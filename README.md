@@ -64,11 +64,19 @@ The viewer renders the configured landing markdown (`viewer.landing` in `remembe
 
 ![Home page](./docs/images/01-home.png)
 
+### Two collapsible left rails
+
+Two independent left panels — a **Workspace rail** with icon-based admin links (Dashboard, Setup, Reindex, Files, Table view, Connectors, Settings, Diagnostics) and a **Pages tree** showing your wiki hierarchy. Each panel collapses to a narrow strip with a single chevron toggle; state persists in `localStorage` across reloads.
+
+![Two collapsible left rails — admin workspace + pages tree, page detail with breadcrumbs, tag pills, TOC](./docs/images/02-page-detail.png)
+
+Collapsed state — both rails shrunk to single-button strips, maximum content width:
+
+![Both rails collapsed](./docs/images/09-rails-collapsed.png)
+
 ### Page detail
 
 Every content page gets breadcrumbs, frontmatter tags rendered as pills, a heading-anchored table of contents on the right, prev/next nav at the bottom, and an ✎ Edit pill that drops you into the browser editor.
-
-![Page detail](./docs/images/02-page-detail.png)
 
 ### Hybrid search
 

@@ -8,21 +8,23 @@ interface Props {
 }
 
 const { tree, currentPath } = Astro.props;
-const pathname = Astro.url.pathname.replace(/\/$/, '') || '/';
-
-const adminLinks = [
-  { href: '/admin', label: 'Dashboard' },
-  { href: '/admin/setup', label: 'Setup' },
-  { href: '/admin/reindex', label: 'Reindex' },
-  { href: '/admin/files', label: 'Files' },
-  { href: '/admin/views', label: 'Table view' },
-  { href: '/admin/connectors', label: 'Connectors' },
-  { href: '/admin/settings', label: 'Settings' },
-  { href: '/admin/diagnostics', label: 'Diagnostics' },
-];
 ---
-<aside class="sidebar">
-  <h2 class="sidebar-title">Pages</h2>
+<aside id="wiki-sidebar" class="sidebar" data-collapsed="false">
+  <div class="sidebar-header">
+    <span class="sidebar-title">Pages</span>
+    <button
+      type="button"
+      class="sidebar-collapse"
+      data-toggle="wiki-sidebar"
+      title="Collapse / expand page tree"
+      aria-label="Collapse page tree"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline class="chev-collapsed" points="13 17 18 12 13 7" style="display:none;"/>
+        <polyline class="chev-expanded" points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+  </div>
   {tree.length === 0 ? (
     <p class="sidebar-empty">No pages yet.<br /><a href="/admin/reindex">Run a reindex →</a></p>
   ) : (
@@ -32,37 +34,53 @@ const adminLinks = [
       </ul>
     </nav>
   )}
-  <h2 class="sidebar-title" style="margin-top: 1.75rem;">Admin</h2>
-  <nav>
-    <ul class="admin-links">
-      {adminLinks.map((l) => (
-        <li>
-          <a href={l.href} class={pathname === l.href ? 'active' : ''}>{l.label}</a>
-        </li>
-      ))}
-    </ul>
-  </nav>
 </aside>
 
 <style is:global>
   .sidebar {
     width: 264px;
     flex-shrink: 0;
-    padding: 1.75rem 1.25rem;
+    padding: 1.25rem 1rem 1.5rem 1.1rem;
     border-right: 1px solid var(--border);
     background: var(--card);
     overflow-y: auto;
+    overflow-x: hidden;
     max-height: calc(100vh - 64px);
     position: sticky;
     top: 64px;
+    transition: width 0.18s ease, padding 0.18s ease;
+  }
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 0.6rem 0.4rem;
+    padding-right: 0.2rem;
   }
   .sidebar-title {
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     color: var(--muted);
-    margin: 0 0 0.5rem 0.5rem;
     font-weight: 700;
+  }
+  .sidebar-collapse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: color 0.12s, background 0.12s;
+  }
+  .sidebar-collapse:hover {
+    color: var(--text);
+    background: var(--bg);
   }
   .sidebar-empty {
     color: var(--muted);
@@ -132,28 +150,18 @@ const adminLinks = [
     transform: rotate(90deg);
   }
 
-  /* Admin link list */
-  .admin-links {
-    list-style: none;
-    padding: 0;
+  /* Collapsed sidebar — narrow expand-only strip */
+  .sidebar[data-collapsed="true"] {
+    width: 36px;
+    padding: 1.25rem 0.35rem 1.25rem 0.35rem;
+  }
+  .sidebar[data-collapsed="true"] .sidebar-header {
     margin: 0;
+    justify-content: center;
   }
-  .admin-links li a {
-    display: block;
-    padding: 0.3rem 0.6rem;
-    text-decoration: none;
-    color: var(--text);
-    border-radius: 5px;
-    font-size: 0.9rem;
-    transition: background 0.12s, color 0.12s;
-  }
-  .admin-links li a:hover {
-    background: var(--bg);
-    color: var(--accent);
-  }
-  .admin-links li a.active {
-    background: var(--accent-bg);
-    color: var(--accent);
-    font-weight: 600;
-  }
+  .sidebar[data-collapsed="true"] .sidebar-title { display: none; }
+  .sidebar[data-collapsed="true"] nav,
+  .sidebar[data-collapsed="true"] .sidebar-empty { display: none; }
+  .sidebar[data-collapsed="true"] .sidebar-collapse .chev-collapsed { display: inline !important; }
+  .sidebar[data-collapsed="true"] .sidebar-collapse .chev-expanded { display: none; }
 </style>

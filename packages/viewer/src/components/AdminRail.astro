@@ -1,0 +1,202 @@
+---
+const pathname = Astro.url.pathname.replace(/\/$/, '') || '/';
+
+interface RailItem {
+  href: string;
+  label: string;
+  /** Inline SVG path data (children of <svg> with currentColor stroke). */
+  icon: string;
+}
+
+const items: RailItem[] = [
+  {
+    href: '/admin',
+    label: 'Dashboard',
+    icon: `<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
+  },
+  {
+    href: '/admin/setup',
+    label: 'Setup',
+    icon: `<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>`,
+  },
+  {
+    href: '/admin/reindex',
+    label: 'Reindex',
+    icon: `<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>`,
+  },
+  {
+    href: '/admin/files',
+    label: 'Files',
+    icon: `<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>`,
+  },
+  {
+    href: '/admin/views',
+    label: 'Table view',
+    icon: `<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>`,
+  },
+  {
+    href: '/admin/connectors',
+    label: 'Connectors',
+    icon: `<path d="M9 2v6"/><path d="M15 2v6"/><path d="M6 8h12v3a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4z"/><path d="M12 15v7"/>`,
+  },
+  {
+    href: '/admin/settings',
+    label: 'Settings',
+    icon: `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>`,
+  },
+  {
+    href: '/admin/diagnostics',
+    label: 'Diagnostics',
+    icon: `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,
+  },
+];
+---
+<aside id="admin-rail" class="admin-rail" data-collapsed="false">
+  <div class="rail-header">
+    <span class="rail-title">Workspace</span>
+    <button
+      type="button"
+      class="rail-collapse"
+      data-toggle="admin-rail"
+      title="Collapse / expand admin rail"
+      aria-label="Collapse admin rail"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline class="chev-collapsed" points="13 17 18 12 13 7" style="display:none;"/>
+        <polyline class="chev-expanded" points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+  </div>
+  <nav>
+    <ul class="rail-list">
+      {items.map((item) => (
+        <li>
+          <a href={item.href} class={pathname === item.href ? 'active' : ''}>
+            <span class="rail-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={item.icon} />
+            </span>
+            <span class="rail-label">{item.label}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+</aside>
+
+<style is:global>
+  .admin-rail {
+    width: 196px;
+    flex-shrink: 0;
+    padding: 1.25rem 0.6rem 1.25rem 0.85rem;
+    border-right: 1px solid var(--border);
+    background: var(--card);
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: calc(100vh - 64px);
+    position: sticky;
+    top: 64px;
+    transition: width 0.18s ease, padding 0.18s ease;
+  }
+  .admin-rail .rail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 0.6rem 0.4rem;
+    padding-right: 0.2rem;
+  }
+  .admin-rail .rail-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    font-weight: 700;
+    transition: opacity 0.18s ease;
+  }
+  .admin-rail .rail-collapse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: color 0.12s, background 0.12s;
+  }
+  .admin-rail .rail-collapse:hover {
+    color: var(--text);
+    background: var(--bg);
+  }
+  .admin-rail .rail-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .admin-rail .rail-list a {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text);
+    font-size: 0.9rem;
+    transition: background 0.12s, color 0.12s;
+  }
+  .admin-rail .rail-list a:hover {
+    background: var(--bg);
+    color: var(--accent);
+  }
+  .admin-rail .rail-list a.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .admin-rail .rail-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: currentColor;
+    flex-shrink: 0;
+  }
+  .admin-rail .rail-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity 0.18s ease;
+  }
+
+  /* Collapsed state — narrow icon-only column */
+  .admin-rail[data-collapsed="true"] {
+    width: 52px;
+    padding: 1.25rem 0.35rem 1.25rem 0.35rem;
+  }
+  .admin-rail[data-collapsed="true"] .rail-header {
+    margin: 0 0 0.5rem 0;
+    justify-content: center;
+  }
+  .admin-rail[data-collapsed="true"] .rail-title { display: none; }
+  .admin-rail[data-collapsed="true"] .rail-list a {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 0.55rem 0;
+  }
+  .admin-rail[data-collapsed="true"] .rail-label {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .admin-rail[data-collapsed="true"] .rail-collapse .chev-collapsed { display: inline !important; }
+  .admin-rail[data-collapsed="true"] .rail-collapse .chev-expanded { display: none; }
+</style>

@@ -1,5 +1,6 @@
 ---
 import Sidebar from '../components/Sidebar.astro';
+import AdminRail from '../components/AdminRail.astro';
 import { listPages } from '../lib/api.ts';
 import { buildTree } from '../lib/tree.ts';
 
@@ -402,6 +403,7 @@ const tree = buildTree(pagesResult.pages);
     </header>
     <nav id="tab-bar" class="tab-bar" hidden></nav>
     <div class="shell">
+      {!hideSidebar && <AdminRail />}
       {!hideSidebar && <Sidebar tree={tree} currentPath={currentPath} />}
       <div class="main-wrap">
         <slot />
@@ -472,6 +474,43 @@ const tree = buildTree(pagesResult.pages);
         };
 
         connect();
+      })();
+    </script>
+
+    <script is:inline>
+      // Collapsible left rails — restores saved state from localStorage on
+      // page load, wires the toggle buttons to flip data-collapsed + persist.
+      (() => {
+        if (window.__rememberRails) return;
+        window.__rememberRails = true;
+        const KEYS = {
+          'admin-rail': 'remember-rail-admin-collapsed',
+          'wiki-sidebar': 'remember-rail-wiki-collapsed',
+        };
+        // Restore saved state before paint.
+        for (const [id, storageKey] of Object.entries(KEYS)) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          try {
+            const saved = localStorage.getItem(storageKey);
+            if (saved === 'true') el.dataset.collapsed = 'true';
+          } catch {}
+        }
+        // Bind toggle buttons.
+        document.querySelectorAll('[data-toggle]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const id = btn.getAttribute('data-toggle');
+            if (!id) return;
+            const target = document.getElementById(id);
+            if (!target) return;
+            const collapsed = target.dataset.collapsed === 'true';
+            target.dataset.collapsed = collapsed ? 'false' : 'true';
+            try {
+              localStorage.setItem(KEYS[id] || '', String(!collapsed));
+            } catch {}
+          });
+        });
       })();
     </script>
 
