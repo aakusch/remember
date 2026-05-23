@@ -17,52 +17,52 @@ if (q.trim()) {
   }
 }
 ---
-<Layout title={q ? `Search: ${q}` : 'Search'}>
-  <article>
-    <h1>Search</h1>
-    <form action="/search" method="get">
-      <input
-        type="search"
-        name="q"
-        value={q}
-        placeholder="Search the wiki…"
-        autofocus
-        style="width: 100%; padding: 0.6rem 0.9rem; font: inherit; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);"
-      />
-    </form>
+<Layout title={q ? `Search: ${q}` : 'Search'} hideSidebar={true}>
+  <div class="main-col">
+    <article>
+      <h1 style="margin-top: 0;">Search</h1>
+      <form action="/search" method="get">
+        <input
+          type="search"
+          name="q"
+          value={q}
+          placeholder="Search the wiki…"
+          autofocus
+          style="width: 100%; padding: 0.7rem 1rem; font: inherit; font-size: 1.05rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); outline: none;"
+        />
+      </form>
 
-    {error && (
-      <p class="muted" style="color: #c00; margin-top: 1rem;">
-        Search failed: {error}
-      </p>
-    )}
+      {error && (
+        <div class="alert error">Search failed: {error}</div>
+      )}
 
-    {q && !error && (
-      <p class="muted" style="margin-top: 0.5rem;">
-        {hits.length} result{hits.length === 1 ? '' : 's'} in {queryMs}ms
-      </p>
-    )}
+      {q && !error && (
+        <p class="muted" style="margin-top: 1rem;">
+          {hits.length} result{hits.length === 1 ? '' : 's'} in {queryMs}ms
+        </p>
+      )}
 
-    {hits.length > 0 && (
-      <ul style="list-style: none; padding: 0; margin-top: 1.5rem;">
-        {hits.map((h) => (
-          <li style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
-            <h3 style="margin: 0 0 0.25rem 0;">
-              <a href={`/${h.path.replace(/\.md$/, '')}`} style="color: var(--accent); text-decoration: none;">
-                {h.path}
-              </a>
-            </h3>
-            <p class="muted" style="margin: 0 0 0.5rem 0;">
-              score {h.score.toFixed(3)} · {h.retrievers.join(' + ')} · chunk {h.chunk_idx}
-            </p>
-            <p style="margin: 0;">{h.snippet}</p>
-          </li>
-        ))}
-      </ul>
-    )}
+      {hits.length > 0 && (
+        <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+          {hits.map((h) => (
+            <li style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+              <h3 style="margin: 0 0 0.25rem 0;">
+                <a href={`/${h.path.replace(/\.md$/, '')}`} style="color: var(--accent); text-decoration: none;">
+                  {h.path}
+                </a>
+              </h3>
+              <p class="muted" style="margin: 0 0 0.5rem 0; font-size: 0.8rem;">
+                score {h.score.toFixed(3)} · {h.retrievers.join(' + ')} · chunk {h.chunk_idx}
+              </p>
+              <p style="margin: 0;">{h.snippet}</p>
+            </li>
+          ))}
+        </ul>
+      )}
 
-    {q && hits.length === 0 && !error && (
-      <p class="muted" style="margin-top: 1.5rem;">No results.</p>
-    )}
-  </article>
+      {q && hits.length === 0 && !error && (
+        <p class="muted" style="margin-top: 1.5rem;">No results.</p>
+      )}
+    </article>
+  </div>
 </Layout>

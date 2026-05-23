@@ -1,0 +1,70 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { getStatus, getConfig, listPages } from '../../lib/api.ts';
+
+const [status, config, pages] = await Promise.all([
+  getStatus(),
+  getConfig(),
+  listPages().catch(() => ({ pages: [], total: 0 })),
+]);
+---
+<Layout title="Admin · remember">
+  <div class="main-col">
+    <h1>Admin</h1>
+    <p class="muted">Manage your wiki — reindex, settings, structural operations.</p>
+
+    <div class="grid">
+      <a class="card" href="/admin/reindex">
+        <h3>Reindex</h3>
+        <p class="muted">Rebuild the search index from your content files.</p>
+        {status && <span class="badge">{status.index.page_count} pages · {status.index.chunk_count} chunks</span>}
+      </a>
+
+      <a class="card" href="/admin/files">
+        <h3>Files</h3>
+        <p class="muted">Browse, delete, move pages and folders.</p>
+        <span class="badge">{pages.total} files</span>
+      </a>
+
+      <a class="card" href="/admin/settings">
+        <h3>Settings</h3>
+        <p class="muted">View your <code>remember.config.ts</code>.</p>
+        {config && <span class="badge">v{config.config.schemaVersion}</span>}
+      </a>
+
+      <a class="card" href="/admin/diagnostics">
+        <h3>Diagnostics</h3>
+        <p class="muted">Health, model info, API status.</p>
+        {status && <span class="badge">{status.index.model}</span>}
+      </a>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .card {
+    display: block;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.1s;
+  }
+  .card:hover {
+    border-color: var(--accent);
+  }
+  .card h3 {
+    margin: 0 0 0.4rem 0;
+    color: var(--accent);
+    font-size: 1.1rem;
+  }
+  .card p { margin: 0 0 0.75rem 0; font-size: 0.875rem; }
+</style>

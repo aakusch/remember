@@ -1,0 +1,60 @@
+---
+import { extractToc } from '../lib/tree.ts';
+
+interface Props {
+  markdown: string;
+}
+
+const toc = extractToc(Astro.props.markdown);
+---
+{toc.length > 0 && (
+  <aside class="toc">
+    <h3>On this page</h3>
+    <ul>
+      {toc.map((item) => (
+        <li class={`level-${item.level}`}>
+          <a href={'#' + item.slug}>{item.text}</a>
+        </li>
+      ))}
+    </ul>
+  </aside>
+)}
+
+<style>
+  .toc {
+    width: 200px;
+    flex-shrink: 0;
+    padding: 1.5rem 0.5rem;
+    font-size: 0.85rem;
+  }
+  .toc h3 {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 0.5rem 0.5rem;
+    font-weight: 700;
+  }
+  .toc ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border-left: 1px solid var(--border);
+  }
+  .toc li {
+    margin: 0.05rem 0;
+  }
+  .toc a {
+    display: block;
+    padding: 0.2rem 0.5rem 0.2rem 0.75rem;
+    color: var(--muted);
+    text-decoration: none;
+    line-height: 1.4;
+  }
+  .toc a:hover {
+    color: var(--accent);
+  }
+  .level-3 a { padding-left: 1.25rem; }
+  .level-4 a { padding-left: 1.75rem; }
+  .level-5 a, .level-6 a { padding-left: 2.25rem; }
+</style>

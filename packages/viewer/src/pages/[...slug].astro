@@ -1,23 +1,89 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { getPage } from '../lib/api.ts';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import Toc from '../components/Toc.astro';
+import { getPage, listPages } from '../lib/api.ts';
+import { buildCrumbs, findAdjacent, slugify } from '../lib/tree.ts';
 import { marked } from 'marked';
 
 const slug = Astro.params.slug ?? '';
-const path = slug.endsWith('.md') ? slug : `${slug}.md`;
 
-const page = await getPage(path);
-const html = page ? marked.parse(page.body) : null;
-const title = (page?.frontmatter.title as string | undefined) ?? path;
+// Skip admin routes; this catch-all is only for content pages
+if (slug.startsWith('admin') || slug.startsWith('api')) {
+  return new Response(null, { status: 404 });
+}
+
+const path = slug.endsWith('.md') ? slug : `${slug}.md`;
+const [page, pagesResult] = await Promise.all([
+  getPage(path),
+  listPages().catch(() => ({ pages: [], total: 0 })),
+]);
+
+// Render markdown with anchor IDs on headings (so TOC links work)
+let html: string | null = null;
+if (page) {
+  marked.use({
+    renderer: {
+      heading(token) {
+        const text = (this.parser?.parseInline(token.tokens) ?? token.text).replace(/<[^>]+>/g, '');
+        const slugId = slugify(text);
+        return `<h${token.depth} id="${slugId}">${this.parser?.parseInline(token.tokens) ?? token.text}</h${token.depth}>`;
+      },
+    },
+  });
+  html = marked.parse(page.body) as string;
+}
+
+const title = (page?.frontmatter.title as string | undefined) ?? path.replace(/\.md$/, '').split('/').pop() ?? path;
+const crumbs = buildCrumbs(path);
+const adjacent = findAdjacent(pagesResult.pages, path);
+
+const tags = page?.frontmatter.tags;
+const tagList = Array.isArray(tags) ? (tags as string[]) : [];
 ---
-<Layout title={title}>
-  {page && html ? (
-    <article set:html={html} />
-  ) : (
+<Layout title={title} currentPath={path}>
+  <div class="main-col with-toc">
     <article>
-      <h1>Page not found</h1>
-      <p class="muted">No page at <code>{path}</code>.</p>
-      <p><a href="/">← Home</a></p>
+      <Breadcrumbs crumbs={crumbs} />
+
+      {page && html ? (
+        <>
+          {tagList.length > 0 && (
+            <p style="margin: 0 0 1rem 0;">
+              {tagList.map((t) => <span class="badge" style="margin-right: 0.4rem;">#{t}</span>)}
+            </p>
+          )}
+
+          <div set:html={html} />
+
+          <footer style="margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 1rem;">
+            {adjacent.prev ? (
+              <a href={'/' + adjacent.prev.path.replace(/\.md$/, '')} style="text-decoration: none; flex: 1;">
+                <div class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">← Previous</div>
+                <div>{adjacent.prev.path.replace(/\.md$/, '')}</div>
+              </a>
+            ) : <span style="flex: 1;"></span>}
+            {adjacent.next ? (
+              <a href={'/' + adjacent.next.path.replace(/\.md$/, '')} style="text-decoration: none; flex: 1; text-align: right;">
+                <div class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Next →</div>
+                <div>{adjacent.next.path.replace(/\.md$/, '')}</div>
+              </a>
+            ) : <span style="flex: 1;"></span>}
+          </footer>
+
+          <p class="muted" style="margin-top: 1.5rem; font-size: 0.8rem;">
+            <span><code>{page.path}</code></span> · last modified {new Date(page.last_modified).toLocaleString()}
+          </p>
+        </>
+      ) : (
+        <>
+          <h1>Page not found</h1>
+          <p class="muted">No page at <code>{path}</code>.</p>
+          <p><a href="/">← Home</a></p>
+        </>
+      )}
     </article>
-  )}
+
+    {page && <Toc markdown={page.body} />}
+  </div>
 </Layout>

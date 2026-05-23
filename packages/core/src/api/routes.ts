@@ -14,6 +14,9 @@ export interface RouteContext {
   reindex: (mode: 'incremental' | 'full') => Promise<{ files_indexed: number; chunks_added: number; duration_ms: number }>;
   adminToken: string | null;
   remoteAllowed: boolean;
+  configPath: string | null;
+  configRoot: string;
+  getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
 }
 
 const notImplemented = (endpoint: string) => ({
@@ -251,12 +254,18 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     });
   });
 
-  // Config (stubs — viewer admin v1.1)
-  app.get('/v1/config', (c) => c.json(notImplemented('GET /v1/config'), 501));
+  // Config
+  app.get('/v1/config', (c) => {
+    return c.json({
+      config: ctx.getConfig(),
+      config_path: ctx.configPath,
+      config_root: ctx.configRoot,
+    });
+  });
   app.put('/v1/config', (c) => {
     const denial = checkAdmin(c, ctx.adminToken);
     if (denial) return denial;
-    return c.json(notImplemented('PUT /v1/config'), 501);
+    return c.json(notImplemented('PUT /v1/config — AST edit of remember.config.ts is v1.2'), 501);
   });
 
   // SSE events (placeholder — fires on first build of watcher)

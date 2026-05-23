@@ -1,55 +1,50 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { getPage, getStatus, listPages, API_BASE } from '../lib/api.ts';
+import { getPage, getStatus, listPages, getConfig, API_BASE } from '../lib/api.ts';
 import { marked } from 'marked';
 
-const [landing, status, pages] = await Promise.all([
+const [config, landing, status, pages] = await Promise.all([
+  getConfig(),
   getPage('README.md'),
   getStatus(),
   listPages().catch(() => ({ pages: [], total: 0 })),
 ]);
 
-const html = landing ? marked.parse(landing.body) : null;
+const landingPath = config?.config.viewer.landing ?? 'README.md';
+const actualLanding = landingPath === 'README.md' ? landing : await getPage(landingPath);
+const html = actualLanding ? marked.parse(actualLanding.body) : null;
+const wikiName = config?.config.name ?? 'remember';
 ---
-<Layout title={(landing?.frontmatter.title as string | undefined) ?? 'remember'}>
-  {landing && html ? (
-    <article set:html={html} />
-  ) : (
-    <article>
-      <h1>remember</h1>
-      <p class="muted">
-        Could not reach the core API at <code>{API_BASE}</code>. Make sure <code>remember start</code> or <code>remember dev</code> is running.
+<Layout title={wikiName} currentPath="README.md">
+  <div class="main-col">
+    {actualLanding && html ? (
+      <article set:html={html} />
+    ) : (
+      <article>
+        <h1>{wikiName}</h1>
+        <p class="muted">
+          Could not load <code>{landingPath}</code> from <code>{API_BASE}</code>.
+          Make sure the core API is running (<code>remember dev</code> or <code>remember start</code>).
+        </p>
+        {pages.pages.length > 0 ? (
+          <>
+            <h2>Pages</h2>
+            <ul>
+              {pages.pages.map((p) => (
+                <li><a href={`/${p.path.replace(/\.md$/, '')}`}>{p.path}</a></li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p class="muted">No pages indexed yet. <a href="/admin/reindex">Run reindex →</a></p>
+        )}
+      </article>
+    )}
+
+    {status && (
+      <p class="muted" style="margin-top: 1.5rem; text-align: center;">
+        {status.index.page_count} pages · {status.index.chunk_count} chunks · {status.index.model} ({status.index.model_dim}-d)
       </p>
-      {status === null && (
-        <p class="muted">API health check failed — check that the core process is alive on the configured port.</p>
-      )}
-      {pages.pages.length > 0 && (
-        <>
-          <h2>All pages</h2>
-          <ul>
-            {pages.pages.map((p) => (
-              <li><a href={`/${p.path.replace(/\.md$/, '')}`}>{p.path}</a></li>
-            ))}
-          </ul>
-        </>
-      )}
-    </article>
-  )}
-
-  {landing && pages.pages.length > 0 && (
-    <article style="margin-top: 2rem;">
-      <h2>Pages</h2>
-      <ul>
-        {pages.pages.map((p) => (
-          <li><a href={`/${p.path.replace(/\.md$/, '')}`}>{p.path}</a></li>
-        ))}
-      </ul>
-    </article>
-  )}
-
-  {status && (
-    <p class="muted" style="margin-top: 1rem;">
-      Index: {status.index.page_count} pages, {status.index.chunk_count} chunks · model {status.index.model} · v{status.version}
-    </p>
-  )}
+    )}
+  </div>
 </Layout>

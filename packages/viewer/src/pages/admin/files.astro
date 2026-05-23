@@ -1,0 +1,171 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { listPages, deletePage, movePage, createFolder, deleteFolder, renameFolder } from '../../lib/api.ts';
+
+let flash: { type: 'success' | 'error'; message: string } | null = null;
+
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const action = form.get('action') as string;
+    if (action === 'delete-page') {
+      const p = form.get('path') as string;
+      const r = await deletePage(p);
+      flash = r.ok
+        ? { type: 'success', message: `Deleted ${p} (${r.removed_chunks ?? 0} chunks removed)` }
+        : { type: 'error', message: `Delete failed: ${JSON.stringify(r.error)}` };
+    } else if (action === 'move-page') {
+      const from = form.get('from') as string;
+      const to = form.get('to') as string;
+      const r = await movePage(from, to);
+      flash = r.ok ? { type: 'success', message: `Moved ${from} → ${to}` } : { type: 'error', message: `Move failed` };
+    } else if (action === 'create-folder') {
+      const p = form.get('path') as string;
+      const r = await createFolder(p);
+      flash = r.ok ? { type: 'success', message: `Created folder ${p}` } : { type: 'error', message: `Create folder failed` };
+    } else if (action === 'delete-folder') {
+      const p = form.get('path') as string;
+      const r = await deleteFolder(p, true);
+      flash = r.ok ? { type: 'success', message: `Deleted folder ${p}` } : { type: 'error', message: `Delete folder failed` };
+    } else if (action === 'rename-folder') {
+      const from = form.get('from') as string;
+      const to = form.get('to') as string;
+      const r = await renameFolder(from, to);
+      flash = r.ok ? { type: 'success', message: `Renamed folder ${from} → ${to}` } : { type: 'error', message: `Rename folder failed` };
+    }
+  } catch (err) {
+    flash = { type: 'error', message: (err as Error).message };
+  }
+}
+
+const pagesResult = await listPages().catch(() => ({ pages: [], total: 0 }));
+const folderSet = new Set<string>();
+for (const p of pagesResult.pages) {
+  const parts = p.path.split('/');
+  for (let i = 1; i < parts.length; i++) {
+    folderSet.add(parts.slice(0, i).join('/'));
+  }
+}
+const folders = Array.from(folderSet).sort();
+---
+<Layout title="Files · Admin">
+  <div class="main-col">
+    <h1>Files</h1>
+    <p class="muted">Structural operations on your wiki content. Editing prose stays in your editor.</p>
+
+    {flash && <div class={`alert ${flash.type}`}>{flash.message}</div>}
+
+    <details style="margin-top: 1rem;">
+      <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600;">+ Create folder</summary>
+      <form method="post" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+        <input type="hidden" name="action" value="create-folder" />
+        <input type="text" name="path" placeholder="new-folder or nested/path" required style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);" />
+        <button type="submit" class="btn">Create</button>
+      </form>
+    </details>
+
+    <h2 style="margin-top: 2rem;">Folders ({folders.length})</h2>
+    {folders.length === 0 ? (
+      <p class="muted">No folders.</p>
+    ) : (
+      <table class="files">
+        <thead>
+          <tr><th>Path</th><th style="text-align: right;">Actions</th></tr>
+        </thead>
+        <tbody>
+          {folders.map((f) => (
+            <tr>
+              <td><code>{f}/</code></td>
+              <td style="text-align: right;">
+                <details style="display: inline-block; margin-right: 0.5rem;">
+                  <summary class="btn secondary" style="display: inline-block; padding: 0.25rem 0.65rem;">Rename</summary>
+                  <form method="post" style="display: flex; gap: 0.3rem; margin-top: 0.4rem;">
+                    <input type="hidden" name="action" value="rename-folder" />
+                    <input type="hidden" name="from" value={f} />
+                    <input type="text" name="to" value={f} required style="padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);" />
+                    <button type="submit" class="btn">Save</button>
+                  </form>
+                </details>
+                <form method="post" style="display: inline;" onsubmit={`return confirm('Delete folder "${f}" recursively? This deletes all pages inside.')`}>
+                  <input type="hidden" name="action" value="delete-folder" />
+                  <input type="hidden" name="path" value={f} />
+                  <button type="submit" class="btn danger" style="padding: 0.25rem 0.65rem;">Delete</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+
+    <h2 style="margin-top: 2.5rem;">Pages ({pagesResult.pages.length})</h2>
+    {pagesResult.pages.length === 0 ? (
+      <p class="muted">No pages indexed.</p>
+    ) : (
+      <table class="files">
+        <thead>
+          <tr>
+            <th>Path</th>
+            <th>Size</th>
+            <th>Modified</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pagesResult.pages.map((p) => (
+            <tr>
+              <td><a href={`/${p.path.replace(/\.md$/, '')}`}>{p.path}</a></td>
+              <td class="muted">{p.size}b</td>
+              <td class="muted" style="font-size: 0.8rem;">{new Date(p.modified).toLocaleString()}</td>
+              <td style="text-align: right; white-space: nowrap;">
+                <details style="display: inline-block; margin-right: 0.5rem;">
+                  <summary class="btn secondary" style="display: inline-block; padding: 0.25rem 0.65rem;">Move</summary>
+                  <form method="post" style="display: flex; gap: 0.3rem; margin-top: 0.4rem;">
+                    <input type="hidden" name="action" value="move-page" />
+                    <input type="hidden" name="from" value={p.path} />
+                    <input type="text" name="to" value={p.path} required style="padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);" />
+                    <button type="submit" class="btn">Save</button>
+                  </form>
+                </details>
+                <form method="post" style="display: inline;" onsubmit={`return confirm('Delete ${p.path}?')`}>
+                  <input type="hidden" name="action" value="delete-page" />
+                  <input type="hidden" name="path" value={p.path} />
+                  <button type="submit" class="btn danger" style="padding: 0.25rem 0.65rem;">Delete</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+
+    <p class="muted" style="margin-top: 2rem; font-size: 0.85rem;">
+      Note: mutations modify files on disk but don't commit to git. Run <code>git status</code> + <code>git commit</code> when satisfied.
+    </p>
+  </div>
+</Layout>
+
+<style>
+  table.files {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+  }
+  .files th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  .files td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .files tr:hover td { background: var(--bg); }
+  details summary { list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+</style>

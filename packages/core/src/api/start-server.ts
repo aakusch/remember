@@ -51,6 +51,16 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     reindex,
     adminToken: cfg.validated.server.adminToken,
     remoteAllowed: cfg.validated.server.host !== '127.0.0.1',
+    configPath: cfg.configPath,
+    configRoot: cfg.rootDir,
+    getConfig: () => ({
+      name: cfg.raw.name,
+      description: cfg.raw.description,
+      content: cfg.validated.content,
+      server: cfg.validated.server,
+      viewer: cfg.validated.viewer,
+      schemaVersion: cfg.validated.schemaVersion,
+    }),
   });
 
   const port = cfg.validated.server.apiPort;

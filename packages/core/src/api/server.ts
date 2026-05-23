@@ -12,6 +12,16 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
       reindex: ctx.reindex,
       adminToken: ctx.adminToken ?? null,
       remoteAllowed: ctx.remoteAllowed ?? false,
+      configPath: ctx.configPath ?? null,
+      configRoot: ctx.configRoot ?? ctx.contentRoot,
+      getConfig:
+        ctx.getConfig ??
+        (() => ({
+          content: ctx.contentRoot!,
+          server: { host: '127.0.0.1', port: 4321, apiPort: 4320, adminToken: null },
+          viewer: { landing: 'README.md', showAdmin: true, breadcrumbs: true },
+          schemaVersion: 1,
+        })),
     });
   } else {
     registerScaffoldRoutes(app);

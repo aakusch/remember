@@ -1,0 +1,117 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { getStatus, getConfig, API_BASE } from '../../lib/api.ts';
+
+let healthOk = false;
+let openapi: { paths?: Record<string, unknown> } | null = null;
+let tools: { tools?: Array<{ name: string; description?: string }> } | null = null;
+
+try {
+  const h = await fetch(`${API_BASE}/health`);
+  healthOk = h.ok;
+} catch { /* fall through */ }
+
+try {
+  const o = await fetch(`${API_BASE}/openapi.json`);
+  if (o.ok) openapi = await o.json();
+} catch { /* fall through */ }
+
+try {
+  const t = await fetch(`${API_BASE}/tools`);
+  if (t.ok) tools = await t.json();
+} catch { /* fall through */ }
+
+const [status, config] = await Promise.all([getStatus(), getConfig()]);
+---
+<Layout title="Diagnostics · Admin">
+  <div class="main-col">
+    <h1>Diagnostics</h1>
+    <p class="muted">Health checks for the core API and the indexing pipeline.</p>
+
+    <div style="margin-top: 1.5rem;">
+      <h3>API health</h3>
+      <table>
+        <tbody>
+          <tr>
+            <td class="muted">Endpoint</td>
+            <td><code>{API_BASE}</code></td>
+          </tr>
+          <tr>
+            <td class="muted">Status</td>
+            <td>{healthOk ? <span class="badge" style="color: var(--success); border-color: var(--success);">healthy</span> : <span class="badge" style="color: var(--danger); border-color: var(--danger);">unreachable</span>}</td>
+          </tr>
+          <tr>
+            <td class="muted">Version</td>
+            <td>{status?.version ?? '—'}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {status && (
+      <div style="margin-top: 2rem;">
+        <h3>Index</h3>
+        <table>
+          <tbody>
+            <tr><td class="muted">State</td><td>{status.index.state}</td></tr>
+            <tr><td class="muted">Pages</td><td>{status.index.page_count}</td></tr>
+            <tr><td class="muted">Chunks</td><td>{status.index.chunk_count}</td></tr>
+            <tr><td class="muted">Embedder model</td><td><code>{status.index.model}</code></td></tr>
+            <tr><td class="muted">Embedding dimension</td><td>{status.index.model_dim}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {config && (
+      <div style="margin-top: 2rem;">
+        <h3>Config</h3>
+        <table>
+          <tbody>
+            <tr><td class="muted">Config root</td><td><code>{config.config_root}</code></td></tr>
+            <tr><td class="muted">Config path</td><td>{config.config_path ? <code>{config.config_path}</code> : <span class="muted">(none — defaults)</span>}</td></tr>
+            <tr><td class="muted">Content dir</td><td><code>{config.config.content}</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {openapi && (
+      <div style="margin-top: 2rem;">
+        <h3>API surface ({Object.keys(openapi.paths ?? {}).length} routes)</h3>
+        <ul style="font-family: ui-monospace, monospace; font-size: 0.85rem;">
+          {Object.entries(openapi.paths ?? {}).map(([p, methods]) => (
+            <li>
+              <code>/v1{p}</code>
+              <span class="muted" style="margin-left: 0.5rem;">
+                {Object.keys(methods as object).map((m) => m.toUpperCase()).join(', ')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {tools?.tools && tools.tools.length > 0 && (
+      <div style="margin-top: 2rem;">
+        <h3>AI tool definitions ({tools.tools.length})</h3>
+        <ul>
+          {tools.tools.map((t) => (
+            <li><code>{t.name}</code> — <span class="muted">{t.description}</span></li>
+          ))}
+        </ul>
+        <p class="muted" style="font-size: 0.85rem;">
+          These are returned by <code>GET {API_BASE}/tools</code> — drop them straight into a Claude or OpenAI tool-use call.
+        </p>
+      </div>
+    )}
+  </div>
+</Layout>
+
+<style>
+  table { border-collapse: collapse; }
+  td { padding: 0.4rem 1.5rem 0.4rem 0; font-size: 0.92rem; vertical-align: top; }
+  h3 { font-size: 1rem; color: var(--accent); margin-top: 0; }
+  ul { margin: 0.5rem 0; padding-left: 1.5rem; }
+  li { margin: 0.25rem 0; }
+</style>

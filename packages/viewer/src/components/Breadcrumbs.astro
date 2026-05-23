@@ -1,0 +1,48 @@
+---
+interface Props {
+  crumbs: Array<{ name: string; path: string }>;
+}
+
+const { crumbs } = Astro.props;
+---
+{crumbs.length > 0 && (
+  <nav class="crumbs" aria-label="Breadcrumbs">
+    <a href="/">Home</a>
+    {crumbs.map((c, i) => (
+      <>
+        <span class="sep">/</span>
+        {i === crumbs.length - 1 ? (
+          <span class="current">{c.name}</span>
+        ) : (
+          <a href={'/' + c.path}>{c.name}</a>
+        )}
+      </>
+    ))}
+  </nav>
+)}
+
+<style>
+  .crumbs {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+  .crumbs a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .crumbs a:hover {
+    color: var(--accent);
+  }
+  .sep {
+    color: var(--border);
+  }
+  .current {
+    color: var(--text);
+    font-weight: 500;
+  }
+</style>

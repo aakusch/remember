@@ -1,0 +1,82 @@
+---
+import type { TreeNode } from '../lib/tree.ts';
+import TreeItem from './TreeItem.astro';
+
+interface Props {
+  tree: TreeNode[];
+  currentPath?: string;
+}
+
+const { tree, currentPath } = Astro.props;
+---
+<aside class="sidebar">
+  <h2 class="sidebar-title">Pages</h2>
+  {tree.length === 0 ? (
+    <p class="empty">No pages yet.<br /><a href="/admin/reindex">Run a reindex →</a></p>
+  ) : (
+    <nav>
+      <ul class="tree">
+        {tree.map((node) => <TreeItem node={node} currentPath={currentPath} />)}
+      </ul>
+    </nav>
+  )}
+  <h2 class="sidebar-title" style="margin-top: 1.5rem;">Admin</h2>
+  <nav>
+    <ul class="admin-links">
+      <li><a href="/admin">Dashboard</a></li>
+      <li><a href="/admin/reindex">Reindex</a></li>
+      <li><a href="/admin/files">Files</a></li>
+      <li><a href="/admin/settings">Settings</a></li>
+      <li><a href="/admin/diagnostics">Diagnostics</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<style>
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    padding: 1.5rem 1rem;
+    border-right: 1px solid var(--border);
+    background: var(--card);
+    overflow-y: auto;
+    max-height: calc(100vh - 60px);
+    position: sticky;
+    top: 60px;
+  }
+  .sidebar-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 0.5rem 0.5rem;
+    font-weight: 700;
+  }
+  .empty {
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 0 0.5rem;
+  }
+  .tree {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .admin-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .admin-links li a {
+    display: block;
+    padding: 0.3rem 0.5rem;
+    text-decoration: none;
+    color: var(--text);
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  .admin-links li a:hover {
+    background: var(--bg);
+    color: var(--accent);
+  }
+</style>
