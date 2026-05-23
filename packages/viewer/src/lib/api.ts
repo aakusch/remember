@@ -21,6 +21,18 @@ export interface PageMeta {
   path: string;
   size: number;
   modified: string;
+  title?: string | null;
+  last_indexed?: string;
+  frontmatter?: Record<string, unknown>;
+}
+
+export interface PagesResponse {
+  pages: PageMeta[];
+  cursor: string | null;
+  total: number;
+  filter?: Record<string, string>;
+  sort?: string | null;
+  q?: string | null;
 }
 
 export interface ApiStatus {
@@ -68,11 +80,39 @@ export async function getPage(path: string): Promise<ApiPage | null> {
   }
 }
 
-export async function listPages(): Promise<{
-  pages: PageMeta[];
-  total: number;
-}> {
+export async function listPages(): Promise<PagesResponse> {
   return fetchJson('/pages?limit=200');
+}
+
+export async function queryPages(params: {
+  filter?: Record<string, string>;
+  sort?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<PagesResponse> {
+  const qs = new URLSearchParams();
+  if (params.filter) {
+    for (const [k, v] of Object.entries(params.filter)) {
+      if (k && v) qs.append(`filter[${k}]`, v);
+    }
+  }
+  if (params.sort) qs.set('sort', params.sort);
+  if (params.q) qs.set('q', params.q);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  return fetchJson(`/pages?${qs.toString()}`);
+}
+
+export async function listAttrs(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE}/attrs`);
+    if (!res.ok) return [];
+    const body = (await res.json()) as { keys: string[] };
+    return body.keys;
+  } catch {
+    return [];
+  }
 }
 
 export async function search(

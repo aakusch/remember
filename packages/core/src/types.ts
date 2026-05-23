@@ -61,6 +61,26 @@ export interface Reranker {
   rerank(query: string, candidates: SearchResult[]): Promise<SearchResult[]>;
 }
 
+export interface PageRecord {
+  path: string;
+  frontmatter: Record<string, unknown>;
+  title: string | null;
+  size: number;
+  last_indexed: string;
+  last_modified: string;
+}
+
+export interface PageQuery {
+  /** Per-key filters. Exact match for scalars; array-membership for array values (e.g. tags). */
+  filter?: Record<string, string>;
+  /** Sort by 'path' | 'last_modified' | 'title' | frontmatter key. Prefix with - for descending. */
+  sort?: string;
+  /** Free-text contains across title + path. */
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface Store {
   upsert(chunks: Array<Chunk & { embedding: number[] }>): Promise<void>;
   deleteByPath(path: string): Promise<number>;
@@ -73,6 +93,10 @@ export interface Store {
     path: string,
     entry: { sha256: string; chunk_count: number; last_indexed: string } | null,
   ): Promise<void>;
+  upsertPage(record: PageRecord): Promise<void>;
+  deletePage(path: string): Promise<void>;
+  queryPages(query: PageQuery): Promise<{ rows: PageRecord[]; total: number }>;
+  listFrontmatterKeys(): Promise<string[]>;
 }
 
 export interface RememberConfig {

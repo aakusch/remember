@@ -292,6 +292,69 @@ const tree = buildTree(pagesResult.pages);
         color: var(--danger);
       }
 
+      /* ─── Tab bar (multi-page nav) ─── */
+      nav.tab-bar {
+        position: sticky;
+        top: 64px;
+        z-index: 9;
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+        padding: 0.35rem 0.85rem;
+        display: flex;
+        gap: 0.3rem;
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+      nav.tab-bar .tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.3rem 0.55rem 0.3rem 0.7rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: color 0.12s, border-color 0.12s, background 0.12s;
+      }
+      nav.tab-bar .tab:hover { color: var(--text); border-color: var(--border-strong); }
+      nav.tab-bar .tab.active {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: var(--accent-bg);
+        font-weight: 500;
+      }
+      nav.tab-bar .tab-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        line-height: 1;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      nav.tab-bar .tab-close:hover { background: var(--border-strong); color: var(--text); }
+      nav.tab-bar .clear-tabs {
+        margin-left: auto;
+        padding: 0.3rem 0.6rem;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 0.78rem;
+        cursor: pointer;
+      }
+      nav.tab-bar .clear-tabs:hover { color: var(--text); border-color: var(--border); }
+
       footer.site {
         padding: 1.5rem 2rem;
         text-align: center;
@@ -337,6 +400,7 @@ const tree = buildTree(pagesResult.pages);
         <input type="search" name="q" placeholder="Search the wiki…" />
       </form>
     </header>
+    <nav id="tab-bar" class="tab-bar" hidden></nav>
     <div class="shell">
       {!hideSidebar && <Sidebar tree={tree} currentPath={currentPath} />}
       <div class="main-wrap">
@@ -408,6 +472,94 @@ const tree = buildTree(pagesResult.pages);
         };
 
         connect();
+      })();
+    </script>
+
+    <script is:inline>
+      // Multi-tab bar — tracks recently opened pages in localStorage, renders
+      // a tab strip the user can switch between. Admin pages are excluded.
+      (() => {
+        if (window.__rememberTabs) return;
+        window.__rememberTabs = true;
+
+        const KEY = 'remember-tabs-v1';
+        const MAX = 12;
+        const bar = document.getElementById('tab-bar');
+        if (!bar) return;
+
+        const isContentPage = (path) => {
+          if (!path) return false;
+          if (path === '/' || path === '') return true;
+          return !path.startsWith('/admin') && !path.startsWith('/api') && !path.startsWith('/search');
+        };
+
+        const load = () => {
+          try {
+            const raw = localStorage.getItem(KEY);
+            return raw ? JSON.parse(raw) : [];
+          } catch { return []; }
+        };
+        const save = (tabs) => {
+          try { localStorage.setItem(KEY, JSON.stringify(tabs)); } catch {}
+        };
+
+        const docTitle = (() => {
+          const t = document.title.replace(/\s*·\s*remember\s*$/, '').replace(/\s*·\s*Admin\s*$/, '');
+          return t || (location.pathname === '/' ? 'Home' : location.pathname);
+        })();
+
+        let tabs = load();
+        const currentPath = location.pathname;
+
+        if (isContentPage(currentPath)) {
+          // Bump current to the right; reuse existing entry if present (preserve title from prior visit).
+          const existingIdx = tabs.findIndex((t) => t.path === currentPath);
+          if (existingIdx >= 0) tabs.splice(existingIdx, 1);
+          tabs.push({ path: currentPath, title: docTitle, opened_at: Date.now() });
+          // Cap at MAX, dropping the oldest.
+          while (tabs.length > MAX) tabs.shift();
+          save(tabs);
+        }
+
+        const render = () => {
+          if (tabs.length === 0) {
+            bar.hidden = true;
+            bar.innerHTML = '';
+            return;
+          }
+          bar.hidden = false;
+          bar.innerHTML = tabs.map((t) => {
+            const isActive = t.path === currentPath;
+            const safeTitle = (t.title || t.path).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+            return `
+              <a class="tab ${isActive ? 'active' : ''}" href="${t.path}">
+                <span>${safeTitle}</span>
+                <span class="tab-close" data-close="${t.path}" title="Close tab">×</span>
+              </a>
+            `;
+          }).join('') + `<button type="button" class="clear-tabs" title="Close all tabs">Clear</button>`;
+
+          bar.querySelectorAll('.tab-close').forEach((el) => {
+            el.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const path = el.getAttribute('data-close');
+              tabs = tabs.filter((t) => t.path !== path);
+              save(tabs);
+              render();
+            });
+          });
+          const clearBtn = bar.querySelector('.clear-tabs');
+          if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+              tabs = [];
+              save(tabs);
+              render();
+            });
+          }
+        };
+
+        render();
       })();
     </script>
   </body>

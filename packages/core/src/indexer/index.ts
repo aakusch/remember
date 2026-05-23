@@ -24,6 +24,18 @@ export interface IndexProgress {
   path?: string;
 }
 
+function pickTitle(frontmatter: Record<string, unknown>, fallback: string): string | null {
+  const t = frontmatter['title'];
+  if (typeof t === 'string' && t.trim()) return t;
+  // Fallback: derive from filename
+  const base = fallback.split('/').pop() ?? fallback;
+  const stem = base.replace(/\.md$/, '');
+  if (!stem) return null;
+  return stem
+    .replace(/[-_]+/g, ' ')
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
 export function createIndexer(opts: IndexerOptions) {
   return {
     async indexAll(root: string, onProgress?: (p: IndexProgress) => void): Promise<IndexResult> {
@@ -47,20 +59,31 @@ export function createIndexer(opts: IndexerOptions) {
         onProgress?.({ stage: 'parse', path: entry.path });
         const parsed = opts.parser.parse(entry.content);
         const chunks = opts.chunker.chunk({ plain: parsed.plain, ast: parsed.ast });
+        const nowIso = new Date().toISOString();
+
+        // Always upsert the page record — frontmatter is per-page metadata,
+        // independent of whether the page has body chunks.
+        await opts.store.upsertPage({
+          path: entry.path,
+          frontmatter: parsed.frontmatter ?? {},
+          title: pickTitle(parsed.frontmatter ?? {}, entry.path),
+          size: entry.content.length,
+          last_indexed: nowIso,
+          last_modified: entry.mtime.toISOString(),
+        });
 
         if (chunks.length === 0) {
-          // Empty file — remove from index but keep manifest entry so we don't reprocess.
+          // Empty file — remove chunks but keep page record + manifest stamp.
           await opts.store.deleteByPath(entry.path);
           await opts.store.updateManifest(entry.path, {
             sha256: entry.sha256,
             chunk_count: 0,
-            last_indexed: new Date().toISOString(),
+            last_indexed: nowIso,
           });
           filesIndexed++;
           continue;
         }
 
-        // Stamp ids + source_path on chunks
         for (const c of chunks) {
           c.source_path = entry.path;
           c.id = `${entry.path}#${c.chunk_idx}`;
@@ -68,7 +91,6 @@ export function createIndexer(opts: IndexerOptions) {
 
         onProgress?.({ stage: 'embed', path: entry.path, total: chunks.length });
         const vectors = await opts.embedder.embed(chunks.map((c) => c.text));
-
         const withVectors = chunks.map((c, i) => ({ ...c, embedding: vectors[i]! }));
 
         onProgress?.({ stage: 'store', path: entry.path });
@@ -77,17 +99,18 @@ export function createIndexer(opts: IndexerOptions) {
         await opts.store.updateManifest(entry.path, {
           sha256: entry.sha256,
           chunk_count: chunks.length,
-          last_indexed: new Date().toISOString(),
+          last_indexed: nowIso,
         });
         filesIndexed++;
         chunksAdded += chunks.length;
       }
 
-      // Remove manifest + chunks for files no longer present.
+      // Remove records for files no longer present.
       let filesDeleted = 0;
       for (const p of Object.keys(manifest)) {
         if (!seenPaths.has(p)) {
           await opts.store.deleteByPath(p);
+          await opts.store.deletePage(p);
           await opts.store.updateManifest(p, null);
           filesDeleted++;
         }
@@ -109,10 +132,21 @@ export function createIndexer(opts: IndexerOptions) {
       const { createHash } = await import('node:crypto');
       const abs = path.resolve(root, relPath);
       const content = await fs.readFile(abs, 'utf8');
+      const stat = await fs.stat(abs);
       const sha256 = createHash('sha256').update(content).digest('hex');
+      const nowIso = new Date().toISOString();
 
       const parsed = opts.parser.parse(content);
       const chunks = opts.chunker.chunk({ plain: parsed.plain, ast: parsed.ast });
+
+      await opts.store.upsertPage({
+        path: relPath,
+        frontmatter: parsed.frontmatter ?? {},
+        title: pickTitle(parsed.frontmatter ?? {}, relPath),
+        size: content.length,
+        last_indexed: nowIso,
+        last_modified: stat.mtime.toISOString(),
+      });
 
       for (const c of chunks) {
         c.source_path = relPath;
@@ -127,7 +161,7 @@ export function createIndexer(opts: IndexerOptions) {
       await opts.store.updateManifest(relPath, {
         sha256,
         chunk_count: chunks.length,
-        last_indexed: new Date().toISOString(),
+        last_indexed: nowIso,
       });
 
       return { chunks_added: chunks.length };

@@ -63,7 +63,34 @@ function checkAdmin(c: Context, adminToken: string | null): Response | null {
   return null;
 }
 
+/**
+ * Read-side check — gates GETs on non-loopback exposure when a token is set.
+ * Localhost reads stay open by default (preserves zero-config viewer experience).
+ */
+function checkRead(c: Context, adminToken: string | null): Response | null {
+  const fwdHost = c.req.header('host');
+  if (isLocalhost(fwdHost)) return null;
+  if (!adminToken) return null;
+  const auth = c.req.header('authorization');
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return c.json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required for remote reads' } }, 401);
+  }
+  const token = auth.slice('Bearer '.length).trim();
+  if (token !== adminToken) {
+    return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid token' } }, 401);
+  }
+  return null;
+}
+
 export function registerRoutes(app: Hono, ctx: RouteContext): void {
+  // Apply remote-read gating to every /v1 endpoint except /health.
+  app.use('/v1/*', async (c, next) => {
+    if (c.req.path === '/v1/health') return next();
+    const denial = checkRead(c, ctx.adminToken);
+    if (denial) return denial;
+    return next();
+  });
+
   // Health + meta
   app.get('/v1/health', (c) => c.json({ ok: true, version: VERSION }));
 
@@ -88,15 +115,61 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     return c.json({ query: q, ...out });
   });
 
-  // List pages
+  // List pages — backed by the frontmatter-aware `pages` table.
+  //   ?filter[<key>]=<value>   exact match against scalar values, or array
+  //                            membership when the frontmatter value is a list
+  //   ?sort=<key>|-<key>       sort ascending or descending (prefix - for desc)
+  //   ?q=<text>                free-text contains on title + path
+  //   ?limit + ?offset|cursor  pagination
   app.get('/v1/pages', async (c) => {
-    const cursor = c.req.query('cursor');
-    const limit = Math.max(1, Math.min(200, Number(c.req.query('limit') ?? '50')));
-    const all = await listMarkdown(ctx.contentRoot);
-    const startIdx = cursor ? Math.max(0, Number(Buffer.from(cursor, 'base64').toString('utf8'))) : 0;
-    const slice = all.slice(startIdx, startIdx + limit);
-    const nextCursor = startIdx + limit < all.length ? Buffer.from(String(startIdx + limit)).toString('base64') : null;
-    return c.json({ pages: slice, cursor: nextCursor, total: all.length });
+    const query = c.req.query();
+    const filter: Record<string, string> = {};
+    for (const [k, v] of Object.entries(query)) {
+      const m = /^filter\[(.+)\]$/.exec(k);
+      if (m && m[1] && typeof v === 'string') filter[m[1]] = v;
+    }
+    const limit = Math.max(1, Math.min(500, Number(query.limit ?? '50')));
+    const cursor = query.cursor;
+    const offset = cursor
+      ? Math.max(0, Number(Buffer.from(cursor, 'base64').toString('utf8')))
+      : Math.max(0, Number(query.offset ?? '0'));
+    const sort = query.sort;
+    const q = query.q;
+
+    const result = await ctx.store.queryPages({
+      filter: Object.keys(filter).length > 0 ? filter : undefined,
+      sort: sort || undefined,
+      q: q || undefined,
+      limit,
+      offset,
+    });
+
+    const nextCursor =
+      offset + result.rows.length < result.total
+        ? Buffer.from(String(offset + result.rows.length)).toString('base64')
+        : null;
+
+    return c.json({
+      pages: result.rows.map((r) => ({
+        path: r.path,
+        title: r.title,
+        size: r.size,
+        modified: r.last_modified,
+        last_indexed: r.last_indexed,
+        frontmatter: r.frontmatter,
+      })),
+      cursor: nextCursor,
+      total: result.total,
+      filter,
+      sort: sort || null,
+      q: q || null,
+    });
+  });
+
+  // Distinct frontmatter keys — powers the table-view column picker.
+  app.get('/v1/attrs', async (c) => {
+    const keys = await ctx.store.listFrontmatterKeys();
+    return c.json({ keys });
   });
 
   // Get one page

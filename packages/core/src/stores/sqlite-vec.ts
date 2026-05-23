@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import type { Chunk, SearchResult, Store } from '../types.js';
+import type { Chunk, PageQuery, PageRecord, SearchResult, Store } from '../types.js';
 
 export interface SqliteVecStoreOptions {
   path?: string;
@@ -161,6 +161,125 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       ).run(sourcePath, entry.sha256, entry.chunk_count, entry.last_indexed);
     },
 
+    async upsertPage(rec: PageRecord) {
+      const fmJson = JSON.stringify(rec.frontmatter ?? {});
+      const upsert = db.prepare(
+        `INSERT OR REPLACE INTO pages (path, frontmatter, title, size, last_indexed, last_modified)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      const delAttrs = db.prepare('DELETE FROM page_attrs WHERE path = ?');
+      const insAttr = db.prepare(
+        'INSERT INTO page_attrs (path, key, value) VALUES (?, ?, ?)',
+      );
+      const txn = db.transaction(() => {
+        upsert.run(rec.path, fmJson, rec.title, rec.size, rec.last_indexed, rec.last_modified);
+        delAttrs.run(rec.path);
+        // Flatten frontmatter into (key, value) rows for fast filter queries.
+        for (const [k, v] of Object.entries(rec.frontmatter ?? {})) {
+          if (Array.isArray(v)) {
+            for (const item of v) insAttr.run(rec.path, k, String(item));
+          } else if (v !== null && v !== undefined && typeof v !== 'object') {
+            insAttr.run(rec.path, k, String(v));
+          } else if (v instanceof Date) {
+            insAttr.run(rec.path, k, v.toISOString());
+          }
+        }
+      });
+      txn();
+    },
+
+    async deletePage(sourcePath: string) {
+      db.prepare('DELETE FROM pages WHERE path = ?').run(sourcePath);
+      db.prepare('DELETE FROM page_attrs WHERE path = ?').run(sourcePath);
+    },
+
+    async queryPages(q: PageQuery) {
+      const filters: string[] = [];
+      const params: unknown[] = [];
+
+      if (q.filter) {
+        for (const [k, v] of Object.entries(q.filter)) {
+          filters.push(
+            `path IN (SELECT path FROM page_attrs WHERE key = ? AND value = ?)`,
+          );
+          params.push(k, String(v));
+        }
+      }
+      if (q.q && q.q.trim()) {
+        filters.push(`(LOWER(title) LIKE ? OR LOWER(path) LIKE ?)`);
+        const like = `%${q.q.trim().toLowerCase()}%`;
+        params.push(like, like);
+      }
+
+      const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+      // Sort handling
+      let orderBy = 'ORDER BY path ASC';
+      if (q.sort) {
+        const desc = q.sort.startsWith('-');
+        const rawKey = (desc ? q.sort.slice(1) : q.sort).trim();
+        const dir = desc ? 'DESC' : 'ASC';
+        // Map friendly aliases to actual column names
+        const SYSTEM_COLS: Record<string, string> = {
+          path: 'path',
+          modified: 'last_modified',
+          last_modified: 'last_modified',
+          last_indexed: 'last_indexed',
+          title: 'title',
+          size: 'size',
+        };
+        const sysCol = SYSTEM_COLS[rawKey];
+        if (sysCol) {
+          orderBy = `ORDER BY ${sysCol} ${dir}`;
+        } else {
+          // Sort by a frontmatter attribute via correlated subquery.
+          orderBy = `ORDER BY (SELECT value FROM page_attrs WHERE page_attrs.path = pages.path AND key = ? LIMIT 1) ${dir}`;
+          params.push(rawKey);
+        }
+      }
+
+      const limit = Math.max(1, Math.min(500, q.limit ?? 200));
+      const offset = Math.max(0, q.offset ?? 0);
+
+      const totalRow = db.prepare(`SELECT COUNT(*) AS n FROM pages ${where}`).get(...params.slice(0, filters.length === 0 ? 0 : params.length - (q.sort && !['path','last_modified','title','size','last_indexed'].includes((q.sort.startsWith('-') ? q.sort.slice(1) : q.sort)) ? 1 : 0))) as { n: number };
+
+      const rows = db
+        .prepare(
+          `SELECT path, frontmatter, title, size, last_indexed, last_modified
+           FROM pages
+           ${where}
+           ${orderBy}
+           LIMIT ? OFFSET ?`,
+        )
+        .all(...params, limit, offset) as Array<{
+        path: string;
+        frontmatter: string;
+        title: string | null;
+        size: number;
+        last_indexed: string;
+        last_modified: string;
+      }>;
+
+      return {
+        total: totalRow?.n ?? 0,
+        rows: rows.map((r) => ({
+          path: r.path,
+          title: r.title,
+          size: r.size,
+          last_indexed: r.last_indexed,
+          last_modified: r.last_modified,
+          frontmatter: safeJsonParse(r.frontmatter),
+        })),
+      };
+    },
+
+    async listFrontmatterKeys() {
+      const rows = db
+        .prepare('SELECT DISTINCT key FROM page_attrs ORDER BY key')
+        .all() as Array<{ key: string }>;
+      return rows.map((r) => r.key);
+    },
+
     close() {
       db.close();
     },
@@ -195,9 +314,35 @@ function initSchema(db: Database.Database, dim: number): void {
       last_indexed TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS pages (
+      path TEXT PRIMARY KEY,
+      frontmatter TEXT NOT NULL DEFAULT '{}',
+      title TEXT,
+      size INTEGER NOT NULL DEFAULT 0,
+      last_indexed TEXT NOT NULL,
+      last_modified TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS page_attrs (
+      path TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      FOREIGN KEY(path) REFERENCES pages(path) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_attrs_kv ON page_attrs(key, value);
+    CREATE INDEX IF NOT EXISTS idx_page_attrs_path ON page_attrs(path);
+
     CREATE VIRTUAL TABLE IF NOT EXISTS fts_chunks USING fts5(text, content='', contentless_delete=1);
   `);
   db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(embedding float[${dim}])`);
+}
+
+function safeJsonParse(s: string): Record<string, unknown> {
+  try {
+    return JSON.parse(s) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 function makeSnippet(text: string, _query?: string): string {

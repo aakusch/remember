@@ -54,8 +54,9 @@ const isNewFile = currentBody === '' && !saved;
     <form method="post" class="editor-form">
       <div class="editor-grid">
         <div class="editor-pane">
-          <label class="pane-label" for="body-input">Markdown source</label>
+          <label class="pane-label" for="body-input">Markdown source · type <kbd>/</kbd> at line start for commands · <kbd>Cmd/Ctrl+S</kbd> to save</label>
           <textarea id="body-input" name="body" spellcheck="false">{editedBody}</textarea>
+          <div id="slash-menu" class="slash-menu" hidden></div>
         </div>
         <div class="editor-pane">
           <span class="pane-label">Preview</span>
@@ -78,16 +79,179 @@ const isNewFile = currentBody === '' && !saved;
   import { marked } from 'marked';
   const textarea = document.getElementById('body-input') as HTMLTextAreaElement;
   const preview = document.getElementById('preview') as HTMLDivElement;
-  if (textarea && preview) {
+  const slashMenu = document.getElementById('slash-menu') as HTMLDivElement;
+
+  type SlashCommand = {
+    keyword: string;
+    label: string;
+    hint: string;
+    insert: string;
+    /** Caret offset from the end of the inserted text. Negative = move left from end. */
+    caretOffset?: number;
+  };
+
+  const COMMANDS: SlashCommand[] = [
+    { keyword: 'h1',     label: 'Heading 1',       hint: '# Title',                   insert: '# ' },
+    { keyword: 'h2',     label: 'Heading 2',       hint: '## Section',                insert: '## ' },
+    { keyword: 'h3',     label: 'Heading 3',       hint: '### Subsection',            insert: '### ' },
+    { keyword: 'h4',     label: 'Heading 4',       hint: '#### ',                     insert: '#### ' },
+    { keyword: 'bullet', label: 'Bullet list',     hint: '- item',                    insert: '- ' },
+    { keyword: 'numbered', label: 'Numbered list', hint: '1. item',                   insert: '1. ' },
+    { keyword: 'todo',   label: 'Task list',       hint: '- [ ] todo',                insert: '- [ ] ' },
+    { keyword: 'code',   label: 'Code block',      hint: '```lang\\n…\\n```',           insert: '```\n\n```\n', caretOffset: -5 },
+    { keyword: 'code-ts', label: 'TypeScript block', hint: '```ts',                   insert: '```ts\n\n```\n', caretOffset: -5 },
+    { keyword: 'code-py', label: 'Python block',   hint: '```py',                     insert: '```python\n\n```\n', caretOffset: -5 },
+    { keyword: 'code-sh', label: 'Shell block',    hint: '```bash',                   insert: '```bash\n\n```\n', caretOffset: -5 },
+    { keyword: 'quote',  label: 'Block quote',     hint: '> quote',                   insert: '> ' },
+    { keyword: 'table',  label: 'Table',           hint: '| a | b |',                 insert: '| col 1 | col 2 |\n| --- | --- |\n| a | b |\n' },
+    { keyword: 'hr',     label: 'Divider',         hint: '---',                       insert: '---\n' },
+    { keyword: 'link',   label: 'Link',            hint: '[text](url)',               insert: '[]()',          caretOffset: -3 },
+    { keyword: 'image',  label: 'Image',           hint: '![alt](url)',               insert: '![]()',         caretOffset: -3 },
+    { keyword: 'math',   label: 'Math (block)',    hint: '$$ expr $$',                insert: '$$\n\n$$\n',    caretOffset: -4 },
+    { keyword: 'mermaid', label: 'Mermaid diagram', hint: '```mermaid',               insert: '```mermaid\ngraph LR\n  A --> B\n```\n' },
+    { keyword: 'frontmatter', label: 'Frontmatter block', hint: '---\\ntitle: …\\n---', insert: '---\ntitle: \ntags: []\nstatus: draft\n---\n\n', caretOffset: -28 },
+    { keyword: 'tag',    label: 'Tag (frontmatter helper)', hint: '`#tag`',           insert: '`#tag`' },
+  ];
+
+  let menuOpen = false;
+  let triggerPos = -1; // position of the "/" that opened the menu
+  let activeIdx = 0;
+  let filtered: SlashCommand[] = [];
+
+  function openMenuAt(pos: number) {
+    triggerPos = pos;
+    menuOpen = true;
+    activeIdx = 0;
+    updateMenu('');
+    slashMenu.hidden = false;
+  }
+
+  function closeMenu() {
+    menuOpen = false;
+    slashMenu.hidden = true;
+    triggerPos = -1;
+  }
+
+  function updateMenu(query: string) {
+    const q = query.toLowerCase();
+    filtered = COMMANDS.filter(
+      (c) => !q || c.keyword.startsWith(q) || c.label.toLowerCase().includes(q),
+    );
+    if (filtered.length === 0) {
+      slashMenu.innerHTML = '<div class="slash-empty">no commands match</div>';
+      return;
+    }
+    activeIdx = Math.min(activeIdx, filtered.length - 1);
+    slashMenu.innerHTML = filtered
+      .map(
+        (c, i) =>
+          `<button type="button" class="slash-item ${i === activeIdx ? 'active' : ''}" data-idx="${i}">
+             <span class="slash-key">/${c.keyword}</span>
+             <span class="slash-label">${c.label}</span>
+             <span class="slash-hint">${c.hint}</span>
+           </button>`,
+      )
+      .join('');
+    slashMenu.querySelectorAll('.slash-item').forEach((el) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const idx = Number((el as HTMLElement).dataset.idx);
+        select(idx);
+      });
+    });
+  }
+
+  function select(idx: number) {
+    const cmd = filtered[idx];
+    if (!cmd || triggerPos < 0) return;
+    const val = textarea.value;
+    // Range to replace: from triggerPos to the current caret end.
+    const end = textarea.selectionStart;
+    const before = val.slice(0, triggerPos);
+    const after = val.slice(end);
+    const insertText = cmd.insert;
+    const newVal = before + insertText + after;
+    textarea.value = newVal;
+    const caretBase = before.length + insertText.length;
+    const newCaret = caretBase + (cmd.caretOffset ?? 0);
+    textarea.setSelectionRange(newCaret, newCaret);
+    textarea.dispatchEvent(new Event('input'));
+    closeMenu();
+    textarea.focus();
+  }
+
+  if (textarea && preview && slashMenu) {
     const render = () => {
       preview.innerHTML = marked.parse(textarea.value) as string;
     };
-    textarea.addEventListener('input', render);
+    textarea.addEventListener('input', () => {
+      render();
+      // Update the in-progress filter if the menu is open.
+      if (menuOpen) {
+        const fragment = textarea.value.slice(triggerPos + 1, textarea.selectionStart);
+        if (/[\s\n]/.test(fragment)) {
+          closeMenu();
+        } else {
+          updateMenu(fragment);
+        }
+      }
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+      // Cmd/Ctrl+S → save
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        const form = textarea.closest('form');
+        if (form) form.requestSubmit();
+        return;
+      }
+
+      if (menuOpen) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIdx = (activeIdx + 1) % filtered.length;
+          updateMenu(textarea.value.slice(triggerPos + 1, textarea.selectionStart));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIdx = (activeIdx - 1 + filtered.length) % filtered.length;
+          updateMenu(textarea.value.slice(triggerPos + 1, textarea.selectionStart));
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          select(activeIdx);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeMenu();
+          return;
+        }
+      }
+
+      // Open slash menu when "/" is typed at line start or after whitespace.
+      if (e.key === '/') {
+        const pos = textarea.selectionStart;
+        const charBefore = pos > 0 ? textarea.value[pos - 1] : '\n';
+        if (!charBefore || charBefore === '\n' || charBefore === ' ' || charBefore === '\t') {
+          // Wait for the slash to actually be inserted, then open.
+          setTimeout(() => openMenuAt(pos), 0);
+        }
+      }
+    });
+
+    textarea.addEventListener('blur', () => {
+      // Brief delay so a mousedown on the menu still registers
+      setTimeout(() => { if (menuOpen) closeMenu(); }, 100);
+    });
+
     render();
   }
 </script>
 
-<style>
+<style is:global>
   .editor-form {
     display: flex;
     flex-direction: column;
@@ -106,6 +270,79 @@ const isNewFile = currentBody === '' && !saved;
     gap: 0.4rem;
     min-width: 0;
   }
+  .pane-label kbd {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    font-family: ui-monospace, monospace;
+    font-size: 0.72em;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+  .editor-pane { position: relative; }
+
+  /* ─── Slash command menu ─── */
+  .slash-menu {
+    position: absolute;
+    z-index: 100;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    min-width: 320px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 0.4rem;
+    bottom: 1rem;
+    left: 1rem;
+  }
+  .slash-item {
+    display: grid;
+    grid-template-columns: 4rem 1fr auto;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+  }
+  .slash-item.active,
+  .slash-item:hover {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .slash-key {
+    font-family: ui-monospace, monospace;
+    font-size: 0.78em;
+    color: var(--muted);
+  }
+  .slash-item.active .slash-key { color: var(--accent); }
+  .slash-label { font-weight: 500; }
+  .slash-hint {
+    font-family: ui-monospace, monospace;
+    font-size: 0.72em;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 14rem;
+  }
+  .slash-empty {
+    padding: 0.6rem 0.8rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+
   .pane-label {
     font-size: 0.7rem;
     text-transform: uppercase;
