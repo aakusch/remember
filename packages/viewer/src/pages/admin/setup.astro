@@ -30,9 +30,92 @@ const DEFAULTS: WizardValues = {
   openaiModel: 'text-embedding-3-small',
 };
 
+// Curated embedding-model catalog. "Custom" lets users paste any HF id.
+const LOCAL_MODELS = [
+  { id: 'BAAI/bge-small-en-v1.5', label: 'BAAI/bge-small-en-v1.5', dim: 384, size: '~80MB', note: 'default · balanced quality / speed' },
+  { id: 'mixedbread-ai/mxbai-embed-xsmall-v1', label: 'mxbai-embed-xsmall-v1', dim: 384, size: '~30MB', note: 'smallest · low RAM' },
+  { id: 'sentence-transformers/all-MiniLM-L6-v2', label: 'all-MiniLM-L6-v2', dim: 384, size: '~80MB', note: 'classic · battle-tested' },
+  { id: 'BAAI/bge-base-en-v1.5', label: 'BAAI/bge-base-en-v1.5', dim: 768, size: '~210MB', note: 'higher quality · larger' },
+  { id: 'BAAI/bge-large-en-v1.5', label: 'BAAI/bge-large-en-v1.5', dim: 1024, size: '~440MB', note: 'best quality · slower' },
+  { id: 'nomic-ai/nomic-embed-text-v1.5', label: 'nomic-embed-text-v1.5', dim: 768, size: '~280MB', note: 'long-context · variable dim' },
+];
+const KNOWN_LOCAL_IDS = new Set(LOCAL_MODELS.map((m) => m.id));
+
+const OPENAI_MODELS = [
+  { id: 'text-embedding-3-small', label: 'text-embedding-3-small', dim: 1536, note: 'cheap · 1536-d (default)' },
+  { id: 'text-embedding-3-large', label: 'text-embedding-3-large', dim: 3072, note: 'higher quality · 3072-d' },
+  { id: 'text-embedding-ada-002', label: 'text-embedding-ada-002', dim: 1536, note: 'legacy' },
+];
+const KNOWN_OPENAI_IDS = new Set(OPENAI_MODELS.map((m) => m.id));
+
+interface Preset {
+  id: string;
+  label: string;
+  description: string;
+  overrides: Partial<WizardValues>;
+  generatedTokenHint?: boolean;
+}
+
+const PRESETS: Preset[] = [
+  {
+    id: 'local-quickstart',
+    label: 'Local quickstart',
+    description: 'Default local-first setup. ~80MB model, localhost-only, no API key, no token.',
+    overrides: {
+      embedder: 'local-onnx',
+      embedModel: 'BAAI/bge-small-en-v1.5',
+      host: '127.0.0.1',
+      adminToken: '',
+    },
+  },
+  {
+    id: 'local-small',
+    label: 'Lightweight local',
+    description: 'Smaller ~30MB model for low-RAM machines. Still 384-d, still local.',
+    overrides: {
+      embedder: 'local-onnx',
+      embedModel: 'mixedbread-ai/mxbai-embed-xsmall-v1',
+      host: '127.0.0.1',
+      adminToken: '',
+    },
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI-powered',
+    description: 'Higher quality, requires OPENAI_API_KEY in env. text-embedding-3-small default.',
+    overrides: {
+      embedder: 'openai',
+      openaiModel: 'text-embedding-3-small',
+      host: '127.0.0.1',
+      adminToken: '',
+    },
+  },
+  {
+    id: 'team',
+    label: 'Team / remote access',
+    description: 'Better quality model + bound on 0.0.0.0 + admin token required for mutations.',
+    overrides: {
+      embedder: 'local-onnx',
+      embedModel: 'BAAI/bge-base-en-v1.5',
+      host: '0.0.0.0',
+    },
+    generatedTokenHint: true,
+  },
+];
+
+function randomToken(): string {
+  // Server-side random — no JS needed on client.
+  // 32 hex chars = 128 bits.
+  let out = '';
+  for (let i = 0; i < 32; i++) {
+    out += Math.floor(Math.random() * 16).toString(16);
+  }
+  return out;
+}
+
+// Load existing config (used both as initial form values and as the "current" comparison).
 const [config, status] = await Promise.all([getConfig(), getStatus()]);
 
-// Pre-fill defaults from current config if present
 const initial: WizardValues = {
   ...DEFAULTS,
   name: config?.config.name ?? DEFAULTS.name,
@@ -45,8 +128,31 @@ const initial: WizardValues = {
   adminToken: config?.config.server.adminToken ?? '',
 };
 
-// Collect submitted values (or fall back to initial)
-let values: WizardValues = { ...initial };
+// "Currently running" snapshot — what the live server has loaded.
+const currentlyLoaded: Partial<WizardValues> = {
+  name: config?.config.name,
+  description: config?.config.description,
+  content: config?.config.content,
+  host: config?.config.server.host,
+  apiPort: config?.config.server.apiPort,
+  port: config?.config.server.port,
+  landing: config?.config.viewer.landing,
+  adminToken: config?.config.server.adminToken ?? '',
+};
+
+// Apply preset overrides via ?preset=ID before form submission resolves.
+const presetId = Astro.url.searchParams.get('preset');
+const activePreset = PRESETS.find((p) => p.id === presetId);
+let presetValues: WizardValues = { ...initial };
+if (activePreset) {
+  presetValues = {
+    ...initial,
+    ...activePreset.overrides,
+    adminToken: activePreset.generatedTokenHint ? randomToken() : (activePreset.overrides.adminToken ?? initial.adminToken),
+  };
+}
+
+let values: WizardValues = { ...presetValues };
 let submitted = false;
 let saveResult: { ok: boolean; written_to?: string; backup_path?: string | null; error?: { code: string; message: string; hint?: string } } | null = null;
 let action: 'generate' | 'save' = 'generate';
@@ -55,21 +161,30 @@ if (Astro.request.method === 'POST') {
   submitted = true;
   const form = await Astro.request.formData();
   action = (form.get('action') === 'save' ? 'save' : 'generate');
+
+  // Resolve embedder model: if custom_local has a value, use it; else use select value.
+  const embedderSel = (form.get('embedder') === 'openai' ? 'openai' : 'local-onnx') as 'openai' | 'local-onnx';
+  const localSelected = String(form.get('embedModelSelect') ?? presetValues.embedModel).trim();
+  const localCustom = String(form.get('embedModelCustom') ?? '').trim();
+  const openaiSelected = String(form.get('openaiModelSelect') ?? presetValues.openaiModel).trim();
+  const openaiCustom = String(form.get('openaiModelCustom') ?? '').trim();
+
   values = {
-    name: String(form.get('name') ?? initial.name).trim() || initial.name,
-    description: String(form.get('description') ?? initial.description).trim() || initial.description,
-    content: String(form.get('content') ?? initial.content).trim() || initial.content,
-    host: String(form.get('host') ?? initial.host).trim() || initial.host,
-    apiPort: Number(form.get('apiPort')) || initial.apiPort,
-    port: Number(form.get('port')) || initial.port,
-    landing: String(form.get('landing') ?? initial.landing).trim() || initial.landing,
+    name: String(form.get('name') ?? presetValues.name).trim() || presetValues.name,
+    description: String(form.get('description') ?? presetValues.description).trim() || presetValues.description,
+    content: String(form.get('content') ?? presetValues.content).trim() || presetValues.content,
+    host: String(form.get('host') ?? presetValues.host).trim() || presetValues.host,
+    apiPort: Number(form.get('apiPort')) || presetValues.apiPort,
+    port: Number(form.get('port')) || presetValues.port,
+    landing: String(form.get('landing') ?? presetValues.landing).trim() || presetValues.landing,
     adminToken: String(form.get('adminToken') ?? '').trim(),
-    embedder: (form.get('embedder') === 'openai' ? 'openai' : 'local-onnx'),
-    embedModel: String(form.get('embedModel') ?? initial.embedModel).trim() || initial.embedModel,
-    openaiModel: String(form.get('openaiModel') ?? initial.openaiModel).trim() || initial.openaiModel,
+    embedder: embedderSel,
+    embedModel: localCustom || localSelected || presetValues.embedModel,
+    openaiModel: openaiCustom || openaiSelected || presetValues.openaiModel,
   };
 }
 
+// Generate the config TS source from the current values.
 const embedderBlock =
   values.embedder === 'openai'
     ? `defaults.embedder.openai({ model: '${values.openaiModel}' })`
@@ -124,37 +239,70 @@ const hasConfig = !!config?.config_path;
 if (submitted && action === 'save') {
   saveResult = await saveConfig(generated);
 }
+
+// Compute per-field "diff from current" for the change indicators.
+function diffFlag(key: keyof WizardValues): boolean {
+  const current = (currentlyLoaded as Record<string, unknown>)[key];
+  const next = (values as Record<string, unknown>)[key];
+  // Treat undefined/null/empty-string as equivalent for the description/token fields
+  const norm = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+  return norm(current) !== norm(next);
+}
+
+const embedderCurrent = status?.index.model ?? '';
+const embedderNext = values.embedder === 'openai' ? values.openaiModel : values.embedModel;
+const embedderDiff = embedderCurrent !== embedderNext;
+
+const localIsKnown = KNOWN_LOCAL_IDS.has(values.embedModel);
+const openaiIsKnown = KNOWN_OPENAI_IDS.has(values.openaiModel);
 ---
 <Layout title="Setup · Admin">
   <div class="main-col">
     <h1>Setup</h1>
     <p class="muted">
-      Walk through your wiki's core settings. This generates a <code>remember.config.ts</code> file you can save or paste into your existing one.
+      Walk through your wiki's core settings. The wizard saves directly to <code>remember.config.ts</code>; restart the core API to apply.
     </p>
 
     {hasConfig ? (
       <div class="alert" style="margin-top: 1rem;">
         <strong>Existing config detected:</strong> <code>{configPath}</code><br />
-        Form is pre-filled with current values. Edits regenerate the config below — they don't write to disk yet (PUT <code>/v1/config</code> lands in v1.2).
+        Form is pre-filled with current values. Changed fields are flagged with a <span class="change-tag">changed</span> tag below their input.
       </div>
     ) : (
       <div class="alert" style="margin-top: 1rem;">
-        <strong>No config file found</strong> at <code>{configPath}</code>. The system is using built-in defaults. Save the generated config below to lock in your choices.
+        <strong>No config file found</strong> at <code>{configPath}</code>. The system is using built-in defaults. Pick a preset below or fill in the form and click <strong>Save to disk</strong> to write the config.
       </div>
     )}
+
+    <h2 class="section-h">Presets</h2>
+    <p class="muted">One-click starting points. Picking a preset pre-fills the form; you can still tweak any field before saving.</p>
+    <div class="preset-grid">
+      {PRESETS.map((p) => (
+        <a class={`preset ${activePreset?.id === p.id ? 'active' : ''}`} href={`/admin/setup?preset=${p.id}`}>
+          <h4>{p.label}</h4>
+          <p>{p.description}</p>
+        </a>
+      ))}
+      <a class={`preset ${!activePreset ? 'active' : ''}`} href="/admin/setup">
+        <h4>Current values</h4>
+        <p>Use what's already loaded from your config file (or built-in defaults).</p>
+      </a>
+    </div>
 
     <form method="post" class="setup-form">
       {/* ─── Identity ─── */}
       <fieldset>
         <legend>Identity</legend>
         <label>
-          <span class="label">Wiki name</span>
+          <span class="label">Wiki name {diffFlag('name') && <span class="change-tag">changed</span>}</span>
           <input type="text" name="name" value={values.name} required />
+          {diffFlag('name') && <span class="hint diff">Current: <code>{currentlyLoaded.name ?? '(unset)'}</code></span>}
           <span class="hint">Shown in the browser title bar and on the landing page.</span>
         </label>
         <label>
-          <span class="label">Description</span>
+          <span class="label">Description {diffFlag('description') && <span class="change-tag">changed</span>}</span>
           <input type="text" name="description" value={values.description} />
+          {diffFlag('description') && <span class="hint diff">Current: <code>{currentlyLoaded.description ?? '(unset)'}</code></span>}
           <span class="hint">Short tagline for the wiki.</span>
         </label>
       </fieldset>
@@ -163,20 +311,22 @@ if (submitted && action === 'save') {
       <fieldset>
         <legend>Content</legend>
         <label>
-          <span class="label">Content directory</span>
+          <span class="label">Content directory {diffFlag('content') && <span class="change-tag">changed</span>}</span>
           <input type="text" name="content" value={values.content} required />
+          {diffFlag('content') && <span class="hint diff">Current: <code>{currentlyLoaded.content}</code></span>}
           <span class="hint">Relative to <code>remember.config.ts</code>. All markdown files here get indexed.</span>
         </label>
         <label>
-          <span class="label">Landing page</span>
+          <span class="label">Landing page {diffFlag('landing') && <span class="change-tag">changed</span>}</span>
           <input type="text" name="landing" value={values.landing} required />
+          {diffFlag('landing') && <span class="hint diff">Current: <code>{currentlyLoaded.landing}</code></span>}
           <span class="hint">Markdown file rendered at <code>/</code>. Relative to the content directory.</span>
         </label>
       </fieldset>
 
       {/* ─── Embeddings ─── */}
       <fieldset>
-        <legend>Embeddings</legend>
+        <legend>Embeddings {embedderDiff && <span class="change-tag">changed</span>}</legend>
         <div class="radio-group">
           <label class="radio">
             <input type="radio" name="embedder" value="local-onnx" checked={values.embedder === 'local-onnx'} />
@@ -191,15 +341,45 @@ if (submitted && action === 'save') {
             </span>
           </label>
         </div>
+
         <label>
-          <span class="label">Local model (HuggingFace ID)</span>
-          <input type="text" name="embedModel" value={values.embedModel} />
-          <span class="hint">Defaults to <code>BAAI/bge-small-en-v1.5</code> (384-d, ~80MB). Downloaded + cached on first index.</span>
+          <span class="label">Local model</span>
+          <select name="embedModelSelect">
+            {LOCAL_MODELS.map((m) => (
+              <option value={m.id} selected={localIsKnown && values.embedModel === m.id}>
+                {m.label} — {m.dim}-d · {m.size} · {m.note}
+              </option>
+            ))}
+            <option value="__custom__" selected={!localIsKnown}>Custom… (paste any HuggingFace ID below)</option>
+          </select>
+          <input
+            type="text"
+            name="embedModelCustom"
+            value={localIsKnown ? '' : values.embedModel}
+            placeholder="e.g. your-org/your-model"
+            style="margin-top: 0.4rem;"
+          />
+          <span class="hint">Used when Local is selected. First index downloads + caches the model to <code>~/.cache/huggingface/</code>.</span>
         </label>
+
         <label>
           <span class="label">OpenAI model</span>
-          <input type="text" name="openaiModel" value={values.openaiModel} />
-          <span class="hint">Only used when OpenAI is selected. Default: <code>text-embedding-3-small</code>.</span>
+          <select name="openaiModelSelect">
+            {OPENAI_MODELS.map((m) => (
+              <option value={m.id} selected={openaiIsKnown && values.openaiModel === m.id}>
+                {m.label} — {m.dim}-d · {m.note}
+              </option>
+            ))}
+            <option value="__custom__" selected={!openaiIsKnown}>Custom…</option>
+          </select>
+          <input
+            type="text"
+            name="openaiModelCustom"
+            value={openaiIsKnown ? '' : values.openaiModel}
+            placeholder="e.g. text-embedding-3-large"
+            style="margin-top: 0.4rem;"
+          />
+          <span class="hint">Used when OpenAI is selected. <code>OPENAI_API_KEY</code> must be set in the environment.</span>
         </label>
       </fieldset>
 
@@ -207,32 +387,36 @@ if (submitted && action === 'save') {
       <fieldset>
         <legend>Server</legend>
         <label>
-          <span class="label">Bind host</span>
+          <span class="label">Bind host {diffFlag('host') && <span class="change-tag">changed</span>}</span>
           <input type="text" name="host" value={values.host} required />
+          {diffFlag('host') && <span class="hint diff">Current: <code>{currentlyLoaded.host}</code></span>}
           <span class="hint"><code>127.0.0.1</code> for localhost-only. Use <code>0.0.0.0</code> to expose on the network (admin token required).</span>
         </label>
         <div class="grid-2">
           <label>
-            <span class="label">API port</span>
+            <span class="label">API port {diffFlag('apiPort') && <span class="change-tag">changed</span>}</span>
             <input type="number" name="apiPort" value={values.apiPort} min="1" max="65535" required />
+            {diffFlag('apiPort') && <span class="hint diff">Current: <code>{currentlyLoaded.apiPort}</code></span>}
             <span class="hint">Core HTTP API. Default 4320.</span>
           </label>
           <label>
-            <span class="label">Viewer port</span>
+            <span class="label">Viewer port {diffFlag('port') && <span class="change-tag">changed</span>}</span>
             <input type="number" name="port" value={values.port} min="1" max="65535" required />
+            {diffFlag('port') && <span class="hint diff">Current: <code>{currentlyLoaded.port}</code></span>}
             <span class="hint">Astro viewer. Default 4321.</span>
           </label>
         </div>
         <label>
-          <span class="label">Admin token (optional)</span>
+          <span class="label">Admin token (optional) {diffFlag('adminToken') && <span class="change-tag">changed</span>}</span>
           <input type="text" name="adminToken" value={values.adminToken} placeholder="(leave blank for localhost-only access)" />
+          {diffFlag('adminToken') && <span class="hint diff">Current: <code>{currentlyLoaded.adminToken || '(unset)'}</code></span>}
           <span class="hint">If set, mutation endpoints require <code>Authorization: Bearer &lt;token&gt;</code>. Required when host is non-loopback.</span>
         </label>
       </fieldset>
 
       <div class="actions">
-        <button type="submit" name="action" value="generate" class="btn secondary">Generate (preview only)</button>
         <button type="submit" name="action" value="save" class="btn" onclick={`return confirm('Write the new config to ${configPath}? A timestamped .bak backup of the current file will be created first. You must restart the core API (Ctrl+C → remember start) for changes to take effect.')`}>Save to disk</button>
+        <button type="submit" name="action" value="generate" class="btn secondary">Generate (preview only)</button>
         <a href="/admin" class="btn secondary">Cancel</a>
       </div>
     </form>
@@ -242,6 +426,7 @@ if (submitted && action === 'save') {
         <strong>Config written to <code>{saveResult.written_to}</code>.</strong><br />
         {saveResult.backup_path && <>Previous version backed up to <code>{saveResult.backup_path}</code>.<br /></>}
         Restart the core API (Ctrl+C in the terminal running it, then <code>remember start</code>) to apply.
+        {embedderDiff && <><br /><strong>Embedding model changed</strong> — after restart, run <a href="/admin/reindex"><strong>Reindex (full)</strong></a> to re-embed all chunks with the new model.</>}
       </div>
     )}
 
@@ -252,11 +437,11 @@ if (submitted && action === 'save') {
       </div>
     )}
 
-    {submitted && (
+    {submitted && action === 'generate' && (
       <section class="preview-section">
         <h2>Generated <code>remember.config.ts</code></h2>
         <p class="muted">
-          Save this to <code>{configPath}</code> (or paste into your existing config), then restart the core API (<code>remember start</code>) to pick up changes.
+          Save this to <code>{configPath}</code>, or click <strong>Save to disk</strong> above to write it via the API.
         </p>
         <div class="code-actions">
           <button type="button" class="btn secondary" id="copy-btn">Copy</button>
@@ -274,7 +459,7 @@ if (submitted && action === 'save') {
   </div>
 </Layout>
 
-{submitted && (
+{submitted && action === 'generate' && (
   <script is:inline>
     (() => {
       const btn = document.getElementById('copy-btn');
@@ -297,8 +482,51 @@ if (submitted && action === 'save') {
 )}
 
 <style>
+  .section-h {
+    margin-top: 2.5rem;
+    font-size: 1.1rem;
+    font-weight: 650;
+  }
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.85rem;
+    margin: 1rem 0 2.5rem 0;
+  }
+  .preset {
+    display: block;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.12s, background 0.12s, transform 0.06s;
+  }
+  .preset:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    text-decoration: none;
+  }
+  .preset.active {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .preset h4 {
+    margin: 0 0 0.4rem 0;
+    font-size: 0.95rem;
+    color: var(--accent);
+    font-weight: 650;
+  }
+  .preset p {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
   .setup-form {
-    margin-top: 1.5rem;
+    margin-top: 0;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -331,7 +559,8 @@ if (submitted && action === 'save') {
     margin-bottom: 0.35rem;
   }
   .setup-form input[type="text"],
-  .setup-form input[type="number"] {
+  .setup-form input[type="number"],
+  .setup-form select {
     width: 100%;
     padding: 0.55rem 0.85rem;
     border: 1px solid var(--border);
@@ -343,8 +572,16 @@ if (submitted && action === 'save') {
     outline: none;
     transition: border-color 0.12s;
   }
+  .setup-form select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2371717a' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+    padding-right: 2.25rem;
+  }
   .setup-form input[type="text"]:focus,
-  .setup-form input[type="number"]:focus {
+  .setup-form input[type="number"]:focus,
+  .setup-form select:focus {
     border-color: var(--accent);
   }
   .setup-form .hint {
@@ -353,6 +590,10 @@ if (submitted && action === 'save') {
     font-size: 0.78rem;
     color: var(--muted);
     line-height: 1.5;
+  }
+  .setup-form .hint.diff {
+    color: var(--accent);
+    font-weight: 500;
   }
   .setup-form .grid-2 {
     display: grid;
@@ -363,6 +604,21 @@ if (submitted && action === 'save') {
   .setup-form .grid-2 label {
     margin-top: 0;
   }
+  .change-tag {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.45rem;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 99px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+  }
+
   .radio-group {
     display: flex;
     flex-direction: column;
@@ -397,6 +653,7 @@ if (submitted && action === 'save') {
     display: flex;
     gap: 0.75rem;
     margin-top: 0.5rem;
+    flex-wrap: wrap;
   }
 
   .preview-section {
