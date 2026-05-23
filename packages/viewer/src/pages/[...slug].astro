@@ -1,0 +1,23 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { getPage } from '../lib/api.ts';
+import { marked } from 'marked';
+
+const slug = Astro.params.slug ?? '';
+const path = slug.endsWith('.md') ? slug : `${slug}.md`;
+
+const page = await getPage(path);
+const html = page ? marked.parse(page.body) : null;
+const title = (page?.frontmatter.title as string | undefined) ?? path;
+---
+<Layout title={title}>
+  {page && html ? (
+    <article set:html={html} />
+  ) : (
+    <article>
+      <h1>Page not found</h1>
+      <p class="muted">No page at <code>{path}</code>.</p>
+      <p><a href="/">← Home</a></p>
+    </article>
+  )}
+</Layout>

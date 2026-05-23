@@ -1,0 +1,122 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
+import { createHybridSearchEngine } from '../src/search/hybrid.js';
+import { createHashEmbedder } from '../src/embedders/hash.js';
+import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createIndexer } from '../src/indexer/index.js';
+import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createRemarkParser } from '../src/parsers/remark.js';
+import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
+import { createApp } from '../src/api/server.js';
+
+describe('HTTP API (wired)', () => {
+  let tmp: string;
+  let store: SqliteVecStore;
+  let app: ReturnType<typeof createApp>;
+
+  beforeEach(async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'remember-api-'));
+    const contentRoot = path.join(tmp, 'content');
+    await fs.mkdir(contentRoot);
+    await fs.writeFile(
+      path.join(contentRoot, 'welcome.md'),
+      '---\ntitle: Welcome\n---\n\n# Welcome\n\nHello world. This is the wiki.',
+    );
+
+    const embedder = createHashEmbedder(384);
+    store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
+    store.setDimension(embedder.dim);
+
+    const indexer = createIndexer({
+      walker: createChokidarWalker({}),
+      parser: createRemarkParser(),
+      chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
+      embedder,
+      store,
+    });
+    await indexer.indexAll(contentRoot);
+
+    const search = createHybridSearchEngine(store, embedder, createPassthroughReranker());
+    const reindex = async () => {
+      const r = await indexer.indexAll(contentRoot);
+      return { files_indexed: r.files_indexed, chunks_added: r.chunks_added, duration_ms: r.duration_ms };
+    };
+
+    app = createApp({
+      contentRoot,
+      store,
+      embedder,
+      search,
+      reindex,
+      adminToken: null,
+      remoteAllowed: false,
+    });
+  });
+
+  afterEach(async () => {
+    store.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  it('GET /v1/health', async () => {
+    const res = await app.request('/v1/health');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, version: '0.0.1' });
+  });
+
+  it('GET /v1/search returns results', async () => {
+    const res = await app.request('/v1/search?q=welcome&k=5');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { results: unknown[] };
+    expect(body.results.length).toBeGreaterThan(0);
+  });
+
+  it('GET /v1/pages lists wiki pages', async () => {
+    const res = await app.request('/v1/pages');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { pages: Array<{ path: string }> };
+    expect(body.pages.find((p) => p.path === 'welcome.md')).toBeTruthy();
+  });
+
+  it('GET /v1/pages/<path> returns the page', async () => {
+    const res = await app.request('/v1/pages/welcome.md');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { frontmatter: { title: string }; body: string };
+    expect(body.frontmatter.title).toBe('Welcome');
+    expect(body.body).toContain('Welcome');
+  });
+
+  it('GET /v1/pages/<path> rejects path traversal', async () => {
+    const res = await app.request('/v1/pages/..%2Fevil.md');
+    expect([400, 404]).toContain(res.status);
+  });
+
+  it('GET /v1/tools returns Anthropic-shaped tool defs', async () => {
+    const res = await app.request('/v1/tools');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { tools: Array<{ name: string; input_schema: unknown }> };
+    const names = body.tools.map((t) => t.name);
+    expect(names).toContain('search_wiki');
+    expect(names).toContain('get_page');
+    expect(names).toContain('list_pages');
+  });
+
+  it('GET /v1/status reports manifest stats', async () => {
+    const res = await app.request('/v1/status');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { index: { page_count: number; model: string } };
+    expect(body.index.page_count).toBeGreaterThanOrEqual(1);
+    expect(body.index.model).toMatch(/hash|bge|text-embedding/);
+  });
+
+  it('GET /v1/openapi.json returns a spec stub', async () => {
+    const res = await app.request('/v1/openapi.json');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { openapi: string; paths: Record<string, unknown> };
+    expect(body.openapi).toMatch(/^3\./);
+    expect(Object.keys(body.paths).length).toBeGreaterThan(0);
+  });
+});

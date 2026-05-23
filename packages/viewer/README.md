@@ -1,29 +1,32 @@
 # @remember/viewer
 
-Browser viewer + admin UI for [`remember`](../../README.md).
+Browser viewer for [`remember`](../../README.md). Astro 5 + SSR.
 
-## Stack
-
-- **Astro** — static markdown rendering + page routing
-- **React islands** — interactive admin (setup wizard, settings, reindex controls, folder ops)
-- Talks to [`@remember/core`](../core) over HTTP / JSON / SSE
-
-## Routes (planned)
+## Routes
 
 | Route | Purpose |
 |---|---|
-| `/` | Configured landing page (default `README.md`) |
-| `/[...slug]` | Render any markdown page |
-| `/search` | Semantic search UI |
-| `/admin/setup` | First-run wizard |
-| `/admin/settings` | Edit `remember.config.ts` via UI |
-| `/admin/index` | Reindex button + live status |
-| `/admin/diagnostics` | Health, model info, debug toggles |
+| `/` | Landing — renders `content/README.md` + lists all pages |
+| `/[...slug]` | Render any markdown page by path (`.md` extension stripped) |
+| `/search?q=...` | Server-rendered search UI hitting core's `/v1/search` |
 
-Admin routes are localhost-only by default; `REMEMBER_ADMIN_TOKEN` enables remote admin.
+## Dev
 
-## Status
+```bash
+# Terminal 1 — start the core API
+cd ../core && pnpm dev   # or: remember dev from a wiki folder
 
-**Scaffold placeholder.** The Astro project will be initialized via `npm create astro@latest` during the implementation phase so we pick up the current template.
+# Terminal 2 — start the viewer
+pnpm --filter @remember/viewer dev
+```
 
-Until then, this directory exists to reserve the package name and validate the monorepo wiring.
+Viewer defaults to `http://127.0.0.1:4321` and talks to the core at `REMEMBER_API` (default `http://127.0.0.1:4320/v1`).
+
+## v1.1+ roadmap
+
+- `/admin/setup` — first-run config wizard
+- `/admin/settings` — edit `remember.config.ts` via the UI
+- `/admin/index` — reindex button + live status via SSE
+- `/admin/diagnostics` — health, model info, debug toggles
+- Structural folder/page operations (move, rename, delete) from the page tree
+- Branding + theme config (CSS variable hooks already reserved in `Layout.astro`)

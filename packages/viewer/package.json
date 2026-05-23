@@ -1,16 +1,22 @@
 {
   "name": "@remember/viewer",
   "version": "0.0.1",
-  "description": "Browser viewer + admin UI for the remember wiki platform (Astro + React islands)",
+  "description": "Browser viewer + admin UI for the remember wiki platform (Astro)",
   "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "echo 'viewer: Astro scaffold lands in implementation phase. Run `npm create astro@latest` here when ready.'",
-    "build": "echo 'viewer: placeholder build (no-op in scaffold)'",
-    "test": "echo 'viewer: no tests yet'",
-    "typecheck": "echo 'viewer: placeholder typecheck'",
-    "lint": "echo 'viewer: no lint yet'"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "echo 'viewer: tests in implementation phase'",
+    "typecheck": "astro check",
+    "lint": "echo '(eslint not yet configured)'"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.0.0",
+    "astro": "^5.0.0",
+    "marked": "^14.0.0"
   },
   "engines": {
     "node": ">=20"

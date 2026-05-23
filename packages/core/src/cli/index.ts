@@ -7,14 +7,21 @@ USAGE:
 
 COMMANDS:
   init <dir>       Scaffold a new wiki in <dir>
-  dev              Start the dev server (viewer + API)
-  start            Start the production server
+  dev              Index, then start the dev server
+  start            Start the production server (assumes index is up to date)
   index            (Re)index the content directory
   status           Print index status
 
 OPTIONS:
   -v, --version    Print version
   -h, --help       Show this help
+
+ENV:
+  REMEMBER_HOST          API bind host (default 127.0.0.1)
+  REMEMBER_API_PORT      API port (default 4320)
+  REMEMBER_PORT          Viewer port (default 4321)
+  REMEMBER_ADMIN_TOKEN   Required for non-loopback binds + remote admin
+  OPENAI_API_KEY         Opts into OpenAI embeddings
 
 Docs: https://github.com/<owner>/remember
 `;
@@ -32,21 +39,46 @@ export async function run(argv: string[]): Promise<void> {
     return;
   }
 
-  // Stubs — concrete implementations land progressively.
-  switch (command) {
-    case 'init':
-    case 'dev':
-    case 'start':
-    case 'index':
-    case 'status':
-      process.stdout.write(
-        `remember ${command}: not yet implemented (scaffold only — see docs/superpowers/specs/ for v1 design)\n`,
-      );
-      return;
-    default:
-      process.stderr.write(
-        `remember: unknown command "${command}"\nRun "remember help" for usage.\n`,
-      );
-      process.exit(1);
+  try {
+    switch (command) {
+      case 'init': {
+        const { init } = await import('./commands/init.js');
+        const target = argv[1];
+        if (!target) {
+          process.stderr.write('remember init: target directory required\nUsage: remember init <dir>\n');
+          process.exit(1);
+        }
+        await init(target);
+        return;
+      }
+      case 'index': {
+        const { indexCommand } = await import('./commands/index-cmd.js');
+        await indexCommand();
+        return;
+      }
+      case 'dev': {
+        const { devCommand } = await import('./commands/dev-cmd.js');
+        await devCommand();
+        return;
+      }
+      case 'start': {
+        const { startCommand } = await import('./commands/start-cmd.js');
+        await startCommand();
+        return;
+      }
+      case 'status': {
+        const { statusCommand } = await import('./commands/status-cmd.js');
+        await statusCommand();
+        return;
+      }
+      default:
+        process.stderr.write(
+          `remember: unknown command "${command}"\nRun "remember help" for usage.\n`,
+        );
+        process.exit(1);
+    }
+  } catch (err) {
+    process.stderr.write(`remember ${command}: ${(err as Error).message}\n`);
+    process.exit(1);
   }
 }

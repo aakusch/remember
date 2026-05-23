@@ -5,7 +5,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "remember dev",
+    "start": "remember start",
+    "index": "remember index",
+    "status": "remember status",
     "test": "echo 'sample-wiki: no tests (used as fixture)'",
     "typecheck": "echo 'sample-wiki: no typecheck'"
+  },
+  "dependencies": {
+    "@remember/core": "workspace:*"
   }
 }
