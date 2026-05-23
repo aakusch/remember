@@ -9,7 +9,9 @@ interface Props {
 
 const { node, currentPath } = Astro.props;
 
-const isActive = node.isFile && (currentPath === node.path || currentPath === node.path.replace(/\.md$/, ''));
+const isActive =
+  node.isFile &&
+  (currentPath === node.path || currentPath === node.path.replace(/\.md$/, ''));
 const href = node.isFile ? '/' + node.path.replace(/\.md$/, '') : '';
 const display = node.isFile ? node.name.replace(/\.md$/, '') : node.name;
 ---
@@ -29,31 +31,3 @@ const display = node.isFile ? node.name.replace(/\.md$/, '') : node.name;
     </details>
   )}
 </li>
-
-<style>
-  details {
-    margin: 0;
-  }
-  .folder-summary {
-    display: block;
-    padding: 0.25rem 0.5rem;
-    color: var(--muted);
-    font-weight: 500;
-    font-size: 0.9rem;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-  }
-  .folder-summary:hover {
-    color: var(--text);
-  }
-  .folder-summary::before {
-    content: '▸ ';
-    display: inline-block;
-    width: 0.8em;
-    transition: transform 0.1s;
-  }
-  details[open] > .folder-summary::before {
-    transform: rotate(90deg);
-  }
-</style>

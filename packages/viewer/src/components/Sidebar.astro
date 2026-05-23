@@ -8,11 +8,20 @@ interface Props {
 }
 
 const { tree, currentPath } = Astro.props;
+const pathname = Astro.url.pathname.replace(/\/$/, '') || '/';
+
+const adminLinks = [
+  { href: '/admin', label: 'Dashboard' },
+  { href: '/admin/reindex', label: 'Reindex' },
+  { href: '/admin/files', label: 'Files' },
+  { href: '/admin/settings', label: 'Settings' },
+  { href: '/admin/diagnostics', label: 'Diagnostics' },
+];
 ---
 <aside class="sidebar">
   <h2 class="sidebar-title">Pages</h2>
   {tree.length === 0 ? (
-    <p class="empty">No pages yet.<br /><a href="/admin/reindex">Run a reindex →</a></p>
+    <p class="sidebar-empty">No pages yet.<br /><a href="/admin/reindex">Run a reindex →</a></p>
   ) : (
     <nav>
       <ul class="tree">
@@ -20,48 +29,107 @@ const { tree, currentPath } = Astro.props;
       </ul>
     </nav>
   )}
-  <h2 class="sidebar-title" style="margin-top: 1.5rem;">Admin</h2>
+  <h2 class="sidebar-title" style="margin-top: 1.75rem;">Admin</h2>
   <nav>
     <ul class="admin-links">
-      <li><a href="/admin">Dashboard</a></li>
-      <li><a href="/admin/reindex">Reindex</a></li>
-      <li><a href="/admin/files">Files</a></li>
-      <li><a href="/admin/settings">Settings</a></li>
-      <li><a href="/admin/diagnostics">Diagnostics</a></li>
+      {adminLinks.map((l) => (
+        <li>
+          <a href={l.href} class={pathname === l.href ? 'active' : ''}>{l.label}</a>
+        </li>
+      ))}
     </ul>
   </nav>
 </aside>
 
-<style>
+<style is:global>
   .sidebar {
-    width: 260px;
+    width: 264px;
     flex-shrink: 0;
-    padding: 1.5rem 1rem;
+    padding: 1.75rem 1.25rem;
     border-right: 1px solid var(--border);
     background: var(--card);
     overflow-y: auto;
-    max-height: calc(100vh - 60px);
+    max-height: calc(100vh - 64px);
     position: sticky;
-    top: 60px;
+    top: 64px;
   }
   .sidebar-title {
     font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     color: var(--muted);
     margin: 0 0 0.5rem 0.5rem;
     font-weight: 700;
   }
-  .empty {
+  .sidebar-empty {
     color: var(--muted);
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     padding: 0 0.5rem;
+    line-height: 1.5;
   }
-  .tree {
+  .sidebar-empty a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* Page tree */
+  .tree, .tree ul {
     list-style: none;
     padding: 0;
     margin: 0;
   }
+  .tree ul {
+    padding-left: 0.85rem;
+    margin-left: 0.45rem;
+    border-left: 1px solid var(--border);
+  }
+  .tree li {
+    margin: 0;
+  }
+  .tree a, .tree summary.folder-summary {
+    display: block;
+    padding: 0.3rem 0.6rem;
+    text-decoration: none;
+    color: var(--text);
+    border-radius: 5px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    cursor: pointer;
+  }
+  .tree a:hover {
+    background: var(--bg);
+    color: var(--accent);
+  }
+  .tree a.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .tree summary.folder-summary {
+    color: var(--muted);
+    font-weight: 500;
+    list-style: none;
+    user-select: none;
+  }
+  .tree summary.folder-summary:hover {
+    background: var(--bg);
+    color: var(--text);
+  }
+  .tree summary.folder-summary::-webkit-details-marker { display: none; }
+  .tree summary.folder-summary::before {
+    content: '▸';
+    display: inline-block;
+    width: 0.9em;
+    margin-right: 0.25rem;
+    transition: transform 0.12s;
+    font-size: 0.75em;
+    color: var(--muted);
+  }
+  .tree details[open] > summary.folder-summary::before {
+    transform: rotate(90deg);
+  }
+
+  /* Admin link list */
   .admin-links {
     list-style: none;
     padding: 0;
@@ -69,14 +137,20 @@ const { tree, currentPath } = Astro.props;
   }
   .admin-links li a {
     display: block;
-    padding: 0.3rem 0.5rem;
+    padding: 0.3rem 0.6rem;
     text-decoration: none;
     color: var(--text);
-    border-radius: 4px;
+    border-radius: 5px;
     font-size: 0.9rem;
+    transition: background 0.12s, color 0.12s;
   }
   .admin-links li a:hover {
     background: var(--bg);
     color: var(--accent);
+  }
+  .admin-links li a.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 600;
   }
 </style>

@@ -20,41 +20,46 @@ const toc = extractToc(Astro.props.markdown);
   </aside>
 )}
 
-<style>
-  .toc {
-    width: 200px;
+<style is:global>
+  aside.toc {
+    width: 220px;
     flex-shrink: 0;
-    padding: 1.5rem 0.5rem;
+    padding: 0.5rem 0;
+    position: sticky;
+    top: 96px;
+    align-self: flex-start;
     font-size: 0.85rem;
   }
-  .toc h3 {
+  aside.toc h3 {
     font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     color: var(--muted);
-    margin: 0 0 0.5rem 0.5rem;
+    margin: 0 0 0.5rem 1rem;
     font-weight: 700;
   }
-  .toc ul {
+  aside.toc ul {
     list-style: none;
     padding: 0;
     margin: 0;
     border-left: 1px solid var(--border);
   }
-  .toc li {
-    margin: 0.05rem 0;
-  }
-  .toc a {
+  aside.toc li { margin: 0; }
+  aside.toc a {
     display: block;
-    padding: 0.2rem 0.5rem 0.2rem 0.75rem;
+    padding: 0.25rem 0.75rem 0.25rem 1rem;
     color: var(--muted);
     text-decoration: none;
-    line-height: 1.4;
+    line-height: 1.45;
+    border-left: 2px solid transparent;
+    margin-left: -1px;
+    transition: color 0.12s, border-color 0.12s;
   }
-  .toc a:hover {
-    color: var(--accent);
+  aside.toc a:hover {
+    color: var(--text);
+    border-left-color: var(--border-strong);
   }
-  .level-3 a { padding-left: 1.25rem; }
-  .level-4 a { padding-left: 1.75rem; }
-  .level-5 a, .level-6 a { padding-left: 2.25rem; }
+  aside.toc li.level-3 a { padding-left: 1.75rem; }
+  aside.toc li.level-4 a { padding-left: 2.5rem; }
+  aside.toc li.level-5 a, aside.toc li.level-6 a { padding-left: 3rem; }
 </style>
