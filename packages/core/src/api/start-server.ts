@@ -1,6 +1,8 @@
 import { serve } from '@hono/node-server';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import chokidar from 'chokidar';
 import { createApp } from './server.js';
 import { createSqliteVecStore } from '../stores/sqlite-vec.js';
 import { createChokidarWalker } from '../walkers/chokidar.js';
@@ -30,19 +32,62 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
   const search = createHybridSearchEngine(store, embedder, reranker, { topK: 20, finalK: 10 });
 
   const indexer = createIndexer({ walker, parser, chunker, embedder, store });
+  const events = new EventEmitter();
 
   const reindex = async (mode: 'incremental' | 'full') => {
+    events.emit('event', { type: 'index.started', mode });
     if (mode === 'full') {
       // For full reindex, we'd want to clear the manifest first.
       // For v1, we let incremental + manifest do the right thing.
     }
     const result = await indexer.indexAll(contentRoot);
+    events.emit('event', { type: 'index.completed', mode, ...result });
     return {
       files_indexed: result.files_indexed,
       chunks_added: result.chunks_added,
       duration_ms: result.duration_ms,
     };
   };
+
+  const reindexOne = async (relPath: string) => {
+    events.emit('event', { type: 'index.started', mode: 'single', path: relPath });
+    const r = await indexer.indexOne(contentRoot, relPath);
+    events.emit('event', { type: 'index.completed', mode: 'single', path: relPath, chunks: r.chunks_added });
+    return r;
+  };
+
+  // File watcher — debounced auto-reindex on disk changes.
+  const watcher = chokidar.watch(contentRoot, {
+    ignored: [
+      /(^|[\\/])\.[^.]/,
+      '**/node_modules/**',
+      '**/.remember/**',
+      '**/.git/**',
+    ],
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 50 },
+  });
+
+  let reindexTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleReindex = () => {
+    if (reindexTimer) clearTimeout(reindexTimer);
+    reindexTimer = setTimeout(() => {
+      reindexTimer = null;
+      reindex('incremental').catch((err) => {
+        process.stderr.write(`[remember] watcher reindex failed: ${(err as Error).message}\n`);
+      });
+    }, 500);
+  };
+
+  const emitChange = (event: 'add' | 'change' | 'unlink', absPath: string) => {
+    const rel = path.relative(contentRoot, absPath).split(path.sep).join('/');
+    events.emit('event', { type: 'page.changed', kind: event, path: rel });
+    scheduleReindex();
+  };
+
+  watcher.on('add', (p) => emitChange('add', p));
+  watcher.on('change', (p) => emitChange('change', p));
+  watcher.on('unlink', (p) => emitChange('unlink', p));
 
   const targetConfigPath = cfg.configPath ?? path.join(cfg.rootDir, 'remember.config.ts');
 
@@ -52,6 +97,8 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     embedder,
     search,
     reindex,
+    reindexOne,
+    events,
     adminToken: cfg.validated.server.adminToken,
     remoteAllowed: cfg.validated.server.host !== '127.0.0.1',
     configPath: cfg.configPath,
@@ -117,6 +164,7 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     url: `http://${host}:${port}`,
     close: () =>
       new Promise<void>((resolve) => {
+        watcher.close().catch(() => undefined);
         server.close(() => resolve());
         store.close();
       }),

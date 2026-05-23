@@ -51,6 +51,13 @@ const tagList = Array.isArray(tags) ? (tags as string[]) : [];
           {tagList.length > 0 && (
             <p style="margin: 0 0 1rem 0;">
               {tagList.map((t) => <span class="badge" style="margin-right: 0.4rem;">#{t}</span>)}
+              <a href={`/admin/edit/${path.replace(/\.md$/, '')}`} class="edit-link" style="margin-left: 0.5rem;">✎ Edit</a>
+            </p>
+          )}
+
+          {tagList.length === 0 && (
+            <p style="margin: 0 0 1rem 0;">
+              <a href={`/admin/edit/${path.replace(/\.md$/, '')}`} class="edit-link">✎ Edit</a>
             </p>
           )}
 
@@ -79,7 +86,10 @@ const tagList = Array.isArray(tags) ? (tags as string[]) : [];
         <>
           <h1>Page not found</h1>
           <p class="muted">No page at <code>{path}</code>.</p>
-          <p><a href="/">← Home</a></p>
+          <p>
+            <a href="/">← Home</a>
+            <a href={`/admin/edit/${path.replace(/\.md$/, '')}`} style="margin-left: 1rem;">✎ Create this page</a>
+          </p>
         </>
       )}
     </article>

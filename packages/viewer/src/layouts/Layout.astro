@@ -300,6 +300,29 @@ const tree = buildTree(pagesResult.pages);
         border-top: 1px solid var(--border);
       }
       footer.site a { color: var(--muted); }
+      .sse-status {
+        display: inline-block;
+        margin-left: 0.5rem;
+        font-size: 0.7rem;
+        color: var(--muted);
+      }
+      .sse-status[data-state="connected"] { color: var(--success); }
+      .sse-status[data-state="disconnected"], .sse-status[data-state="error"] { color: var(--danger); }
+
+      a.edit-link {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.82rem;
+        padding: 0.1rem 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: 99px;
+        transition: color 0.12s, border-color 0.12s;
+      }
+      a.edit-link:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
@@ -321,7 +344,71 @@ const tree = buildTree(pagesResult.pages);
       </div>
     </div>
     <footer class="site">
-      <a href="https://github.com/">remember</a> · v0.0.1
+      <a href="https://github.com/">remember</a> · v0.0.1 · <span id="sse-status" class="sse-status">●</span>
     </footer>
+
+    <script is:inline define:vars={{ apiBase: import.meta.env.REMEMBER_API ?? 'http://127.0.0.1:4320/v1' }}>
+      // SSE live-reload — listens for page.changed / index.completed and reloads
+      // when the change touches the current page. Idempotent on multiple includes.
+      (() => {
+        if (window.__rememberSSE) return;
+        window.__rememberSSE = true;
+        const status = document.getElementById('sse-status');
+        const setStatus = (state, title) => {
+          if (!status) return;
+          status.dataset.state = state;
+          status.title = title;
+        };
+        const currentSlug = window.location.pathname.replace(/^\/+|\/+$/g, '');
+        const matchesCurrent = (changedPath) => {
+          if (!changedPath) return false;
+          const a = changedPath.replace(/\.md$/, '').replace(/^\/+|\/+$/g, '');
+          return a === currentSlug || a === 'README';
+        };
+
+        let reloadTimer = null;
+        const scheduleReload = () => {
+          if (reloadTimer) return;
+          reloadTimer = setTimeout(() => window.location.reload(), 600);
+        };
+
+        const connect = () => {
+          let es;
+          try {
+            es = new EventSource(`${apiBase}/events`);
+          } catch {
+            setStatus('error', 'SSE unsupported');
+            return;
+          }
+
+          es.addEventListener('connected', () => setStatus('connected', 'live-reload connected'));
+          es.addEventListener('heartbeat', () => {});
+          es.addEventListener('page.changed', (e) => {
+            try {
+              const d = JSON.parse(e.data);
+              if (matchesCurrent(d.path)) scheduleReload();
+              if (window.location.pathname === '/' || window.location.pathname === '') scheduleReload();
+            } catch {}
+          });
+          es.addEventListener('page.saved', (e) => {
+            try {
+              const d = JSON.parse(e.data);
+              if (matchesCurrent(d.path)) scheduleReload();
+            } catch {}
+          });
+          es.addEventListener('index.completed', () => {
+            // Refresh listing pages so the sidebar tree updates.
+            if (window.location.pathname.startsWith('/admin/files')) scheduleReload();
+          });
+          es.onerror = () => {
+            setStatus('disconnected', 'live-reload disconnected — retrying');
+            es.close();
+            setTimeout(connect, 3000);
+          };
+        };
+
+        connect();
+      })();
+    </script>
   </body>
 </html>

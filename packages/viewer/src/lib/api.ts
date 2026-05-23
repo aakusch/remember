@@ -168,4 +168,28 @@ export async function saveConfig(source: string): Promise<{
   return (await res.json()) as Awaited<ReturnType<typeof saveConfig>>;
 }
 
+export async function savePage(
+  p: string,
+  body: string,
+): Promise<{ ok: boolean; indexed?: number; error?: { code: string; message: string } }> {
+  const encoded = p.split('/').map((s) => encodeURIComponent(s)).join('/');
+  const res = await fetch(`${API_BASE}/pages/${encoded}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+  return (await res.json()) as Awaited<ReturnType<typeof savePage>>;
+}
+
+export async function getPageRaw(p: string): Promise<string | null> {
+  try {
+    const encoded = p.split('/').map((s) => encodeURIComponent(s)).join('/');
+    const res = await fetch(`${API_BASE}/pages/${encoded}?format=text`);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
 export { API_BASE };

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { EventEmitter } from 'node:events';
 import { registerRoutes, type RouteContext } from './routes.js';
 
 export function createApp(ctx?: Partial<RouteContext>): Hono {
@@ -10,6 +11,9 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
       embedder: ctx.embedder,
       search: ctx.search,
       reindex: ctx.reindex,
+      reindexOne:
+        ctx.reindexOne ??
+        (async () => ({ chunks_added: 0 })),
       adminToken: ctx.adminToken ?? null,
       remoteAllowed: ctx.remoteAllowed ?? false,
       configPath: ctx.configPath ?? null,
@@ -32,6 +36,7 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
             hint: 'Use startServer() or pass ctx.saveConfig to createApp()',
           },
         })),
+      events: ctx.events ?? new EventEmitter(),
     });
   } else {
     registerScaffoldRoutes(app);

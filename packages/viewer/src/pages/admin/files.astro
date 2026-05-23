@@ -55,14 +55,23 @@ const folders = Array.from(folderSet).sort();
 
     {flash && <div class={`alert ${flash.type}`}>{flash.message}</div>}
 
-    <details style="margin-top: 1rem;">
-      <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600;">+ Create folder</summary>
-      <form method="post" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-        <input type="hidden" name="action" value="create-folder" />
-        <input type="text" name="path" placeholder="new-folder or nested/path" required style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);" />
-        <button type="submit" class="btn">Create</button>
-      </form>
-    </details>
+    <div style="display: flex; gap: 0.6rem; margin-top: 1rem; flex-wrap: wrap;">
+      <details>
+        <summary class="btn secondary" style="display: inline-block;">+ Create folder</summary>
+        <form method="post" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+          <input type="hidden" name="action" value="create-folder" />
+          <input type="text" name="path" placeholder="new-folder or nested/path" required style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);" />
+          <button type="submit" class="btn">Create</button>
+        </form>
+      </details>
+      <details>
+        <summary class="btn" style="display: inline-block;">+ New page</summary>
+        <form action="/admin/edit/_redirect" method="get" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;" onsubmit="event.preventDefault(); const p = this.querySelector('input').value.replace(/\.md$/,''); window.location.href = '/admin/edit/' + encodeURIComponent(p).replace(/%2F/g,'/');">
+          <input type="text" placeholder="new-page or folder/new-page" required style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);" />
+          <button type="submit" class="btn">Create</button>
+        </form>
+      </details>
+    </div>
 
     <h2 style="margin-top: 2rem;">Folders ({folders.length})</h2>
     {folders.length === 0 ? (

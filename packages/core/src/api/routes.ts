@@ -1,4 +1,6 @@
 import type { Context, Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
+import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { safeJoinContent, PathOutsideContentError } from './path-utils.js';
@@ -12,12 +14,14 @@ export interface RouteContext {
   embedder: Embedder;
   search: SearchEngine;
   reindex: (mode: 'incremental' | 'full') => Promise<{ files_indexed: number; chunks_added: number; duration_ms: number }>;
+  reindexOne: (relPath: string) => Promise<{ chunks_added: number }>;
   adminToken: string | null;
   remoteAllowed: boolean;
   configPath: string | null;
   configRoot: string;
   getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
   saveConfig: (source: string) => Promise<{ ok: true; written_to: string; backup_path: string | null } | { ok: false; error: { code: string; message: string; hint?: string } }>;
+  events: EventEmitter;
 }
 
 const notImplemented = (endpoint: string) => ({
@@ -115,6 +119,31 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       }
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return c.json({ error: { code: 'PAGE_NOT_FOUND', message: `No page at ${userPath}` } }, 404);
+      }
+      throw err;
+    }
+  });
+
+  // Write page (admin-gated). Editor surface for the viewer.
+  app.put('/v1/pages/*', async (c) => {
+    const denial = checkAdmin(c, ctx.adminToken);
+    if (denial) return denial;
+    const userPath = c.req.path.replace(/^\/v1\/pages\//, '');
+    const body = (await c.req.json().catch(() => ({}))) as { body?: unknown };
+    if (typeof body.body !== 'string') {
+      return c.json({ error: { code: 'BAD_REQUEST', message: 'PUT /v1/pages/<path> requires { body: string } (full markdown including frontmatter)' } }, 400);
+    }
+    try {
+      const abs = safeJoinContent(ctx.contentRoot, userPath);
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, body.body, 'utf8');
+      // Reindex just this file so the change is searchable immediately.
+      const r = await ctx.reindexOne(userPath);
+      ctx.events.emit('event', { type: 'page.saved', path: userPath, chunks: r.chunks_added });
+      return c.json({ ok: true, indexed: r.chunks_added });
+    } catch (err) {
+      if (err instanceof PathOutsideContentError) {
+        return c.json({ error: { code: err.code, message: err.message } }, 400);
       }
       throw err;
     }
@@ -293,11 +322,38 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     });
   });
 
-  // SSE events (placeholder — fires on first build of watcher)
-  app.get('/v1/events', (c) => {
+  // Server-Sent Events. Viewer subscribes for live reload + index status.
+  app.get('/v1/events', async (c) => {
     const denial = checkAdmin(c, ctx.adminToken);
     if (denial) return denial;
-    return c.json(notImplemented('GET /v1/events'), 501);
+
+    return streamSSE(c, async (stream) => {
+      const listener = async (event: { type: string } & Record<string, unknown>) => {
+        try {
+          await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+        } catch {
+          // client disconnected — listener cleanup happens via abort signal
+        }
+      };
+      ctx.events.on('event', listener);
+
+      await stream.writeSSE({ event: 'connected', data: JSON.stringify({ time: Date.now() }) });
+
+      // Heartbeat so proxies don't drop the connection during quiet periods.
+      const heartbeat = setInterval(() => {
+        stream
+          .writeSSE({ event: 'heartbeat', data: String(Date.now()) })
+          .catch(() => clearInterval(heartbeat));
+      }, 25_000);
+
+      await new Promise<void>((resolve) => {
+        c.req.raw.signal.addEventListener('abort', () => {
+          ctx.events.off('event', listener);
+          clearInterval(heartbeat);
+          resolve();
+        });
+      });
+    });
   });
 
   // AI tools surface
