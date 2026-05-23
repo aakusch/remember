@@ -13,6 +13,8 @@ import { createPassthroughReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
 import { loadConfig } from '../config/load.js';
 import { resolveEmbedder } from './resolve-embedder.js';
+import { createConnectorManager } from '../connectors/manager.js';
+import { resolveConnectors } from '../connectors/resolve.js';
 
 export interface StartServerOptions {
   rootDir: string;
@@ -91,6 +93,32 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
 
   const targetConfigPath = cfg.configPath ?? path.join(cfg.rootDir, 'remember.config.ts');
 
+  // Connector manager — initialize before app + run initial sync in background.
+  const resolvedConnectors = resolveConnectors(cfg.raw.connectors, cfg.rootDir);
+  const connectorManager = await createConnectorManager({
+    connectors: resolvedConnectors,
+    contentRoot,
+    rootDir: cfg.rootDir,
+    events,
+  });
+
+  if (resolvedConnectors.length > 0) {
+    // Kick off initial sync, but don't block server startup on it.
+    process.stdout.write(`[remember] ${resolvedConnectors.length} connector(s) configured: ${resolvedConnectors.map((c) => c.name).join(', ')}\n`);
+    connectorManager.syncAll().then((r) => {
+      const summary = Object.entries(r)
+        .map(([name, res]) => {
+          if (res && typeof res === 'object' && 'error' in res) return `${name}: ERROR (${(res as { error: string }).error})`;
+          const r2 = res as { files_written?: number; files_unchanged?: number; duration_ms?: number };
+          return `${name}: ${r2.files_written ?? 0}w/${r2.files_unchanged ?? 0}u in ${r2.duration_ms ?? 0}ms`;
+        })
+        .join(' · ');
+      process.stdout.write(`[remember] initial connector sync done — ${summary}\n`);
+    }).catch((err) => {
+      process.stderr.write(`[remember] connector sync failed: ${(err as Error).message}\n`);
+    });
+  }
+
   const app = createApp({
     contentRoot,
     store,
@@ -99,6 +127,11 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     reindex,
     reindexOne,
     events,
+    connectors: {
+      list: () => connectorManager.list(),
+      syncOne: (name) => connectorManager.syncOne(name),
+      syncAll: () => connectorManager.syncAll(),
+    },
     adminToken: cfg.validated.server.adminToken,
     remoteAllowed: cfg.validated.server.host !== '127.0.0.1',
     configPath: cfg.configPath,
@@ -165,6 +198,7 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     close: () =>
       new Promise<void>((resolve) => {
         watcher.close().catch(() => undefined);
+        connectorManager.stopAll().catch(() => undefined);
         server.close(() => resolve());
         store.close();
       }),

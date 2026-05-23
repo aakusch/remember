@@ -95,6 +95,7 @@ export interface RememberConfig {
   search?: {
     engine?: unknown;
   };
+  connectors?: unknown[];
   index?: {
     watchMode?: 'on' | 'off' | 'on-dev-only';
     debounceMs?: number;

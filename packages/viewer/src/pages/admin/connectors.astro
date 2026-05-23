@@ -1,0 +1,198 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { listConnectors, syncConnector, syncAllConnectors, type ConnectorStatusDTO } from '../../lib/api.ts';
+
+let flash: { type: 'success' | 'error'; message: string } | null = null;
+
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const action = form.get('action') as string;
+    const name = form.get('name') as string | null;
+    let result: unknown;
+    if (action === 'sync-one' && name) {
+      result = await syncConnector(name);
+    } else if (action === 'sync-all') {
+      result = await syncAllConnectors();
+    }
+    flash = { type: 'success', message: `Sync triggered: ${JSON.stringify(result)}` };
+  } catch (err) {
+    flash = { type: 'error', message: (err as Error).message };
+  }
+}
+
+const connectors: ConnectorStatusDTO[] = await listConnectors();
+---
+<Layout title="Connectors · Admin">
+  <div class="main-col">
+    <h1>Connectors</h1>
+    <p class="muted">
+      Connectors pull content from external sources into <code>content/</code> so it's indexed and searchable like any other markdown file. Configure them in <code>remember.config.ts</code> under the <code>connectors</code> array.
+    </p>
+
+    {flash && <div class={`alert ${flash.type}`}>{flash.message}</div>}
+
+    {connectors.length === 0 ? (
+      <div class="alert">
+        <strong>No connectors configured.</strong><br />
+        Add them to <code>remember.config.ts</code>:
+        <pre style="margin-top: 0.75rem; background: var(--bg); padding: 1rem; border-radius: 6px; font-size: 0.85em; overflow-x: auto;"><code>{`import { defineConfig, defaults } from '@remember/core';
+
+export default defineConfig({
+  // ...
+  connectors: [
+    defaults.connector.obsidian({
+      name: 'my-vault',
+      vaultPath: '/path/to/your/Obsidian Vault',
+      include: ['Reference/', 'Notes/'],
+      exclude: ['Reference/_archive/'],
+      transformWikilinks: true,
+      tag: 'obsidian',
+    }),
+    defaults.connector.granola({
+      apiUrl: 'https://your-granola-bridge.example.com/meetings',
+      apiKey: process.env.GRANOLA_API_KEY,
+      since: '2026-01-01',
+      tag: 'meeting',
+      includeTranscript: false,
+    }),
+    defaults.connector.filesystem({
+      name: 'shared-notes',
+      sourcePath: '/path/to/team/shared/notes',
+    }),
+  ],
+});`}</code></pre>
+      </div>
+    ) : (
+      <>
+        <div style="display: flex; gap: 0.5rem; margin: 1rem 0 1.5rem 0;">
+          <form method="post" style="display: inline;">
+            <input type="hidden" name="action" value="sync-all" />
+            <button type="submit" class="btn">Sync all connectors</button>
+          </form>
+        </div>
+
+        <div class="connector-grid">
+          {connectors.map((c) => (
+            <div class={`connector-card ${c.last_error ? 'error' : c.configured ? 'configured' : 'misconfigured'}`}>
+              <div class="header">
+                <h3>{c.name}</h3>
+                <span class={`status ${c.configured ? 'ok' : 'warn'}`}>
+                  {c.configured ? 'configured' : 'misconfigured'}
+                </span>
+              </div>
+              <p class="kind"><code>{c.kind}</code> → <code>content/{c.target}/</code></p>
+
+              {c.last_error && (
+                <p class="error-line"><strong>Error:</strong> {c.last_error}</p>
+              )}
+
+              {c.last_sync_at ? (
+                <div class="stats">
+                  <span class="muted">Last sync: {new Date(c.last_sync_at).toLocaleString()}</span>
+                  {c.last_result && (
+                    <div class="counts">
+                      <span class="count written">+{c.last_result.files_written ?? 0}</span>
+                      <span class="count unchanged">~{c.last_result.files_unchanged ?? 0}</span>
+                      <span class="count deleted">−{c.last_result.files_deleted ?? 0}</span>
+                      <span class="muted">in {c.last_result.duration_ms ?? 0}ms</span>
+                    </div>
+                  )}
+                  {c.last_result?.notes && <p class="muted notes">{c.last_result.notes}</p>}
+                </div>
+              ) : (
+                <p class="muted">Never synced.</p>
+              )}
+
+              <form method="post" style="margin-top: 1rem;">
+                <input type="hidden" name="action" value="sync-one" />
+                <input type="hidden" name="name" value={c.name} />
+                <button type="submit" class="btn secondary" disabled={!c.configured}>Sync now</button>
+              </form>
+            </div>
+          ))}
+        </div>
+
+        <p class="muted" style="margin-top: 2rem; font-size: 0.85rem;">
+          Synced files live under <code>content/_&lt;connector&gt;/</code> and flow through the same indexing pipeline as your hand-written pages — searchable immediately. Don't edit them directly; next sync overwrites.
+        </p>
+      </>
+    )}
+  </div>
+</Layout>
+
+<style>
+  .connector-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+  }
+  .connector-card {
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+  }
+  .connector-card.error { border-color: rgba(220, 38, 38, 0.4); }
+  .connector-card .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+  }
+  .connector-card h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--accent);
+  }
+  .connector-card .status {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  .connector-card .status.ok { color: var(--success); border-color: rgba(22, 163, 74, 0.5); }
+  .connector-card .status.warn { color: var(--danger); border-color: rgba(220, 38, 38, 0.5); }
+  .connector-card .kind {
+    margin: 0 0 0.8rem 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .connector-card .error-line {
+    background: rgba(220, 38, 38, 0.08);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: var(--danger);
+    margin: 0.5rem 0;
+  }
+  .connector-card .stats { margin-top: 0.5rem; }
+  .connector-card .counts {
+    margin-top: 0.4rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+  .connector-card .count {
+    font-family: ui-monospace, monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .connector-card .count.written { color: var(--success); }
+  .connector-card .count.unchanged { color: var(--muted); }
+  .connector-card .count.deleted { color: var(--danger); }
+  .connector-card .notes {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    font-style: italic;
+  }
+  .connector-card button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

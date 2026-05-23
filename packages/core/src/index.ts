@@ -30,3 +30,19 @@ export { createIndexer } from './indexer/index.js';
 export { createHashEmbedder } from './embedders/hash.js';
 export { createLocalOnnxEmbedder } from './embedders/local-onnx.js';
 export { createOpenAIEmbedder } from './embedders/openai.js';
+
+export {
+  createConnectorManager,
+  createObsidianConnector,
+  createGranolaConnector,
+  createFilesystemConnector,
+  resolveConnectors,
+  type Connector,
+  type ConnectorManager,
+  type ConnectorStatus,
+  type ConnectorSyncResult,
+  type ObsidianConnectorOptions,
+  type GranolaConnectorOptions,
+  type GranolaMeeting,
+  type FilesystemConnectorOptions,
+} from './connectors/index.js';

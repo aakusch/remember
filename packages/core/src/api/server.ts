@@ -37,6 +37,12 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
           },
         })),
       events: ctx.events ?? new EventEmitter(),
+      connectors:
+        ctx.connectors ?? {
+          list: () => [],
+          syncOne: async () => ({ error: 'no connector manager' }),
+          syncAll: async () => ({}),
+        },
     });
   } else {
     registerScaffoldRoutes(app);

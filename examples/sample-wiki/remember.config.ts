@@ -37,5 +37,28 @@ export default defineConfig({
     breadcrumbs: true,
   },
 
+  // Pull external content into the index via connectors.
+  // Synced files land in content/_<connector-name>/ and flow through the same
+  // pipeline as your hand-written pages.
+  connectors: [
+    defaults.connector.obsidian({
+      name: 'obsidian',
+      vaultPath: '../sample-vault',
+      transformWikilinks: true,
+      tag: 'obsidian',
+    }),
+    defaults.connector.granola({
+      name: 'granola',
+      // No apiUrl/apiKey here — connector reports as "misconfigured" until you
+      // wire it up. To enable, set GRANOLA_API_URL + GRANOLA_API_KEY env vars
+      // or pass a fetchMeetings callback in code.
+      apiUrl: process.env.GRANOLA_API_URL,
+      apiKey: process.env.GRANOLA_API_KEY,
+      since: '2026-01-01',
+      tag: 'meeting',
+      includeTranscript: false,
+    }),
+  ],
+
   schemaVersion: 1,
 });

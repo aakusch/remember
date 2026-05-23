@@ -22,6 +22,11 @@ export interface RouteContext {
   getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
   saveConfig: (source: string) => Promise<{ ok: true; written_to: string; backup_path: string | null } | { ok: false; error: { code: string; message: string; hint?: string } }>;
   events: EventEmitter;
+  connectors: {
+    list: () => Array<{ name: string; kind: string; target: string; configured: boolean; last_sync_at: string | null; last_result: unknown; last_error: string | null }>;
+    syncOne: (name: string) => Promise<unknown>;
+    syncAll: () => Promise<Record<string, unknown>>;
+  };
 }
 
 const notImplemented = (endpoint: string) => ({
@@ -354,6 +359,22 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         });
       });
     });
+  });
+
+  // Connectors
+  app.get('/v1/connectors', (c) => c.json({ connectors: ctx.connectors.list() }));
+  app.post('/v1/connectors/:name/sync', async (c) => {
+    const denial = checkAdmin(c, ctx.adminToken);
+    if (denial) return denial;
+    const name = c.req.param('name');
+    const r = await ctx.connectors.syncOne(name);
+    return c.json(r);
+  });
+  app.post('/v1/connectors/sync', async (c) => {
+    const denial = checkAdmin(c, ctx.adminToken);
+    if (denial) return denial;
+    const r = await ctx.connectors.syncAll();
+    return c.json({ ok: true, results: r });
   });
 
   // AI tools surface

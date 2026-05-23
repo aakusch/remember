@@ -192,4 +192,43 @@ export async function getPageRaw(p: string): Promise<string | null> {
   }
 }
 
+export interface ConnectorStatusDTO {
+  name: string;
+  kind: string;
+  target: string;
+  configured: boolean;
+  last_sync_at: string | null;
+  last_result: {
+    files_written?: number;
+    files_unchanged?: number;
+    files_deleted?: number;
+    duration_ms?: number;
+    notes?: string;
+  } | null;
+  last_error: string | null;
+}
+
+export async function listConnectors(): Promise<ConnectorStatusDTO[]> {
+  try {
+    const res = await fetch(`${API_BASE}/connectors`);
+    if (!res.ok) return [];
+    const body = (await res.json()) as { connectors: ConnectorStatusDTO[] };
+    return body.connectors;
+  } catch {
+    return [];
+  }
+}
+
+export async function syncConnector(name: string): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/connectors/${encodeURIComponent(name)}/sync`, {
+    method: 'POST',
+  });
+  return await res.json();
+}
+
+export async function syncAllConnectors(): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/connectors/sync`, { method: 'POST' });
+  return await res.json();
+}
+
 export { API_BASE };
