@@ -1,0 +1,72 @@
+# Changelog
+
+All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
+
+## [Unreleased]
+
+### Added — Wave 5: Editor + nav + table view
+- **Slash commands in editor** — 20 commands (`/h1`-`/h4`, `/bullet`, `/numbered`, `/todo`, `/code`, `/code-ts/py/sh`, `/quote`, `/table`, `/hr`, `/link`, `/image`, `/math`, `/mermaid`, `/frontmatter`, `/tag`). Keyboard-navigable popup with filter-as-you-type. `Cmd/Ctrl+S` to save.
+- **Multi-tab bar** — sticky tab strip below the header. Persisted in localStorage. Up to 12 tabs, click × to close one, Clear to wipe all.
+- **`/admin/views` table view** — query frontmatter as a sortable, filterable table. 4 preset cards (Runbooks by severity, ADRs newest first, Platform-owned, Recently modified).
+- **`GET /v1/pages` frontmatter-aware** — accepts `?filter[<key>]=<value>` (repeatable, AND-joined), `?sort=<key>|-<key>`, `?q=<text>`, `?limit + ?offset|?cursor`. Returns title, frontmatter, last_indexed on each row.
+- **`GET /v1/attrs`** — distinct list of frontmatter keys discovered in the corpus; powers the column picker.
+- **`pages` + `page_attrs` SQLite tables** — frontmatter flattened for fast indexed filtering.
+- **Remote-read auth gating** — when `REMEMBER_ADMIN_TOKEN` is set, non-loopback GETs now require the token too (not just mutations).
+
+### Added — Wave 4: Connectors + editor + watcher
+- **Connector framework** — pluggable adapter for pulling external sources into `content/external/<name>/`.
+  - `defaults.connector.obsidian({ vaultPath, transformWikilinks, tag })`
+  - `defaults.connector.granola({ apiUrl, apiKey, since, includeTranscript })` (or pass a `fetchMeetings` callback)
+  - `defaults.connector.filesystem({ sourcePath })`
+- **`/v1/connectors` API** — list connectors + per-connector sync trigger + batch sync.
+- **`/admin/connectors` viewer page** — status cards, manual sync, config snippets in empty state.
+- **In-browser markdown editor** at `/admin/edit/<path>` — split-pane source + live preview via `marked`. ✎ Edit pill on every page detail.
+- **File watcher** — chokidar over `content/`, 500ms debounced incremental reindex on any add/change/unlink.
+- **SSE `/v1/events`** — `connected`, `heartbeat`, `index.started`, `index.completed`, `page.changed`, `page.saved`, `connector.synced`.
+- **Viewer SSE auto-reload** — open viewer tabs refresh when their page changes on disk.
+- **`PUT /v1/pages/<path>`** — write markdown + reindex that one file. `safeJoinContent` path-traversal hardened.
+
+### Added — Wave 3: Setup wizard + Save to disk
+- **`/admin/setup` wizard** — preset profiles (Local quickstart, Lightweight local, OpenAI-powered, Team/remote), embedding-model dropdown, "CHANGED" pill on diff'd fields.
+- **`PUT /v1/config`** — writes the full `remember.config.ts` to disk with a timestamped `.bak` backup. Validates source contains a `defineConfig(...)` call.
+- **`GET /v1/config`** — returns loaded config + paths.
+
+### Added — Wave 2: Admin section
+- `/admin` dashboard with stat cards.
+- `/admin/reindex` — incremental + full reindex with live status table.
+- `/admin/settings` — read-only config display (4 grouped sections).
+- `/admin/diagnostics` — API health, OpenAPI route enumeration, AI tool defs.
+- `/admin/files` — folder + page tables with move/delete/rename/create-folder forms.
+- Sidebar nav with active-state highlighting.
+- Layout polish — sticky header (64px), persistent 264px sidebar, light/dark via `prefers-color-scheme`, CSS variables ready for v0.3 theming.
+- TOC sidebar with sticky positioning + indented per heading level.
+- Breadcrumbs, tag badges, prev/next nav, last-modified timestamp on every page.
+
+### Added — Wave 1: v1 indexer + hybrid search + HTTP API
+- Walker (chokidar), Parser (remark + gray-matter), Chunker (smart-split, 900 tokens / 15% overlap), Store (sqlite-vec + FTS5), Indexer (sha256-based incremental).
+- Embedder: local-onnx via `@huggingface/transformers` (default `BAAI/bge-small-en-v1.5`, 384-d) + OpenAI (`text-embedding-3-small`) + hash (deterministic test fallback).
+- SearchEngine: hybrid BM25 + vector with Reciprocal Rank Fusion (modeled on `tobi/qmd`).
+- Reranker: passthrough (cross-encoder slot reserved for v0.1).
+- HTTP API via Hono: `/v1/health`, `/v1/openapi.json`, `/v1/search`, `/v1/pages`, `/v1/pages/<path>`, `/v1/status`, `/v1/tools`, `/v1/index`, structural mutations on pages + folders, OpenAPI route enumeration.
+- CLI: `remember init`, `remember dev`, `remember start`, `remember index`, `remember status`.
+- Astro 5 + node-SSR viewer — landing, `/[...slug]` page detail, `/search` UI.
+- Scaffold + sample-wiki + design spec.
+
+---
+
+## Build history
+
+- **`6acf7f9`** wave 5 — slash commands, multi-tab bar, table view, frontmatter-aware /v1/pages, remote-read gating
+- **`a520094`** docs(viewer/connectors): correct path in footer
+- **`dcfba36`** wave 4 (part b) — connectors framework + Obsidian + Granola + filesystem
+- **`053cbcc`** content — populate sample-wiki with 16 realistic pages
+- **`be467e3`** wave 4 (part a) — in-browser editor, file watcher, SSE live-reload
+- **`173a1aa`** wave 3 (part c) — setup wizard presets + model dropdowns + diff indicators
+- **`7abecdc`** wave 3 (part b) — PUT /v1/config writes to disk; Save button
+- **`a1f2093`** wave 3 (part a) — /admin/setup wizard with config preview
+- **`de27e77`** wave 2 (part b) — spacing, layout, card styling fix (Astro is:global)
+- **`49256ee`** wave 2 (part a) — full admin section, sidebar nav, TOC, breadcrumbs, structural ops
+- **`d8ad612`** wave 1 — v1 indexer, hybrid search, HTTP API, Astro viewer
+- **`b684301`** scaffold — v1 repo skeleton
+- **`3ba424a`** spec — initial v1 design

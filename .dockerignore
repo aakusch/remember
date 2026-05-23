@@ -1,0 +1,22 @@
+**/node_modules
+**/dist
+**/.remember
+**/.astro
+**/.turbo
+**/coverage
+**/.DS_Store
+**/.env
+**/.env.local
+**/.git
+**/.idea
+**/.vscode
+**/*.log
+**/*.tsbuildinfo
+
+# Don't ship local test artifacts or backup configs
+examples/sample-wiki/.remember/
+examples/sample-wiki/*.bak.*
+my-wiki/
+
+# Examples that are bundled as fixtures only (not needed in runtime image)
+# Leave examples/sample-wiki in so docker compose has working content out of the box
