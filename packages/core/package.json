@@ -1,0 +1,52 @@
+{
+  "name": "@remember/core",
+  "version": "0.0.1",
+  "description": "Headless engine for remember — local-first AI-ready wiki platform. Indexer, embeddings, HTTP API, CLI.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./embedders/local-onnx": "./dist/embedders/local-onnx.js",
+    "./embedders/openai": "./dist/embedders/openai.js",
+    "./chunkers/smart-split": "./dist/chunkers/smart-split.js",
+    "./walkers/chokidar": "./dist/walkers/chokidar.js",
+    "./parsers/remark": "./dist/parsers/remark.js",
+    "./stores/sqlite-vec": "./dist/stores/sqlite-vec.js",
+    "./search/hybrid": "./dist/search/hybrid.js",
+    "./rerankers/none": "./dist/rerankers/none.js"
+  },
+  "bin": {
+    "remember": "./bin/remember.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo '(eslint not yet configured)'"
+  },
+  "dependencies": {
+    "hono": "^4.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "sample-wiki",
+  "version": "0.0.1",
+  "description": "Sample remember wiki used by tests and `remember init --template sample`",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "echo 'sample-wiki: no tests (used as fixture)'",
+    "typecheck": "echo 'sample-wiki: no typecheck'"
+  }
+}
