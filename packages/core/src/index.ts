@@ -14,6 +14,8 @@ export type {
   SearchResult,
   Reranker,
   RememberConfig,
+  PageRecord,
+  PageQuery,
 } from './types.js';
 
 export { createApp } from './api/server.js';
