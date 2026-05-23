@@ -22,6 +22,16 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
           viewer: { landing: 'README.md', showAdmin: true, breadcrumbs: true },
           schemaVersion: 1,
         })),
+      saveConfig:
+        ctx.saveConfig ??
+        (async () => ({
+          ok: false,
+          error: {
+            code: 'NO_SAVE_HANDLER',
+            message: 'createApp was constructed without a saveConfig callback',
+            hint: 'Use startServer() or pass ctx.saveConfig to createApp()',
+          },
+        })),
     });
   } else {
     registerScaffoldRoutes(app);

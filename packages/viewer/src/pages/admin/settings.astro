@@ -59,8 +59,7 @@ const config = await getConfig();
         </div>
 
         <p class="muted" style="margin-top: 2.5rem;">
-          <strong>Editing</strong>: open <code>{config.config_path ?? 'remember.config.ts'}</code> in your editor.
-          Server-side editing of the config from the browser (PUT <code>/v1/config</code>) is queued for v1.2.
+          <strong>Editing</strong>: edit <code>{config.config_path ?? 'remember.config.ts'}</code> in your editor, or use the <a href="/admin/setup">Setup wizard</a> to regenerate + save the config from the browser (writes via <code>PUT /v1/config</code>, then restart the core to apply).
         </p>
       </>
     )}

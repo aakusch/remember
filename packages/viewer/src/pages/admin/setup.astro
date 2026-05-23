@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { getConfig, getStatus, API_BASE } from '../../lib/api.ts';
+import { getConfig, getStatus, saveConfig, API_BASE } from '../../lib/api.ts';
 
 interface WizardValues {
   name: string;
@@ -48,10 +48,13 @@ const initial: WizardValues = {
 // Collect submitted values (or fall back to initial)
 let values: WizardValues = { ...initial };
 let submitted = false;
+let saveResult: { ok: boolean; written_to?: string; backup_path?: string | null; error?: { code: string; message: string; hint?: string } } | null = null;
+let action: 'generate' | 'save' = 'generate';
 
 if (Astro.request.method === 'POST') {
   submitted = true;
   const form = await Astro.request.formData();
+  action = (form.get('action') === 'save' ? 'save' : 'generate');
   values = {
     name: String(form.get('name') ?? initial.name).trim() || initial.name,
     description: String(form.get('description') ?? initial.description).trim() || initial.description,
@@ -117,6 +120,10 @@ export default defineConfig({
 
 const configPath = config?.config_path ?? `${config?.config_root ?? '.'}/remember.config.ts`;
 const hasConfig = !!config?.config_path;
+
+if (submitted && action === 'save') {
+  saveResult = await saveConfig(generated);
+}
 ---
 <Layout title="Setup · Admin">
   <div class="main-col">
@@ -224,10 +231,26 @@ const hasConfig = !!config?.config_path;
       </fieldset>
 
       <div class="actions">
-        <button type="submit" class="btn">Generate config</button>
+        <button type="submit" name="action" value="generate" class="btn secondary">Generate (preview only)</button>
+        <button type="submit" name="action" value="save" class="btn" onclick={`return confirm('Write the new config to ${configPath}? A timestamped .bak backup of the current file will be created first. You must restart the core API (Ctrl+C → remember start) for changes to take effect.')`}>Save to disk</button>
         <a href="/admin" class="btn secondary">Cancel</a>
       </div>
     </form>
+
+    {submitted && action === 'save' && saveResult?.ok && (
+      <div class="alert success" style="margin-top: 1.5rem;">
+        <strong>Config written to <code>{saveResult.written_to}</code>.</strong><br />
+        {saveResult.backup_path && <>Previous version backed up to <code>{saveResult.backup_path}</code>.<br /></>}
+        Restart the core API (Ctrl+C in the terminal running it, then <code>remember start</code>) to apply.
+      </div>
+    )}
+
+    {submitted && action === 'save' && saveResult && !saveResult.ok && (
+      <div class="alert error" style="margin-top: 1.5rem;">
+        <strong>Save failed:</strong> {saveResult.error?.message ?? 'Unknown error'}
+        {saveResult.error?.hint && <><br /><span class="muted">Hint: {saveResult.error.hint}</span></>}
+      </div>
+    )}
 
     {submitted && (
       <section class="preview-section">

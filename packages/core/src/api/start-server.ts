@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { createApp } from './server.js';
 import { createSqliteVecStore } from '../stores/sqlite-vec.js';
 import { createChokidarWalker } from '../walkers/chokidar.js';
@@ -43,6 +44,8 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     };
   };
 
+  const targetConfigPath = cfg.configPath ?? path.join(cfg.rootDir, 'remember.config.ts');
+
   const app = createApp({
     contentRoot,
     store,
@@ -61,6 +64,43 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
       viewer: cfg.validated.viewer,
       schemaVersion: cfg.validated.schemaVersion,
     }),
+    saveConfig: async (source: string) => {
+      // Sanity check: the source must contain a defineConfig call.
+      if (!/defineConfig\s*\(/.test(source)) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'CONFIG_INVALID',
+            message: 'Source does not contain a `defineConfig(...)` call.',
+            hint: 'Use the /admin/setup wizard to generate a valid config, or paste a hand-written one that calls defineConfig.',
+          },
+        };
+      }
+
+      // Backup the existing file if present.
+      let backupPath: string | null = null;
+      try {
+        await fs.access(targetConfigPath);
+        backupPath = `${targetConfigPath}.bak.${Date.now()}`;
+        await fs.copyFile(targetConfigPath, backupPath);
+      } catch {
+        // File doesn't exist — skip backup.
+      }
+
+      try {
+        await fs.writeFile(targetConfigPath, source, 'utf8');
+      } catch (err) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'WRITE_FAILED',
+            message: `Failed to write ${targetConfigPath}: ${(err as Error).message}`,
+          },
+        };
+      }
+
+      return { ok: true as const, written_to: targetConfigPath, backup_path: backupPath };
+    },
   });
 
   const port = cfg.validated.server.apiPort;

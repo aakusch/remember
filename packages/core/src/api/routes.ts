@@ -17,6 +17,7 @@ export interface RouteContext {
   configPath: string | null;
   configRoot: string;
   getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
+  saveConfig: (source: string) => Promise<{ ok: true; written_to: string; backup_path: string | null } | { ok: false; error: { code: string; message: string; hint?: string } }>;
 }
 
 const notImplemented = (endpoint: string) => ({
@@ -262,10 +263,34 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       config_root: ctx.configRoot,
     });
   });
-  app.put('/v1/config', (c) => {
+  app.put('/v1/config', async (c) => {
     const denial = checkAdmin(c, ctx.adminToken);
     if (denial) return denial;
-    return c.json(notImplemented('PUT /v1/config — AST edit of remember.config.ts is v1.2'), 501);
+
+    const body = (await c.req.json().catch(() => ({}))) as { source?: unknown };
+    if (typeof body.source !== 'string' || !body.source.trim()) {
+      return c.json(
+        {
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'PUT /v1/config requires { source: string } where source is the full remember.config.ts contents',
+          },
+        },
+        400,
+      );
+    }
+
+    const result = await ctx.saveConfig(body.source);
+    if (!result.ok) {
+      return c.json({ error: result.error }, 500);
+    }
+    return c.json({
+      ok: true,
+      written_to: result.written_to,
+      backup_path: result.backup_path,
+      restart_required: true,
+      hint: 'Restart the core API (Ctrl+C → remember start) to pick up the new config',
+    });
   });
 
   // SSE events (placeholder — fires on first build of watcher)

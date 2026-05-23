@@ -152,4 +152,20 @@ export async function renameFolder(from: string, to: string): Promise<{ ok: bool
   return (await res.json()) as ReturnType<typeof renameFolder> extends Promise<infer T> ? T : never;
 }
 
+export async function saveConfig(source: string): Promise<{
+  ok: boolean;
+  written_to?: string;
+  backup_path?: string | null;
+  restart_required?: boolean;
+  hint?: string;
+  error?: { code: string; message: string; hint?: string };
+}> {
+  const res = await fetch(`${API_BASE}/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source }),
+  });
+  return (await res.json()) as Awaited<ReturnType<typeof saveConfig>>;
+}
+
 export { API_BASE };
