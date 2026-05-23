@@ -1,0 +1,411 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { getConfig, getStatus, API_BASE } from '../../lib/api.ts';
+
+interface WizardValues {
+  name: string;
+  description: string;
+  content: string;
+  host: string;
+  apiPort: number;
+  port: number;
+  landing: string;
+  adminToken: string;
+  embedder: 'local-onnx' | 'openai';
+  embedModel: string;
+  openaiModel: string;
+}
+
+const DEFAULTS: WizardValues = {
+  name: 'My Knowledge Base',
+  description: 'Local-first AI-ready wiki',
+  content: './content',
+  host: '127.0.0.1',
+  apiPort: 4320,
+  port: 4321,
+  landing: 'README.md',
+  adminToken: '',
+  embedder: 'local-onnx',
+  embedModel: 'BAAI/bge-small-en-v1.5',
+  openaiModel: 'text-embedding-3-small',
+};
+
+const [config, status] = await Promise.all([getConfig(), getStatus()]);
+
+// Pre-fill defaults from current config if present
+const initial: WizardValues = {
+  ...DEFAULTS,
+  name: config?.config.name ?? DEFAULTS.name,
+  description: config?.config.description ?? DEFAULTS.description,
+  content: config?.config.content ?? DEFAULTS.content,
+  host: config?.config.server.host ?? DEFAULTS.host,
+  apiPort: config?.config.server.apiPort ?? DEFAULTS.apiPort,
+  port: config?.config.server.port ?? DEFAULTS.port,
+  landing: config?.config.viewer.landing ?? DEFAULTS.landing,
+  adminToken: config?.config.server.adminToken ?? '',
+};
+
+// Collect submitted values (or fall back to initial)
+let values: WizardValues = { ...initial };
+let submitted = false;
+
+if (Astro.request.method === 'POST') {
+  submitted = true;
+  const form = await Astro.request.formData();
+  values = {
+    name: String(form.get('name') ?? initial.name).trim() || initial.name,
+    description: String(form.get('description') ?? initial.description).trim() || initial.description,
+    content: String(form.get('content') ?? initial.content).trim() || initial.content,
+    host: String(form.get('host') ?? initial.host).trim() || initial.host,
+    apiPort: Number(form.get('apiPort')) || initial.apiPort,
+    port: Number(form.get('port')) || initial.port,
+    landing: String(form.get('landing') ?? initial.landing).trim() || initial.landing,
+    adminToken: String(form.get('adminToken') ?? '').trim(),
+    embedder: (form.get('embedder') === 'openai' ? 'openai' : 'local-onnx'),
+    embedModel: String(form.get('embedModel') ?? initial.embedModel).trim() || initial.embedModel,
+    openaiModel: String(form.get('openaiModel') ?? initial.openaiModel).trim() || initial.openaiModel,
+  };
+}
+
+const embedderBlock =
+  values.embedder === 'openai'
+    ? `defaults.embedder.openai({ model: '${values.openaiModel}' })`
+    : `defaults.embedder.localOnnx({ model: '${values.embedModel}' })`;
+
+const generated = `import { defineConfig, defaults } from '@remember/core';
+
+export default defineConfig({
+  name: '${values.name.replace(/'/g, "\\'")}',
+  description: '${values.description.replace(/'/g, "\\'")}',
+
+  content: '${values.content}',
+
+  server: {
+    host: '${values.host}',
+    apiPort: ${values.apiPort},
+    port: ${values.port},${values.adminToken ? `\n    adminToken: '${values.adminToken.replace(/'/g, "\\'")}',` : ''}
+  },
+
+  pipeline: {
+    walker:   defaults.walker.chokidar({ respectGitignore: true }),
+    parser:   defaults.parser.remark(),
+    chunker:  defaults.chunker.smartSplit({ size: 900, overlap: 0.15 }),
+    embedder: ${embedderBlock},
+    store:    defaults.store.sqliteVec({ path: '.remember/index.db' }),
+  },
+
+  search: {
+    engine: defaults.search.hybrid({
+      bm25:   { enabled: true, weight: 0.5 },
+      vector: { enabled: true, weight: 0.5 },
+      fusion: 'rrf',
+      rerank: defaults.rerank.none(),
+      topK: 20,
+      finalK: 10,
+    }),
+  },
+
+  viewer: {
+    landing: '${values.landing}',
+    showAdmin: true,
+    breadcrumbs: true,
+  },
+
+  schemaVersion: 1,
+});
+`;
+
+const configPath = config?.config_path ?? `${config?.config_root ?? '.'}/remember.config.ts`;
+const hasConfig = !!config?.config_path;
+---
+<Layout title="Setup · Admin">
+  <div class="main-col">
+    <h1>Setup</h1>
+    <p class="muted">
+      Walk through your wiki's core settings. This generates a <code>remember.config.ts</code> file you can save or paste into your existing one.
+    </p>
+
+    {hasConfig ? (
+      <div class="alert" style="margin-top: 1rem;">
+        <strong>Existing config detected:</strong> <code>{configPath}</code><br />
+        Form is pre-filled with current values. Edits regenerate the config below — they don't write to disk yet (PUT <code>/v1/config</code> lands in v1.2).
+      </div>
+    ) : (
+      <div class="alert" style="margin-top: 1rem;">
+        <strong>No config file found</strong> at <code>{configPath}</code>. The system is using built-in defaults. Save the generated config below to lock in your choices.
+      </div>
+    )}
+
+    <form method="post" class="setup-form">
+      {/* ─── Identity ─── */}
+      <fieldset>
+        <legend>Identity</legend>
+        <label>
+          <span class="label">Wiki name</span>
+          <input type="text" name="name" value={values.name} required />
+          <span class="hint">Shown in the browser title bar and on the landing page.</span>
+        </label>
+        <label>
+          <span class="label">Description</span>
+          <input type="text" name="description" value={values.description} />
+          <span class="hint">Short tagline for the wiki.</span>
+        </label>
+      </fieldset>
+
+      {/* ─── Content ─── */}
+      <fieldset>
+        <legend>Content</legend>
+        <label>
+          <span class="label">Content directory</span>
+          <input type="text" name="content" value={values.content} required />
+          <span class="hint">Relative to <code>remember.config.ts</code>. All markdown files here get indexed.</span>
+        </label>
+        <label>
+          <span class="label">Landing page</span>
+          <input type="text" name="landing" value={values.landing} required />
+          <span class="hint">Markdown file rendered at <code>/</code>. Relative to the content directory.</span>
+        </label>
+      </fieldset>
+
+      {/* ─── Embeddings ─── */}
+      <fieldset>
+        <legend>Embeddings</legend>
+        <div class="radio-group">
+          <label class="radio">
+            <input type="radio" name="embedder" value="local-onnx" checked={values.embedder === 'local-onnx'} />
+            <span>
+              <strong>Local (recommended)</strong> — runs an ONNX model on your machine. No API key, no outbound calls.
+            </span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="embedder" value="openai" checked={values.embedder === 'openai'} />
+            <span>
+              <strong>OpenAI</strong> — uses <code>OPENAI_API_KEY</code> from env. Higher quality, requires network + paid API key.
+            </span>
+          </label>
+        </div>
+        <label>
+          <span class="label">Local model (HuggingFace ID)</span>
+          <input type="text" name="embedModel" value={values.embedModel} />
+          <span class="hint">Defaults to <code>BAAI/bge-small-en-v1.5</code> (384-d, ~80MB). Downloaded + cached on first index.</span>
+        </label>
+        <label>
+          <span class="label">OpenAI model</span>
+          <input type="text" name="openaiModel" value={values.openaiModel} />
+          <span class="hint">Only used when OpenAI is selected. Default: <code>text-embedding-3-small</code>.</span>
+        </label>
+      </fieldset>
+
+      {/* ─── Server ─── */}
+      <fieldset>
+        <legend>Server</legend>
+        <label>
+          <span class="label">Bind host</span>
+          <input type="text" name="host" value={values.host} required />
+          <span class="hint"><code>127.0.0.1</code> for localhost-only. Use <code>0.0.0.0</code> to expose on the network (admin token required).</span>
+        </label>
+        <div class="grid-2">
+          <label>
+            <span class="label">API port</span>
+            <input type="number" name="apiPort" value={values.apiPort} min="1" max="65535" required />
+            <span class="hint">Core HTTP API. Default 4320.</span>
+          </label>
+          <label>
+            <span class="label">Viewer port</span>
+            <input type="number" name="port" value={values.port} min="1" max="65535" required />
+            <span class="hint">Astro viewer. Default 4321.</span>
+          </label>
+        </div>
+        <label>
+          <span class="label">Admin token (optional)</span>
+          <input type="text" name="adminToken" value={values.adminToken} placeholder="(leave blank for localhost-only access)" />
+          <span class="hint">If set, mutation endpoints require <code>Authorization: Bearer &lt;token&gt;</code>. Required when host is non-loopback.</span>
+        </label>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" class="btn">Generate config</button>
+        <a href="/admin" class="btn secondary">Cancel</a>
+      </div>
+    </form>
+
+    {submitted && (
+      <section class="preview-section">
+        <h2>Generated <code>remember.config.ts</code></h2>
+        <p class="muted">
+          Save this to <code>{configPath}</code> (or paste into your existing config), then restart the core API (<code>remember start</code>) to pick up changes.
+        </p>
+        <div class="code-actions">
+          <button type="button" class="btn secondary" id="copy-btn">Copy</button>
+          <span class="muted" id="copy-status"></span>
+        </div>
+        <pre class="generated"><code id="generated-code">{generated}</code></pre>
+      </section>
+    )}
+
+    {status && (
+      <p class="muted" style="margin-top: 2.5rem;">
+        Currently running: {status.index.model} · {status.index.page_count} pages · API at <code>{API_BASE}</code>
+      </p>
+    )}
+  </div>
+</Layout>
+
+{submitted && (
+  <script is:inline>
+    (() => {
+      const btn = document.getElementById('copy-btn');
+      const status = document.getElementById('copy-status');
+      const code = document.getElementById('generated-code');
+      if (!btn || !status || !code) return;
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent || '');
+          status.textContent = '✓ copied';
+          status.style.color = 'var(--success)';
+          setTimeout(() => { status.textContent = ''; }, 2000);
+        } catch (err) {
+          status.textContent = 'copy failed — select the text manually';
+          status.style.color = 'var(--danger)';
+        }
+      });
+    })();
+  </script>
+)}
+
+<style>
+  .setup-form {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .setup-form fieldset {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem 1.5rem;
+    background: var(--card);
+    margin: 0;
+  }
+  .setup-form legend {
+    font-weight: 650;
+    padding: 0 0.5rem;
+    color: var(--accent);
+    font-size: 0.95rem;
+  }
+  .setup-form label {
+    display: block;
+    margin-top: 0.85rem;
+  }
+  .setup-form label:first-of-type {
+    margin-top: 0.5rem;
+  }
+  .setup-form .label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.35rem;
+  }
+  .setup-form input[type="text"],
+  .setup-form input[type="number"] {
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .setup-form input[type="text"]:focus,
+  .setup-form input[type="number"]:focus {
+    border-color: var(--accent);
+  }
+  .setup-form .hint {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .setup-form .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 0.85rem;
+  }
+  .setup-form .grid-2 label {
+    margin-top: 0;
+  }
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.5rem 0 1rem 0;
+  }
+  .radio-group .radio {
+    display: flex;
+    gap: 0.65rem;
+    align-items: flex-start;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    background: var(--bg);
+    transition: border-color 0.12s, background 0.12s;
+    margin: 0;
+  }
+  .radio-group .radio:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .radio-group .radio input[type="radio"] {
+    margin-top: 0.25rem;
+    accent-color: var(--accent);
+  }
+  .radio-group .radio span {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  .preview-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+  }
+  .preview-section h2 {
+    margin-top: 0;
+  }
+  .code-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1rem 0 0.5rem 0;
+  }
+  pre.generated {
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.825rem;
+    line-height: 1.6;
+    border: 1px solid var(--border);
+    color: var(--text);
+    margin: 0;
+  }
+  pre.generated code {
+    background: transparent;
+    padding: 0;
+    border: none;
+    font-family: inherit;
+  }
+</style>
