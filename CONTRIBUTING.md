@@ -5,7 +5,7 @@ Thanks for being here. `remember` is an early-stage OSS project — small, frien
 ## Quick contributor setup
 
 ```bash
-git clone https://github.com/OWNER/remember.git
+git clone https://github.com/aakusch/remember.git
 cd remember
 pnpm install                      # installs all workspace deps
 pnpm --filter @remember/core build

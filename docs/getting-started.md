@@ -182,4 +182,4 @@ ENV overrides (take precedence over config):
 - [v1 design spec](./superpowers/specs/2026-05-23-remember-platform-design.md) — the comprehensive spec that drove the build
 - [CHANGELOG](../CHANGELOG.md) — what shipped when
 
-Questions or stuck? Open a [Discussion](https://github.com/OWNER/remember/discussions) or file an [Issue](https://github.com/OWNER/remember/issues).
+Questions or stuck? Open a [Discussion](https://github.com/aakusch/remember/discussions) or file an [Issue](https://github.com/aakusch/remember/issues).
