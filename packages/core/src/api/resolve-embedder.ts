@@ -29,7 +29,7 @@ export async function resolveEmbedder(raw: RememberConfig): Promise<Embedder> {
     process.stderr.write(
       `[remember] @huggingface/transformers not installed; falling back to hash embedder ` +
         `(deterministic but not semantically meaningful). Install it for real local embeddings:\n` +
-        `  pnpm --filter @remember/core add @huggingface/transformers\n` +
+        `  pnpm --filter @useremember/core add @huggingface/transformers\n` +
         `Underlying: ${(err as Error).message}\n`,
     );
     return createHashEmbedder(384);

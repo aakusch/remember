@@ -25,7 +25,7 @@
 
 ### v1 goals
 
-1. **One-liner install** — `npx @remember/cli init my-wiki && npx @remember/cli dev` to running wiki in <60 seconds.
+1. **One-liner install** — `npx @useremember/core init my-wiki && npx @useremember/core dev` to running wiki in <60 seconds.
 2. **AI-plugs-in** — `GET /v1/search` semantic+keyword search; `GET /v1/tools` returns Anthropic/OpenAI-ready tool definitions.
 3. **Browser admin** — first-run setup wizard, config editing, reindex, page/folder manipulation (delete, move, rename, create folder).
 4. **File-canonical content** — markdown in a git repo is the source of truth; editing happens in the user's editor.
@@ -55,7 +55,7 @@
     models/                           (cached onnx model)
 
        ┌─────────────────┐                 ┌──────────────────┐
-       │  @remember/core │   HTTP/JSON     │ @remember/viewer │
+       │  @useremember/core │   HTTP/JSON     │ @useremember/viewer │
        │  • CLI          │ ◄──────────────►│  • Astro + React │
        │  • Indexer      │     SSE         │  • Renders MD    │
        │  • Embedder     │                 │  • Search UI     │
@@ -65,23 +65,23 @@
        └─────────────────┘                 └──────────────────┘
 ```
 
-**Two packages, one monorepo (pnpm workspaces).** Clients run `npx @remember/cli dev` and both processes start. The seam matters: `core` is headless and knows nothing about UI; `viewer` is just a client of core's HTTP API. This is what enables the future cloud product (same core, different adapters + multi-tenant layer above).
+**Two packages, one monorepo (pnpm workspaces).** Clients run `npx @useremember/core dev` and both processes start. The seam matters: `core` is headless and knows nothing about UI; `viewer` is just a client of core's HTTP API. This is what enables the future cloud product (same core, different adapters + multi-tenant layer above).
 
 ---
 
 ## 4. Packages
 
-### `@remember/core`
+### `@useremember/core`
 
 Headless engine. Pure Node + TS.
 
 - **CLI** (`bin/remember`) — `init`, `dev`, `start`, `index`, `status`
 - **Indexer** — walks content, parses, chunks, embeds, stores
 - **HTTP API** — Hono server, JSON, OpenAPI auto-generated at `/v1/openapi.json`
-- **Adapters** (all sub-exports): `@remember/core/walkers/*`, `embedders/*`, `chunkers/*`, `stores/*`, `search/*`, `rerankers/*`
+- **Adapters** (all sub-exports): `@useremember/core/walkers/*`, `embedders/*`, `chunkers/*`, `stores/*`, `search/*`, `rerankers/*`
 - **Config loader** — Zod-validated `remember.config.ts`; writes back via AST edit (preserves comments)
 
-### `@remember/viewer`
+### `@useremember/viewer`
 
 Astro site with React islands for the interactive admin surface.
 
@@ -201,7 +201,7 @@ Default bind: `127.0.0.1`. Explicit `--host 0.0.0.0` requires admin token, else 
 ## 8. Config schema (`remember.config.ts`)
 
 ```typescript
-import { defineConfig, defaults } from '@remember/core'
+import { defineConfig, defaults } from '@useremember/core'
 
 export default defineConfig({
   name: 'My Knowledge Base',
@@ -254,9 +254,9 @@ Every field defaultable. Minimal valid config: `defineConfig({})`.
 
 ```bash
 # Zero-state install
-npx @remember/cli init my-wiki
+npx @useremember/core init my-wiki
 cd my-wiki
-npx @remember/cli dev
+npx @useremember/core dev
 # → opens browser to http://localhost:4321/admin/setup
 # → wizard: content dir, embedding model (default: local), port, optional admin token
 # → first index runs → wiki live
@@ -276,7 +276,7 @@ my-wiki/
 ```
 
 **Distribution v1:**
-- npm: `@remember/cli` (primary)
+- npm: `@useremember/core` (primary)
 - Docker: `ghcr.io/<owner>/remember` (also v1 — acceptance criteria require it)
 
 **v1.1+ distribution:** Homebrew tap, standalone Bun-compiled binary, `curl install.remember.dev | sh` one-liner.
@@ -377,13 +377,13 @@ remember/
 
 A user can:
 
-1. Run `npx @remember/cli init my-wiki` and get a working scaffold in <10 seconds
-2. Run `npx @remember/cli dev`, complete the browser setup wizard, and see search results from sample content in <2 minutes from zero
+1. Run `npx @useremember/core init my-wiki` and get a working scaffold in <10 seconds
+2. Run `npx @useremember/core dev`, complete the browser setup wizard, and see search results from sample content in <2 minutes from zero
 3. Drop a new markdown file in `content/`, see it auto-indexed in <1 second, and find it via `/v1/search`
 4. Hit `GET /v1/search?q=...` from `curl` and get RRF-fused hybrid results with paths + snippets
 5. Hit `GET /v1/tools` and get Anthropic-compatible tool definitions ready to drop into a Claude tool-use call
 6. Use the viewer admin to delete a page, move a page, rename a folder — and see the search index reconcile immediately
-7. Run `OPENAI_API_KEY=sk-... npx @remember/cli dev` and have OpenAI embeddings activate, with a model-stale banner prompting full re-embed
+7. Run `OPENAI_API_KEY=sk-... npx @useremember/core dev` and have OpenAI embeddings activate, with a model-stale banner prompting full re-embed
 8. Run inside Docker without modification (`docker run -v ./content:/app/content -p 4321:4321 ghcr.io/.../remember`)
 
 ---

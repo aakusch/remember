@@ -8,8 +8,8 @@ Thanks for being here. `remember` is an early-stage OSS project — small, frien
 git clone https://github.com/aakusch/remember.git
 cd remember
 pnpm install                      # installs all workspace deps
-pnpm --filter @remember/core build
-pnpm --filter @remember/core test
+pnpm --filter @useremember/core build
+pnpm --filter @useremember/core test
 ```
 
 Requirements: Node 20+, pnpm 9+.
@@ -26,7 +26,7 @@ node ../../packages/core/bin/remember.js start
 
 ```bash
 # Terminal 2 — viewer on :4321
-pnpm --filter @remember/viewer dev
+pnpm --filter @useremember/viewer dev
 ```
 
 Then open http://localhost:4321 to browse and edit.
@@ -36,7 +36,7 @@ Then open http://localhost:4321 to browse and edit.
 ```
 remember/
   packages/
-    core/         @remember/core — headless engine
+    core/         @useremember/core — headless engine
       src/
         api/      Hono server + routes
         cli/      CLI commands
@@ -51,7 +51,7 @@ remember/
         stores/   sqlite-vec (with pages, page_attrs, fts_chunks, vec_chunks)
         walkers/  chokidar walker with ignore rules
       tests/      vitest
-    viewer/       @remember/viewer — Astro 5 SSR
+    viewer/       @useremember/viewer — Astro 5 SSR
       src/
         layouts/  Layout.astro (header, sidebar, tab bar, footer, global CSS)
         components/  Sidebar, TreeItem, Breadcrumbs, Toc
@@ -73,14 +73,14 @@ remember/
 - All work happens off `main` via feature branches.
 - PRs need green CI (lint, typecheck, tests) and one reviewer.
 - Conventional commits preferred: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
-- Adapter interfaces are versioned; any breaking change to an adapter requires a major bump on `@remember/core`.
+- Adapter interfaces are versioned; any breaking change to an adapter requires a major bump on `@useremember/core`.
 
 ## Tests
 
 The core has a vitest suite that covers each adapter contract + end-to-end indexer/search/API behavior:
 
 ```bash
-pnpm --filter @remember/core test
+pnpm --filter @useremember/core test
 ```
 
 When you add a new adapter implementation, it should pass the contract test for its kind. New API endpoints get an `api.test.ts` case.

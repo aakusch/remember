@@ -43,7 +43,7 @@ export async function devCommand(): Promise<void> {
   process.stdout.write(`  Tools:   ${apiUrl}/v1/tools\n`);
 
   // Spawn the viewer (Astro dev server) alongside the API. Degrades to
-  // API-only when @remember/viewer isn't installed or REMEMBER_NO_VIEWER=1.
+  // API-only when @useremember/viewer isn't installed or REMEMBER_NO_VIEWER=1.
   const viewer: ViewerHandle | null = await startViewer({
     rootDir: process.cwd(),
     host: cfg.validated.server.host,

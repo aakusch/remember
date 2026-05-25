@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Local-first, AI-ready wiki platform — monorepo root",
   "scripts": {
-    "dev": "pnpm --filter @remember/core dev",
+    "dev": "pnpm --filter @useremember/core dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

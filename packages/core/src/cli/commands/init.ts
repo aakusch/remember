@@ -14,7 +14,7 @@ const CONFIG_TEMPLATE = (opts: { adminToken: string | null }) => {
   const tokenLine = opts.adminToken
     ? `    // Generated at init. Required to bind to non-loopback hosts and to use\n    // any write/admin endpoint from a remote machine. Keep it secret.\n    adminToken: process.env.REMEMBER_ADMIN_TOKEN ?? '${opts.adminToken}',\n`
     : `    // adminToken: process.env.REMEMBER_ADMIN_TOKEN, // required for non-loopback binds\n`;
-  return `import { defineConfig, defaults } from '@remember/core';
+  return `import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   name: 'My Knowledge Base',
@@ -249,8 +249,8 @@ const PACKAGE_TEMPLATE = (name: string) => ({
     status: 'remember status',
   },
   dependencies: {
-    '@remember/core': '*',
-    '@remember/viewer': '*',
+    '@useremember/core': '*',
+    '@useremember/viewer': '*',
   },
 });
 
@@ -324,7 +324,7 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     `Next steps:`,
     `  cd ${targetDir}`,
     `  pnpm install            # or: npm install`,
-    `  pnpm dev                # or: npx @remember/cli dev`,
+    `  pnpm dev                # or: npx @useremember/core dev`,
     ``,
     `Then open http://localhost:4321 — the in-browser setup wizard walks you through configuration.`,
   ];

@@ -18,7 +18,7 @@ export interface ViewerHandle {
 }
 
 /**
- * Locate the `@remember/viewer` package on disk. Looks first in the consumer
+ * Locate the `@useremember/viewer` package on disk. Looks first in the consumer
  * project's node_modules (the published-npm case), then walks up from this
  * package's own location to find the sibling workspace (the monorepo case).
  *
@@ -28,7 +28,7 @@ function locateViewerPackage(rootDir: string): string | null {
   // 1. Consumer-project node_modules — npm/pnpm install case.
   try {
     const require_ = createRequire(path.join(rootDir, 'package.json'));
-    const pkg = require_.resolve('@remember/viewer/package.json');
+    const pkg = require_.resolve('@useremember/viewer/package.json');
     return path.dirname(pkg);
   } catch {
     /* fall through */
@@ -43,7 +43,7 @@ function locateViewerPackage(rootDir: string): string | null {
     if (fs.existsSync(path.join(candidate, 'package.json'))) {
       try {
         const pkg = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8'));
-        if (pkg.name === '@remember/viewer') return candidate;
+        if (pkg.name === '@useremember/viewer') return candidate;
       } catch {
         /* keep walking */
       }
@@ -81,8 +81,8 @@ export async function startViewer(opts: StartViewerOptions): Promise<ViewerHandl
   const viewerDir = locateViewerPackage(opts.rootDir);
   if (!viewerDir) {
     process.stdout.write(
-      'remember dev: @remember/viewer not installed — running API-only. ' +
-        'Run `npm install @remember/viewer` to enable the browser UI.\n',
+      'remember dev: @useremember/viewer not installed — running API-only. ' +
+        'Run `npm install @useremember/viewer` to enable the browser UI.\n',
     );
     return null;
   }

@@ -23,7 +23,7 @@ A free, open-source, AI-ready wiki platform. Markdown in, hybrid search out — 
 ## Quickstart
 
 ```bash
-npx @remember/cli init my-wiki
+npx @useremember/core init my-wiki
 cd my-wiki
 pnpm install     # or: npm install
 pnpm dev
@@ -158,7 +158,7 @@ Pull external sources into the same indexed corpus:
 
 ```ts
 // remember.config.ts
-import { defineConfig, defaults } from '@remember/core';
+import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   connectors: [
@@ -186,7 +186,7 @@ The connector manager runs an initial sync on boot, then exposes per-connector a
 ### Quickstart (recommended)
 
 ```bash
-npx @remember/cli init my-wiki
+npx @useremember/core init my-wiki
 cd my-wiki
 pnpm install
 pnpm dev
@@ -200,7 +200,7 @@ For working on `remember` itself, or running against the bundled sample wiki:
 git clone https://github.com/aakusch/remember.git
 cd remember
 pnpm install
-pnpm --filter @remember/core build
+pnpm --filter @useremember/core build
 ./scripts/dev.sh                  # runs core + viewer side by side
 ```
 
@@ -221,7 +221,7 @@ See [`docker-compose.yml`](./docker-compose.yml) for volume mounts and env vars.
 Minimum:
 
 ```ts
-import { defineConfig } from '@remember/core';
+import { defineConfig } from '@useremember/core';
 export default defineConfig({});
 ```
 
@@ -235,12 +235,12 @@ Full schema reference: [`docs/getting-started.md#configuration-reference`](./doc
 
 Two packages, one pnpm-workspaces monorepo:
 
-- **`@remember/core`** — headless engine. CLI + HTTP API + indexer + search + adapters. Node-only. Standalone-usable.
-- **`@remember/viewer`** — Astro 5 SSR browser UI. Optional; bring your own UI if you want.
+- **`@useremember/core`** — headless engine. CLI + HTTP API + indexer + search + adapters. Node-only. Standalone-usable.
+- **`@useremember/viewer`** — Astro 5 SSR browser UI. Optional; bring your own UI if you want.
 
 ```
 ┌─────────────────────┐         ┌─────────────────────┐
-│   @remember/core    │  HTTP   │  @remember/viewer   │
+│   @useremember/core    │  HTTP   │  @useremember/viewer   │
 │  ─────────────────  │ ◄─────► │  ─────────────────  │
 │  • CLI              │   SSE   │  • Astro + React    │
 │  • Indexer          │         │  • Renderer         │
@@ -285,7 +285,7 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
 
 PRs welcome on:
 
-- New connector implementations (`@remember/core/connectors/<name>.ts`)
+- New connector implementations (`@useremember/core/connectors/<name>.ts`)
 - New embedder providers (Voyage, Cohere, etc.)
 - New rerankers (cross-encoder, LLM-based)
 - New viewer themes / layouts

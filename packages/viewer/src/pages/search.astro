@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { search, listAttrs, type SearchHit } from '../lib/api.ts';
-import { extractAnswer, tokenizeQuery } from '@remember/core';
+import { extractAnswer, tokenizeQuery } from '@useremember/core';
 
 const url = Astro.url;
 const q = url.searchParams.get('q') ?? '';

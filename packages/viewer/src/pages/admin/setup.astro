@@ -190,7 +190,7 @@ const embedderBlock =
     ? `defaults.embedder.openai({ model: '${values.openaiModel}' })`
     : `defaults.embedder.localOnnx({ model: '${values.embedModel}' })`;
 
-const generated = `import { defineConfig, defaults } from '@remember/core';
+const generated = `import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   name: '${values.name.replace(/'/g, "\\'")}',

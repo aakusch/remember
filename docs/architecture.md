@@ -7,15 +7,15 @@ A condensed view of how `remember` is built. The full design rationale lives in 
 ```
 remember/
 ├─ packages/
-│  ├─ core/      @remember/core    — headless engine
-│  └─ viewer/    @remember/viewer  — Astro browser UI
+│  ├─ core/      @useremember/core    — headless engine
+│  └─ viewer/    @useremember/viewer  — Astro browser UI
 └─ examples/
    ├─ sample-wiki/   reference wiki used in tests + by remember init
    └─ sample-vault/  mock Obsidian vault for the connector demo
 ```
 
-- **`@remember/core`** is the engine. CLI + HTTP API + indexer + search + adapters. Node-only. Can be used standalone with any UI.
-- **`@remember/viewer`** is the default browser UI. Astro 5 SSR + tiny inline scripts. Talks to core over HTTP/JSON + SSE. Optional — bring your own UI if you want.
+- **`@useremember/core`** is the engine. CLI + HTTP API + indexer + search + adapters. Node-only. Can be used standalone with any UI.
+- **`@useremember/viewer`** is the default browser UI. Astro 5 SSR + tiny inline scripts. Talks to core over HTTP/JSON + SSE. Optional — bring your own UI if you want.
 
 ## Data flow
 
@@ -30,7 +30,7 @@ remember/
                             │
                             ▼
         ┌───────────────────────────────────────────┐
-        │                @remember/core             │
+        │                @useremember/core             │
         │                                           │
         │  ┌─────────────┐                          │
         │  │ chokidar    │ watches content/         │
@@ -62,7 +62,7 @@ remember/
                          │ HTTP/JSON + SSE
                          ▼
               ┌───────────────────────┐
-              │   @remember/viewer    │
+              │   @useremember/viewer    │
               │   (Astro on :4321)    │
               └───────────────────────┘
                          ▲
@@ -78,20 +78,20 @@ Every component of the indexing pipeline is an adapter with a documented interfa
 
 | Adapter | Interface | Default | Sub-export |
 |---|---|---|---|
-| `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | chokidar + ignore | `@remember/core/walkers/chokidar` |
-| `Parser` | `parse(raw): {frontmatter, ast, plain}` | remark + gray-matter | `@remember/core/parsers/remark` |
-| `Chunker` | `chunk(parsed): Chunk[]` | smart-split (900 tokens, 15% overlap) | `@remember/core/chunkers/smart-split` |
-| `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@remember/core/embedders/local-onnx`, `/openai`, `/hash` |
-| `Store` | `upsert/delete/searchVector/searchBm25/getManifest/upsertPage/queryPages/listFrontmatterKeys` | SQLite + sqlite-vec | `@remember/core/stores/sqlite-vec` |
-| `SearchEngine` | `query(q, opts): {results, query_ms, debug?}` | hybrid BM25+vector with RRF fusion | `@remember/core/search/hybrid` |
-| `Reranker` | `rerank(query, candidates): SearchResult[]` | passthrough (cross-encoder reserved for v0.1) | `@remember/core/rerankers/none` |
-| `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `@remember/core/connectors` |
+| `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | chokidar + ignore | `@useremember/core/walkers/chokidar` |
+| `Parser` | `parse(raw): {frontmatter, ast, plain}` | remark + gray-matter | `@useremember/core/parsers/remark` |
+| `Chunker` | `chunk(parsed): Chunk[]` | smart-split (900 tokens, 15% overlap) | `@useremember/core/chunkers/smart-split` |
+| `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai`, `/hash` |
+| `Store` | `upsert/delete/searchVector/searchBm25/getManifest/upsertPage/queryPages/listFrontmatterKeys` | SQLite + sqlite-vec | `@useremember/core/stores/sqlite-vec` |
+| `SearchEngine` | `query(q, opts): {results, query_ms, debug?}` | hybrid BM25+vector with RRF fusion | `@useremember/core/search/hybrid` |
+| `Reranker` | `rerank(query, candidates): SearchResult[]` | passthrough (cross-encoder reserved for v0.1) | `@useremember/core/rerankers/none` |
+| `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `@useremember/core/connectors` |
 
 The default implementations are wired automatically when `loadConfig()` runs. Override any of them in `remember.config.ts`:
 
 ```ts
-import { defineConfig, defaults } from '@remember/core';
-import { createOpenAIEmbedder } from '@remember/core/embedders/openai';
+import { defineConfig, defaults } from '@useremember/core';
+import { createOpenAIEmbedder } from '@useremember/core/embedders/openai';
 
 export default defineConfig({
   pipeline: {

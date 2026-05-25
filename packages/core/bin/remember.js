@@ -4,7 +4,7 @@ import('../dist/cli/index.js')
   .catch((err) => {
     if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
       process.stderr.write(
-        'remember: build artifacts not found. Run `pnpm build` in @remember/core first.\n',
+        'remember: build artifacts not found. Run `pnpm build` in @useremember/core first.\n',
       );
     } else {
       process.stderr.write(`remember: ${err?.message ?? err}\n`);

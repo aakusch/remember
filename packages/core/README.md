@@ -1,4 +1,4 @@
-# @remember/core
+# @useremember/core
 
 Headless engine for the [`remember`](../../README.md) wiki platform. Provides:
 
@@ -14,7 +14,7 @@ Headless engine for the [`remember`](../../README.md) wiki platform. Provides:
 ## Use as a library
 
 ```ts
-import { defineConfig, defaults } from '@remember/core';
+import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   content: './content',

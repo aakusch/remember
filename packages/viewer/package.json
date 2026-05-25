@@ -1,5 +1,5 @@
 {
-  "name": "@remember/viewer",
+  "name": "@useremember/viewer",
   "version": "0.0.1",
   "description": "Browser viewer + admin UI for the remember wiki platform (Astro)",
   "license": "MIT",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@astrojs/node": "^9.0.0",
-    "@remember/core": "workspace:*",
+    "@useremember/core": "workspace:*",
     "astro": "^5.0.0",
     "marked": "^14.0.0"
   },

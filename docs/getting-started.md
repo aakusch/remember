@@ -5,7 +5,7 @@ This walks you from zero to a working local AI-ready wiki in about 60 seconds, t
 ## TL;DR
 
 ```bash
-npx @remember/cli init my-wiki
+npx @useremember/core init my-wiki
 cd my-wiki
 pnpm install
 pnpm dev
@@ -97,7 +97,7 @@ External edits work too — `remember` watches the filesystem. Edit a file in VS
 Configure them in `remember.config.ts`:
 
 ```ts
-import { defineConfig, defaults } from '@remember/core';
+import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   connectors: [

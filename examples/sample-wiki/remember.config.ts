@@ -1,4 +1,4 @@
-import { defineConfig, defaults } from '@remember/core';
+import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   name: 'Sample Wiki',

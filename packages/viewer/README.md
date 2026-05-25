@@ -1,4 +1,4 @@
-# @remember/viewer
+# @useremember/viewer
 
 Browser viewer for [`remember`](../../README.md). Astro 5 + SSR.
 
@@ -17,7 +17,7 @@ Browser viewer for [`remember`](../../README.md). Astro 5 + SSR.
 cd ../core && pnpm dev   # or: remember dev from a wiki folder
 
 # Terminal 2 — start the viewer
-pnpm --filter @remember/viewer dev
+pnpm --filter @useremember/viewer dev
 ```
 
 Viewer defaults to `http://127.0.0.1:4321` and talks to the core at `REMEMBER_API` (default `http://127.0.0.1:4320/v1`).

@@ -111,7 +111,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         title: 'remember',
         version: VERSION,
         description:
-          '@remember/core — local-first AI-ready wiki. ' +
+          '@useremember/core — local-first AI-ready wiki. ' +
           'Endpoints marked with `adminToken` require Authorization: Bearer <token> ' +
           'when the server is bound to a non-loopback host, or for any write operation.',
         license: { name: 'MIT' },

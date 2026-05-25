@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { defineConfig, createApp } from '../src/index.js';
 import * as defaults from '../src/config/defaults.js';
 
-describe('@remember/core surface', () => {
+describe('@useremember/core surface', () => {
   it('defineConfig is identity', () => {
     const c = defineConfig({ name: 'test', content: './content' });
     expect(c.name).toBe('test');

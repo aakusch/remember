@@ -6,7 +6,7 @@ This directory ships two reference workspaces used by tests and demos.
 
 A 25-page knowledge base across `engineering/`, `ops/`, `product/`, and `people/`. Comprehensive frontmatter — `tags`, `owner`, `severity`, `status`, etc. — so the table view (`/admin/views`) has interesting data to work with.
 
-It's also wired as a pnpm workspace package, so `@remember/core` is symlinked. Run it directly:
+It's also wired as a pnpm workspace package, so `@useremember/core` is symlinked. Run it directly:
 
 ```bash
 cd examples/sample-wiki
@@ -23,7 +23,7 @@ You can use this to verify connector + indexer + search behavior end-to-end with
 
 ## Adding your own example
 
-Examples must be runnable workspaces — drop a `package.json` with `@remember/core: workspace:*` and they get picked up by `pnpm-workspace.yaml`'s `examples/*` glob.
+Examples must be runnable workspaces — drop a `package.json` with `@useremember/core: workspace:*` and they get picked up by `pnpm-workspace.yaml`'s `examples/*` glob.
 
 Suggested examples that don't exist yet (PRs welcome):
 

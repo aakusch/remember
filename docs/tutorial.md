@@ -7,7 +7,7 @@ A hands-on walkthrough that takes about 15 minutes. By the end you'll have a wor
 ## 1. Install
 
 ```bash
-npx @remember/cli init my-wiki
+npx @useremember/core init my-wiki
 cd my-wiki
 pnpm install
 pnpm dev
@@ -175,7 +175,7 @@ Four built-in preset views at the bottom of the page:
 Connectors pull external markdown sources into your index. Edit `remember.config.ts`:
 
 ```ts
-import { defineConfig, defaults } from '@remember/core';
+import { defineConfig, defaults } from '@useremember/core';
 
 export default defineConfig({
   // ...

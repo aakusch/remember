@@ -31,7 +31,7 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
           transformers = await import('@huggingface/transformers');
         } catch (err) {
           throw new Error(
-            `LocalOnnxEmbedder requires the optional dependency "@huggingface/transformers". Install it with: pnpm add @huggingface/transformers (filter @remember/core). Underlying error: ${(err as Error).message}`,
+            `LocalOnnxEmbedder requires the optional dependency "@huggingface/transformers". Install it with: pnpm add @huggingface/transformers (filter @useremember/core). Underlying error: ${(err as Error).message}`,
           );
         }
         return transformers.pipeline('feature-extraction', modelId, {
