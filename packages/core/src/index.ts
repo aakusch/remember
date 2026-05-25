@@ -27,6 +27,7 @@ export { createSmartSplitChunker } from './chunkers/smart-split.js';
 export { createSqliteVecStore } from './stores/sqlite-vec.js';
 export { createHybridSearchEngine } from './search/hybrid.js';
 export { rrfFuse } from './search/rrf.js';
+export { extractSnippet, extractAnswer, tokenizeQuery, splitSentences } from './search/snippet.js';
 export { createPassthroughReranker } from './rerankers/none.js';
 export { createIndexer } from './indexer/index.js';
 export { createHashEmbedder } from './embedders/hash.js';

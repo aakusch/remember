@@ -1,25 +1,192 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { search, type SearchHit } from '../lib/api.ts';
+import { search, listAttrs, type SearchHit } from '../lib/api.ts';
+import { extractAnswer, tokenizeQuery } from '@remember/core';
 
-const q = Astro.url.searchParams.get('q') ?? '';
+const url = Astro.url;
+const q = url.searchParams.get('q') ?? '';
+
+// Parse filter[key]=value params. Multiple values per key OR together.
+const filters: Record<string, string[]> = {};
+for (const [name, value] of url.searchParams.entries()) {
+  const m = /^filter\[(.+)\]$/.exec(name);
+  if (m && m[1] && value) {
+    (filters[m[1]] = filters[m[1]] ?? []).push(value);
+  }
+}
+const filterKeys = Object.keys(filters);
+const hasFilters = filterKeys.length > 0;
+
 let hits: SearchHit[] = [];
 let queryMs = 0;
+let totalHits = 0;
 let error: string | null = null;
 
 if (q.trim()) {
   try {
-    const res = await search(q, 10);
-    hits = res.results;
+    // Fetch more than 10 so post-filter has room to keep enough.
+    const res = await search(q, hasFilters ? 50 : 10);
     queryMs = res.query_ms;
+    totalHits = res.results.length;
+    hits = res.results;
+
+    // Post-filter by frontmatter. OR within a key, AND across keys.
+    if (hasFilters) {
+      hits = hits.filter((hit) => {
+        for (const [key, values] of Object.entries(filters)) {
+          const fmVal = hit.frontmatter?.[key];
+          // Stringified compare so '1', 1, true all work the same way.
+          const candidate = Array.isArray(fmVal)
+            ? fmVal.map(String)
+            : fmVal == null
+              ? []
+              : [String(fmVal)];
+          if (!values.some((v) => candidate.includes(v))) return false;
+        }
+        return true;
+      });
+    }
   } catch (err) {
     error = (err as Error).message;
   }
 }
+
+// Available filter keys for the sidebar.
+const allKeys = await listAttrs();
+
+// Derive value buckets from the visible result set so the sidebar shows what's
+// actually filterable in context. Pulled from `hits` rather than the workspace
+// so the count reflects "X results have this value", which is what users care
+// about. Cap to 8 values per key to keep the rail tidy.
+const valueBuckets: Record<string, Array<{ value: string; count: number }>> = {};
+for (const hit of hits) {
+  const fm = hit.frontmatter ?? {};
+  for (const key of Object.keys(fm)) {
+    const raw = fm[key];
+    const vals = Array.isArray(raw) ? raw.map(String) : raw == null ? [] : [String(raw)];
+    for (const v of vals) {
+      const bucket = (valueBuckets[key] = valueBuckets[key] ?? []);
+      const existing = bucket.find((b) => b.value === v);
+      if (existing) existing.count++;
+      else bucket.push({ value: v, count: 1 });
+    }
+  }
+}
+for (const key of Object.keys(valueBuckets)) {
+  const bucket = valueBuckets[key]!;
+  bucket.sort((a, b) => b.count - a.count);
+  if (bucket.length > 8) valueBuckets[key] = bucket.slice(0, 8);
+}
+
+// Helper: rebuild a URL with one filter added or removed.
+const urlWithFilter = (key: string, value: string, mode: 'add' | 'remove') => {
+  const next = new URL(url.toString());
+  next.searchParams.delete(`filter[${key}]`);
+  const current = filters[key] ?? [];
+  const updated =
+    mode === 'add' ? [...current.filter((v) => v !== value), value] : current.filter((v) => v !== value);
+  for (const v of updated) next.searchParams.append(`filter[${key}]`, v);
+  return `${next.pathname}${next.search}`;
+};
+const urlClearAll = () => {
+  const next = new URL(url.toString());
+  for (const name of [...next.searchParams.keys()]) {
+    if (name.startsWith('filter[')) next.searchParams.delete(name);
+  }
+  return `${next.pathname}${next.search}`;
+};
+
+// Featured answer — pick the best single sentence from the top hit's snippet.
+// Returns null when the algorithm has no confidence; UI suppresses the card
+// in that case and renders just the supporting result list.
+const topHit = hits[0];
+const featuredAnswer = topHit ? extractAnswer(topHit.snippet, q) : null;
+
+// Build a regex once for highlighting query terms in the answer + results.
+const highlightTerms = tokenizeQuery(q);
+const highlightRegex = highlightTerms.length > 0
+  ? new RegExp(`\\b(${highlightTerms.map((t) => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\w*`, 'gi')
+  : null;
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function highlight(text: string): string {
+  const safe = escapeHtml(text);
+  if (!highlightRegex) return safe;
+  return safe.replace(highlightRegex, (m) => `<mark>${m}</mark>`);
+}
+
+function titleFor(hit: SearchHit): string {
+  const fm = hit.frontmatter ?? {};
+  if (typeof fm.title === 'string' && fm.title) return fm.title;
+  return hit.path.replace(/\.md$/, '').split('/').pop() ?? hit.path;
+}
 ---
 <Layout title={q ? `Search: ${q}` : 'Search'} hideSidebar={true}>
-  <div class="main-col">
-    <article>
+  <div class="main-col search-layout">
+    <aside class="facets">
+      <h3>Filters</h3>
+
+      {!q.trim() && (
+        <p class="muted facets-empty">Run a search to see what's filterable.</p>
+      )}
+
+      {hasFilters && (
+        <div class="active-filters">
+          <div class="active-header">
+            <span class="muted">Active</span>
+            <a href={urlClearAll()} class="muted clear-all">Clear</a>
+          </div>
+          {filterKeys.map((key) => (
+            filters[key]!.map((value) => (
+              <a href={urlWithFilter(key, value, 'remove')} class="filter-chip">
+                <span class="chip-key">{key}</span>
+                <span class="chip-val">{value}</span>
+                <span class="chip-x" aria-hidden="true">×</span>
+              </a>
+            ))
+          ))}
+        </div>
+      )}
+
+      {q.trim() && Object.keys(valueBuckets).length > 0 && (
+        <div class="facet-keys">
+          {Object.entries(valueBuckets).map(([key, values]) => (
+            <div class="facet-group">
+              <div class="facet-label">{key}</div>
+              <ul class="facet-values">
+                {values.map((v) => {
+                  const isActive = (filters[key] ?? []).includes(v.value);
+                  return (
+                    <li>
+                      <a
+                        href={urlWithFilter(key, v.value, isActive ? 'remove' : 'add')}
+                        class={isActive ? 'facet-value active' : 'facet-value'}
+                      >
+                        <span class="facet-value-text">{v.value}</span>
+                        <span class="muted facet-count">{v.count}</span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {allKeys.length > 0 && (
+        <details class="all-keys">
+          <summary>All frontmatter keys ({allKeys.length})</summary>
+          <ul>
+            {allKeys.map((k) => (<li><code>{k}</code></li>))}
+          </ul>
+        </details>
+      )}
+    </aside>
+
+    <article class="search-results">
       <h1 style="margin-top: 0;">Search</h1>
       <form action="/search" method="get">
         <input
@@ -30,6 +197,10 @@ if (q.trim()) {
           autofocus
           style="width: 100%; padding: 0.7rem 1rem; font: inherit; font-size: 1.05rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); outline: none;"
         />
+        {/* Preserve active filters across new searches */}
+        {Object.entries(filters).flatMap(([key, values]) =>
+          values.map((v) => <input type="hidden" name={`filter[${key}]`} value={v} />),
+        )}
       </form>
 
       {error && (
@@ -39,25 +210,52 @@ if (q.trim()) {
       {q && !error && (
         <p class="muted" style="margin-top: 1rem;">
           {hits.length} result{hits.length === 1 ? '' : 's'} in {queryMs}ms
+          {hasFilters && totalHits > hits.length && (
+            <span> · {totalHits - hits.length} filtered out</span>
+          )}
         </p>
       )}
 
+      {/* Featured answer — extracted best sentence from the top hit. Only
+          shown when the algorithm has enough confidence; otherwise the list
+          below carries the load. */}
+      {featuredAnswer && topHit && (
+        <section class="featured-answer">
+          <div class="featured-label">Answer</div>
+          <p class="featured-text" set:html={highlight(featuredAnswer)} />
+          <div class="featured-source">
+            <span class="muted">From</span>
+            <a href={`/${topHit.path.replace(/\.md$/, '')}`}>
+              {titleFor(topHit)}
+            </a>
+            <span class="muted">·</span>
+            <code class="muted">{topHit.path}</code>
+          </div>
+        </section>
+      )}
+
       {hits.length > 0 && (
-        <ul style="list-style: none; padding: 0; margin-top: 1rem;">
-          {hits.map((h) => (
-            <li style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
-              <h3 style="margin: 0 0 0.25rem 0;">
-                <a href={`/${h.path.replace(/\.md$/, '')}`} style="color: var(--accent); text-decoration: none;">
-                  {h.path}
-                </a>
-              </h3>
-              <p class="muted" style="margin: 0 0 0.5rem 0; font-size: 0.8rem;">
-                score {h.score.toFixed(3)} · {h.retrievers.join(' + ')} · chunk {h.chunk_idx}
-              </p>
-              <p style="margin: 0;">{h.snippet}</p>
-            </li>
-          ))}
-        </ul>
+        <>
+          {featuredAnswer && (
+            <h2 class="more-heading">More from your wiki</h2>
+          )}
+          <ul class="result-list">
+            {hits.map((h) => (
+              <li class="result-card">
+                <div class="result-head">
+                  <h3>
+                    <a href={`/${h.path.replace(/\.md$/, '')}`}>{titleFor(h)}</a>
+                  </h3>
+                  <span class="muted result-path"><code>{h.path}</code></span>
+                </div>
+                <p class="result-meta muted">
+                  {h.retrievers.join(' + ')} · score {h.score.toFixed(3)}
+                </p>
+                <p class="result-snippet" set:html={highlight(h.snippet)} />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {q && hits.length === 0 && !error && (
@@ -66,3 +264,225 @@ if (q.trim()) {
     </article>
   </div>
 </Layout>
+
+<style>
+  .search-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 2.25rem;
+    max-width: 1180px;
+    width: 100%;
+  }
+  @media (max-width: 800px) {
+    .search-layout { grid-template-columns: 1fr; gap: 1.5rem; }
+  }
+
+  aside.facets {
+    position: sticky;
+    top: 76px;
+    align-self: flex-start;
+    font-size: 0.88rem;
+    padding: 0.5rem 0;
+  }
+  aside.facets h3 {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 0.85rem 0;
+    font-weight: 600;
+  }
+  .facets-empty { font-size: 0.85rem; margin: 0; color: var(--muted); }
+
+  .active-filters { margin-bottom: 1.25rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .active-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.4rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .clear-all { text-decoration: none; }
+  .clear-all:hover { color: var(--text); }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.5rem 0.2rem 0.6rem;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent);
+    border-radius: 99px;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.78rem;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .filter-chip:hover { text-decoration: none; }
+  .chip-key { font-weight: 500; }
+  .chip-val { opacity: 0.85; }
+  .chip-x { opacity: 0.7; font-size: 0.85rem; }
+
+  .facet-group { margin-bottom: 1.25rem; }
+  .facet-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+  }
+  .facet-values { list-style: none; padding: 0; margin: 0; }
+  .facet-values li { margin: 0; }
+  .facet-value {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0.55rem;
+    margin: 0 -0.55rem;
+    border-radius: 6px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    transition: background 0.12s, color 0.12s;
+  }
+  .facet-value:hover { background: var(--bg); text-decoration: none; }
+  .facet-value.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .facet-value-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facet-count {
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.4rem;
+    background: var(--bg);
+    border-radius: 99px;
+    color: var(--muted);
+  }
+  .facet-value.active .facet-count {
+    background: var(--accent);
+    color: white;
+  }
+
+  .all-keys { margin-top: 1.5rem; }
+  .all-keys summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .all-keys ul { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.78rem; }
+  .all-keys code { background: var(--bg); padding: 0.1rem 0.4rem; border-radius: 4px; }
+
+  article.search-results { padding: 2rem 2.25rem; min-width: 0; }
+
+  /* ─── Featured answer card ───────────────────────────────────────── */
+  .featured-answer {
+    margin: 1.5rem 0 2rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    position: relative;
+  }
+  .featured-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  .featured-text {
+    font-size: 1.05rem;
+    line-height: 1.55;
+    color: var(--text);
+    margin: 0 0 0.85rem 0;
+    font-weight: 450;
+  }
+  .featured-text mark {
+    background: var(--accent);
+    color: white;
+    padding: 0 3px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .featured-source {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+  }
+  .featured-source a {
+    color: var(--accent);
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .featured-source a:hover { text-decoration: underline; }
+  .featured-source code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  .more-heading {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+    margin: 2rem 0 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ─── Result list ────────────────────────────────────────────────── */
+  .result-list { list-style: none; padding: 0; margin: 0; }
+  .result-card {
+    margin-bottom: 0.85rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 0.15s;
+  }
+  .result-card:hover { border-color: var(--border-strong); }
+  .result-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+  .result-head h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+  }
+  .result-head h3 a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .result-head h3 a:hover { text-decoration: underline; }
+  .result-path { font-size: 0.78rem; flex-shrink: 0; }
+  .result-meta { margin: 0 0 0.5rem 0; font-size: 0.78rem; }
+  .result-snippet { margin: 0; line-height: 1.6; }
+  .result-snippet mark {
+    background: rgba(245, 158, 11, 0.22);
+    color: var(--text);
+    padding: 0 2px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+</style>

@@ -1,9 +1,19 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { getPageRaw, savePage } from '../../../lib/api.ts';
+import { getPageRaw, savePage, listPageHistory } from '../../../lib/api.ts';
 
 const slug = Astro.params.slug ?? '';
 const targetPath = slug.endsWith('.md') ? slug : `${slug}.md`;
+
+const history = await listPageHistory(targetPath, 8);
+const fmtAge = (iso: string) => {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+  return new Date(iso).toISOString().slice(0, 10);
+};
+const fmtSize = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 let saveError: string | null = null;
 let saved = false;
@@ -54,7 +64,42 @@ const isNewFile = currentBody === '' && !saved;
     <form method="post" class="editor-form">
       <div class="editor-grid">
         <div class="editor-pane">
-          <label class="pane-label" for="body-input">Markdown source · type <kbd>/</kbd> at line start for commands · <kbd>Cmd/Ctrl+S</kbd> to save</label>
+          <div class="pane-label-row">
+            <label class="pane-label" for="body-input">Markdown source · type <kbd>/</kbd> for commands · <kbd>Cmd/Ctrl+S</kbd> to save</label>
+            <span id="editor-status" class="editor-status" data-state="clean">Saved</span>
+          </div>
+          <div class="editor-toolbar" role="toolbar" aria-label="Formatting">
+            <button type="button" class="tb-btn" data-action="wrap" data-pre="**" data-post="**" title="Bold (Cmd/Ctrl+B)" aria-label="Bold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>
+            </button>
+            <button type="button" class="tb-btn" data-action="wrap" data-pre="*" data-post="*" title="Italic (Cmd/Ctrl+I)" aria-label="Italic">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+            </button>
+            <button type="button" class="tb-btn" data-action="wrap" data-pre="`" data-post="`" title="Inline code" aria-label="Inline code">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            </button>
+            <span class="tb-divider" aria-hidden="true"></span>
+            <button type="button" class="tb-btn tb-btn-text" data-action="linestart" data-prefix="# " title="Heading 1">H1</button>
+            <button type="button" class="tb-btn tb-btn-text" data-action="linestart" data-prefix="## " title="Heading 2">H2</button>
+            <button type="button" class="tb-btn tb-btn-text" data-action="linestart" data-prefix="### " title="Heading 3">H3</button>
+            <span class="tb-divider" aria-hidden="true"></span>
+            <button type="button" class="tb-btn" data-action="linestart" data-prefix="- " title="Bullet list" aria-label="Bullet list">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+            <button type="button" class="tb-btn" data-action="linestart" data-prefix="1. " title="Numbered list" aria-label="Numbered list">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+            </button>
+            <button type="button" class="tb-btn" data-action="linestart" data-prefix="> " title="Quote" aria-label="Quote">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2H4c-1.25 0-2 .75-2 2v6c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2v4z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2h-4c-1.25 0-2 .75-2 2v6c0 1.25.75 2 2 2h.5c.5 0 .5 0 .5 1v1c0 1-1 2-2 2v4z"/></svg>
+            </button>
+            <span class="tb-divider" aria-hidden="true"></span>
+            <button type="button" class="tb-btn" data-action="link" title="Link (Cmd/Ctrl+K)" aria-label="Link">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </button>
+            <button type="button" class="tb-btn" data-action="codeblock" title="Code block" aria-label="Code block">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="8 9 5 12 8 15"/><polyline points="16 9 19 12 16 15"/></svg>
+            </button>
+          </div>
           <textarea id="body-input" name="body" spellcheck="false">{editedBody}</textarea>
           <div id="slash-menu" class="slash-menu" hidden></div>
         </div>
@@ -72,6 +117,29 @@ const isNewFile = currentBody === '' && !saved;
         </span>
       </div>
     </form>
+
+    {history.length > 0 && (
+      <section class="history-panel">
+        <div class="history-header">
+          <h3>History</h3>
+          <span class="muted">last {history.length} save{history.length === 1 ? '' : 's'}</span>
+        </div>
+        <ul class="history-list">
+          {history.map((h) => (
+            <li>
+              <a href={`/admin/history?path=${encodeURIComponent(targetPath)}&id=${h.id}`}>
+                <span class="hist-age">{fmtAge(h.written_at)}</span>
+                <span class="muted hist-size">{fmtSize(h.byte_size)}</span>
+                <span class="muted hist-sha">{h.sha256.slice(0, 7)}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p class="muted history-hint">
+          A snapshot is taken just before every save. Snapshots are stored in <code>.remember/index.db</code>.
+        </p>
+      </section>
+    )}
   </div>
 </Layout>
 
@@ -180,11 +248,105 @@ const isNewFile = currentBody === '' && !saved;
     textarea.focus();
   }
 
+  const statusEl = document.getElementById('editor-status') as HTMLElement | null;
+  const initialValue = textarea?.value ?? '';
+  const setStatus = (state: 'clean' | 'dirty' | 'saving' | 'saved') => {
+    if (!statusEl) return;
+    statusEl.dataset.state = state;
+    statusEl.textContent =
+      state === 'dirty' ? 'Modified' :
+      state === 'saving' ? 'Saving…' :
+      state === 'saved' ? 'Saved' :
+      'Saved';
+  };
+
+  // Toolbar — wrap selection with a prefix/suffix, prepend a prefix at line
+  // start, insert a link/code-block scaffold. Reuses the textarea selection.
+  const wrapSelection = (pre: string, post: string) => {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const sel = textarea.value.slice(start, end);
+    const inserted = pre + (sel || 'text') + post;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    textarea.value = before + inserted + after;
+    if (sel) {
+      textarea.setSelectionRange(start + pre.length, start + pre.length + sel.length);
+    } else {
+      textarea.setSelectionRange(start + pre.length, start + pre.length + 4); // select 'text'
+    }
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+  };
+  const lineStartPrefix = (prefix: string) => {
+    if (!textarea) return;
+    const pos = textarea.selectionStart;
+    const val = textarea.value;
+    const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+    textarea.value = val.slice(0, lineStart) + prefix + val.slice(lineStart);
+    const newPos = pos + prefix.length;
+    textarea.setSelectionRange(newPos, newPos);
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+  };
+  const insertLink = () => {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const sel = textarea.value.slice(start, end) || 'text';
+    const inserted = `[${sel}](url)`;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    textarea.value = before + inserted + after;
+    const urlStart = before.length + sel.length + 3; // after `[sel](`
+    textarea.setSelectionRange(urlStart, urlStart + 3); // select 'url'
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+  };
+  const insertCodeBlock = () => {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const sel = textarea.value.slice(start, end);
+    const block = '```\n' + (sel || '') + '\n```\n';
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    textarea.value = before + block + after;
+    const caret = sel ? before.length + block.length : before.length + 4; // after opening fence + newline
+    textarea.setSelectionRange(caret, caret);
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+  };
+
+  document.querySelectorAll<HTMLButtonElement>('.tb-btn').forEach((btn) => {
+    btn.addEventListener('mousedown', (e) => {
+      // mousedown so the textarea doesn't lose focus before we act.
+      e.preventDefault();
+    });
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      if (action === 'wrap') {
+        wrapSelection(btn.dataset.pre ?? '', btn.dataset.post ?? '');
+      } else if (action === 'linestart') {
+        lineStartPrefix(btn.dataset.prefix ?? '');
+      } else if (action === 'link') {
+        insertLink();
+      } else if (action === 'codeblock') {
+        insertCodeBlock();
+      }
+    });
+  });
+
   if (textarea && preview && slashMenu) {
     const render = () => {
       preview.innerHTML = marked.parse(textarea.value) as string;
     };
     textarea.addEventListener('input', () => {
+      // Mark dirty whenever the content diverges from the last saved value.
+      if (statusEl) {
+        setStatus(textarea.value === initialValue ? 'clean' : 'dirty');
+      }
       render();
       // Update the in-progress filter if the menu is open.
       if (menuOpen) {
@@ -201,8 +363,27 @@ const isNewFile = currentBody === '' && !saved;
       // Cmd/Ctrl+S → save
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
+        setStatus('saving');
         const form = textarea.closest('form');
         if (form) form.requestSubmit();
+        return;
+      }
+      // Cmd/Ctrl+B → bold
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        wrapSelection('**', '**');
+        return;
+      }
+      // Cmd/Ctrl+I → italic
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        wrapSelection('*', '*');
+        return;
+      }
+      // Cmd/Ctrl+K → link
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        insertLink();
         return;
       }
 
@@ -246,6 +427,12 @@ const isNewFile = currentBody === '' && !saved;
       // Brief delay so a mousedown on the menu still registers
       setTimeout(() => { if (menuOpen) closeMenu(); }, 100);
     });
+
+    // Flag form submits as 'saving' so the indicator updates on Save click.
+    const form = textarea.closest('form');
+    if (form) {
+      form.addEventListener('submit', () => setStatus('saving'));
+    }
 
     render();
   }
@@ -350,13 +537,90 @@ const isNewFile = currentBody === '' && !saved;
     color: var(--muted);
     font-weight: 700;
   }
+  .pane-label-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .editor-status {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    padding: 0.1rem 0.5rem;
+    border-radius: 99px;
+    border: 1px solid transparent;
+  }
+  .editor-status[data-state='clean'],
+  .editor-status[data-state='saved'] {
+    color: var(--muted);
+    border-color: var(--border);
+  }
+  .editor-status[data-state='dirty'] {
+    color: #d97706;
+    border-color: rgba(217, 119, 6, 0.35);
+    background: rgba(217, 119, 6, 0.07);
+  }
+  .editor-status[data-state='saving'] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+
+  /* Toolbar above the textarea — attached visually via shared corners. */
+  .editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: var(--card);
+  }
+  .tb-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+  }
+  .tb-btn:hover {
+    color: var(--text);
+    background: var(--bg);
+  }
+  .tb-btn:active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .tb-btn-text { font-family: ui-monospace, monospace; letter-spacing: 0; }
+  .tb-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: auto 0.25rem;
+    align-self: center;
+  }
+
   textarea#body-input {
     width: 100%;
     height: 100%;
     min-height: 60vh;
     padding: 1rem 1.25rem;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0 0 8px 8px;
     background: var(--card);
     color: var(--text);
     font: 13px / 1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -411,4 +675,45 @@ const isNewFile = currentBody === '' && !saved;
   @media (max-width: 900px) {
     .editor-grid { grid-template-columns: 1fr; }
   }
+
+  /* ─── History panel ─── */
+  .history-panel {
+    margin-top: 2rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+  }
+  .history-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .history-header h3 {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .history-list { list-style: none; padding: 0; margin: 0; }
+  .history-list li { margin: 0; }
+  .history-list a {
+    display: grid;
+    grid-template-columns: 6rem 1fr 6rem;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.45rem 0.5rem;
+    margin: 0 -0.5rem;
+    border-radius: 5px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  .history-list a:hover { background: var(--bg); text-decoration: none; }
+  .hist-age { font-weight: 500; }
+  .hist-size { font-family: ui-monospace, monospace; font-size: 0.78rem; }
+  .hist-sha { font-family: ui-monospace, monospace; font-size: 0.78rem; text-align: right; }
+  .history-hint { margin: 0.75rem 0 0 0; font-size: 0.8rem; }
 </style>

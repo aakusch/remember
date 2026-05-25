@@ -4,6 +4,22 @@ import { registerRoutes, type RouteContext } from './routes.js';
 
 export function createApp(ctx?: Partial<RouteContext>): Hono {
   const app = new Hono();
+
+  // Global error handler — captures any uncaught route exception into the
+  // log buffer so the Diagnostics page can show "what just broke" without
+  // requiring the user to dig through stdout.
+  app.onError((err, c) => {
+    if (ctx?.logs) {
+      ctx.logs.push({
+        level: 'error',
+        source: 'http',
+        message: `${c.req.method} ${new URL(c.req.url).pathname}: ${err.message}`,
+        detail: { stack: err.stack?.split('\n').slice(0, 3).join(' | ') },
+      });
+    }
+    return c.json({ error: { code: 'INTERNAL', message: err.message } }, 500);
+  });
+
   if (ctx && ctx.store && ctx.embedder && ctx.search && ctx.reindex && ctx.contentRoot) {
     registerRoutes(app, {
       contentRoot: ctx.contentRoot,
@@ -36,6 +52,9 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
             hint: 'Use startServer() or pass ctx.saveConfig to createApp()',
           },
         })),
+      reloadConfig: ctx.reloadConfig,
+      logs: ctx.logs,
+      history: ctx.history,
       events: ctx.events ?? new EventEmitter(),
       connectors:
         ctx.connectors ?? {

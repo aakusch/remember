@@ -20,7 +20,21 @@ const tree = buildTree(pagesResult.pages);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <title>{title}</title>
+    <script is:inline>
+      // Theme bootstrap — runs synchronously before paint to avoid FOUC.
+      // Reads the user's saved preference; if none, leaves the attribute
+      // unset and lets prefers-color-scheme decide.
+      (() => {
+        try {
+          const saved = localStorage.getItem('remember-theme');
+          if (saved === 'dark' || saved === 'light') {
+            document.documentElement.setAttribute('data-theme', saved);
+          }
+        } catch {}
+      })();
+    </script>
     <style is:global>
       :root {
         color-scheme: light dark;
@@ -36,8 +50,22 @@ const tree = buildTree(pagesResult.pages);
         --success: #16a34a;
         --shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
       }
+      :root[data-theme='dark'] {
+        --text: #f4f4f5;
+        --muted: #a1a1aa;
+        --accent: #93c5fd;
+        --accent-bg: rgba(147, 197, 253, 0.12);
+        --bg: #0a0a0b;
+        --card: #161618;
+        --border: #2a2a2e;
+        --border-strong: #3f3f46;
+        --danger: #f87171;
+        --success: #4ade80;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+      /* System preference applies only when the user hasn't explicitly chosen. */
       @media (prefers-color-scheme: dark) {
-        :root {
+        :root:not([data-theme]) {
           --text: #f4f4f5;
           --muted: #a1a1aa;
           --accent: #93c5fd;
@@ -51,6 +79,32 @@ const tree = buildTree(pagesResult.pages);
           --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
         }
       }
+
+      /* Theme toggle button styling — matches search input height. */
+      header.top button.theme-toggle {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--bg);
+        color: var(--muted);
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+        flex-shrink: 0;
+      }
+      header.top button.theme-toggle:hover {
+        color: var(--text);
+        border-color: var(--border-strong);
+        background: var(--card);
+      }
+      header.top button.theme-toggle svg.icon-sun { display: none; }
+      header.top button.theme-toggle svg.icon-moon { display: block; }
+      :root[data-theme='dark'] header.top button.theme-toggle svg.icon-sun { display: block; }
+      :root[data-theme='dark'] header.top button.theme-toggle svg.icon-moon { display: none; }
       *, *::before, *::after { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
       body {
@@ -60,15 +114,28 @@ const tree = buildTree(pagesResult.pages);
         -webkit-font-smoothing: antialiased;
       }
 
+      /* Consistent focus ring across interactive elements. */
+      :where(button, a, input, textarea, select):focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 5px;
+      }
+
+      /* Subtle selection — matches the accent palette. */
+      ::selection {
+        background: var(--accent-bg);
+        color: var(--text);
+      }
+
       /* ─── Top header ─── */
       header.top {
-        height: 64px;
-        padding: 0 1.75rem;
+        height: 60px;
+        padding: 0 1.5rem;
         border-bottom: 1px solid var(--border);
         background: var(--card);
         display: flex;
         align-items: center;
-        gap: 1.75rem;
+        gap: 1.25rem;
         position: sticky;
         top: 0;
         z-index: 10;
@@ -76,33 +143,51 @@ const tree = buildTree(pagesResult.pages);
       header.top a.brand {
         color: var(--text);
         text-decoration: none;
-        font-weight: 700;
-        font-size: 1.05rem;
+        font-weight: 650;
+        font-size: 1rem;
         letter-spacing: -0.01em;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
       }
-      header.top nav.primary { display: flex; gap: 1.5rem; }
+      header.top a.brand .brand-icon {
+        display: block;
+        border-radius: 5px;
+      }
+      header.top nav.primary { display: flex; gap: 1.15rem; }
       header.top nav.primary a {
         color: var(--muted);
         text-decoration: none;
-        font-size: 0.925rem;
+        font-size: 0.9rem;
         transition: color 0.15s;
       }
       header.top nav.primary a:hover { color: var(--text); }
-      header.top form { margin-left: auto; }
+      header.top form {
+        margin-left: auto;
+        flex: 1;
+        max-width: 360px;
+        min-width: 0;
+      }
       header.top input[type="search"] {
         font: inherit;
-        padding: 0.5rem 0.95rem;
+        padding: 0.4rem 0.85rem;
         border: 1px solid var(--border);
         border-radius: 7px;
         background: var(--bg);
         color: var(--text);
-        width: 300px;
+        width: 100%;
         outline: none;
-        transition: border-color 0.15s, background 0.15s;
+        transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
       }
       header.top input[type="search"]:focus {
         border-color: var(--accent);
         background: var(--card);
+        box-shadow: 0 0 0 3px var(--accent-bg);
+      }
+      @media (max-width: 720px) {
+        header.top { padding: 0 1rem; gap: 0.85rem; }
+        header.top nav.primary { gap: 0.85rem; }
+        header.top nav.primary a { font-size: 0.85rem; }
       }
 
       /* ─── App shell (sidebar + main) ─── */
@@ -363,7 +448,9 @@ const tree = buildTree(pagesResult.pages);
         font-size: 0.8rem;
         border-top: 1px solid var(--border);
       }
-      footer.site a { color: var(--muted); }
+      footer.site a { color: var(--muted); text-decoration: none; }
+      footer.site a:hover { color: var(--text); }
+      footer.site .footer-sep { margin: 0 0.5rem; opacity: 0.5; }
       .sse-status {
         display: inline-block;
         margin-left: 0.5rem;
@@ -391,7 +478,10 @@ const tree = buildTree(pagesResult.pages);
   </head>
   <body>
     <header class="top">
-      <a class="brand" href="/">remember</a>
+      <a class="brand" href="/">
+        <img src="/remember-icon.png" alt="" width="22" height="22" class="brand-icon" />
+        <span>remember</span>
+      </a>
       <nav class="primary">
         <a href="/">Home</a>
         <a href="/search">Search</a>
@@ -400,6 +490,21 @@ const tree = buildTree(pagesResult.pages);
       <form action="/search">
         <input type="search" name="q" placeholder="Search the wiki…" />
       </form>
+      <button
+        type="button"
+        class="theme-toggle"
+        id="theme-toggle"
+        title="Toggle light/dark theme"
+        aria-label="Toggle theme"
+      >
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>
+        </svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+      </button>
     </header>
     <nav id="tab-bar" class="tab-bar" hidden></nav>
     <div class="shell">
@@ -410,7 +515,11 @@ const tree = buildTree(pagesResult.pages);
       </div>
     </div>
     <footer class="site">
-      <a href="https://github.com/">remember</a> · v0.0.1 · <span id="sse-status" class="sse-status">●</span>
+      <a href="https://github.com/aakusch/remember" target="_blank" rel="noopener noreferrer">remember</a>
+      <span class="footer-sep">·</span>
+      v0.0.1
+      <span class="footer-sep">·</span>
+      <span id="sse-status" class="sse-status" aria-live="polite">●</span>
     </footer>
 
     <script is:inline define:vars={{ apiBase: import.meta.env.REMEMBER_API ?? 'http://127.0.0.1:4320/v1' }}>
@@ -474,6 +583,27 @@ const tree = buildTree(pagesResult.pages);
         };
 
         connect();
+      })();
+    </script>
+
+    <script is:inline>
+      // Theme toggle — flips between explicit light/dark on click, persisted.
+      // Falls back to system preference when no explicit choice is set.
+      (() => {
+        if (window.__rememberTheme) return;
+        window.__rememberTheme = true;
+        const btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        const currentTheme = () => {
+          const attr = document.documentElement.getAttribute('data-theme');
+          if (attr === 'dark' || attr === 'light') return attr;
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        };
+        btn.addEventListener('click', () => {
+          const next = currentTheme() === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', next);
+          try { localStorage.setItem('remember-theme', next); } catch {}
+        });
       })();
     </script>
 

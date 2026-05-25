@@ -88,6 +88,9 @@ importers:
       '@astrojs/node':
         specifier: ^9.0.0
         version: 9.5.5(astro@5.18.1(@types/node@20.19.41)(jiti@2.7.0)(rollup@4.60.4)(tsx@4.22.3)(typescript@5.9.3))
+      '@remember/core':
+        specifier: workspace:*
+        version: link:../core
       astro:
         specifier: ^5.0.0
         version: 5.18.1(@types/node@20.19.41)(jiti@2.7.0)(rollup@4.60.4)(tsx@4.22.3)(typescript@5.9.3)

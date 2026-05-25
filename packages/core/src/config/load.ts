@@ -34,7 +34,9 @@ export async function loadConfig(rootDir: string): Promise<LoadedConfig> {
 
   let raw: RememberConfig = {};
   if (configPath) {
-    const jiti = createJiti(absRoot, { interopDefault: true });
+    // moduleCache: false — required for hot-reload to actually pick up
+    // a re-written config file. Without it, jiti returns the cached module.
+    const jiti = createJiti(absRoot, { interopDefault: true, moduleCache: false });
     const mod = (await jiti.import(configPath)) as RememberConfig | { default: RememberConfig };
     raw = ('default' in (mod as object) ? (mod as { default: RememberConfig }).default : mod) as RememberConfig;
   }

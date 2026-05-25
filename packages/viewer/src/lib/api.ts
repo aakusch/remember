@@ -131,6 +131,40 @@ export async function getStatus(): Promise<ApiStatus | null> {
   }
 }
 
+export interface HistoryListEntry {
+  id: number;
+  path: string;
+  sha256: string;
+  byte_size: number;
+  written_at: string;
+}
+export interface HistoryFullEntry extends HistoryListEntry {
+  body: string;
+  frontmatter: Record<string, unknown>;
+}
+
+export async function listPageHistory(pagePath: string, limit = 10): Promise<HistoryListEntry[]> {
+  try {
+    const res = await fetch(`${API_BASE}/pages/${encodeURI(pagePath)}/history?limit=${limit}`);
+    if (!res.ok) return [];
+    const body = (await res.json()) as { entries?: HistoryListEntry[] };
+    return body.entries ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getHistoryEntry(id: number): Promise<HistoryFullEntry | null> {
+  try {
+    const res = await fetch(`${API_BASE}/history/${id}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { entry?: HistoryFullEntry };
+    return body.entry ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getConfig(): Promise<ApiConfig | null> {
   try {
     return await fetchJson<ApiConfig>('/config');

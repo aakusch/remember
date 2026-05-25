@@ -43,12 +43,14 @@ export async function run(argv: string[]): Promise<void> {
     switch (command) {
       case 'init': {
         const { init } = await import('./commands/init.js');
-        const target = argv[1];
+        const positional = argv.slice(1).filter((a) => !a.startsWith('--'));
+        const flags = new Set(argv.slice(1).filter((a) => a.startsWith('--')));
+        const target = positional[0];
         if (!target) {
-          process.stderr.write('remember init: target directory required\nUsage: remember init <dir>\n');
+          process.stderr.write('remember init: target directory required\nUsage: remember init <dir> [--no-token]\n');
           process.exit(1);
         }
-        await init(target);
+        await init(target, { noToken: flags.has('--no-token') });
         return;
       }
       case 'index': {

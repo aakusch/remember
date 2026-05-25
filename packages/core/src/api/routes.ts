@@ -5,6 +5,8 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { safeJoinContent, PathOutsideContentError } from './path-utils.js';
 import type { Embedder, SearchEngine, Store } from '../types.js';
+import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
+import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 
 const VERSION = '0.0.1';
 
@@ -21,6 +23,14 @@ export interface RouteContext {
   configRoot: string;
   getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
   saveConfig: (source: string) => Promise<{ ok: true; written_to: string; backup_path: string | null } | { ok: false; error: { code: string; message: string; hint?: string } }>;
+  reloadConfig?: () => Promise<{ ok: true; reloaded_at: string } | { ok: false; error: { code: string; message: string; hint?: string } }>;
+  logs?: LogBuffer;
+  history?: {
+    append: (input: HistoryWriteInput) => number;
+    list: (path: string, limit?: number) => HistoryEntry[];
+    get: (id: number) => HistoryFull | null;
+    prune: (path: string, keep?: number) => number;
+  };
   events: EventEmitter;
   connectors: {
     list: () => Array<{ name: string; kind: string; target: string; configured: boolean; last_sync_at: string | null; last_result: unknown; last_error: string | null }>;
@@ -97,9 +107,36 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   app.get('/v1/openapi.json', (c) =>
     c.json({
       openapi: '3.1.0',
-      info: { title: 'remember', version: VERSION },
+      info: {
+        title: 'remember',
+        version: VERSION,
+        description:
+          '@remember/core — local-first AI-ready wiki. ' +
+          'Endpoints marked with `adminToken` require Authorization: Bearer <token> ' +
+          'when the server is bound to a non-loopback host, or for any write operation.',
+        license: { name: 'MIT' },
+      },
       servers: [{ url: '/v1' }],
       paths: openApiPaths,
+      components: {
+        securitySchemes: {
+          adminToken: {
+            type: 'http',
+            scheme: 'bearer',
+            description: 'The adminToken from remember.config.ts (or REMEMBER_ADMIN_TOKEN env).',
+          },
+        },
+      },
+      tags: [
+        { name: 'system', description: 'Health + spec' },
+        { name: 'search', description: 'Hybrid retrieval and AI tool defs' },
+        { name: 'pages', description: 'Page CRUD + frontmatter' },
+        { name: 'folders', description: 'Folder lifecycle' },
+        { name: 'index', description: 'Reindex trigger + status' },
+        { name: 'config', description: 'Live config get/set + hot-reload' },
+        { name: 'observability', description: 'Logs + live events' },
+        { name: 'connectors', description: 'External-source sync' },
+      ],
     }),
   );
 
@@ -174,7 +211,23 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Get one page
   app.get('/v1/pages/*', async (c) => {
-    const userPath = c.req.path.replace(/^\/v1\/pages\//, '');
+    const rawPath = c.req.path.replace(/^\/v1\/pages\//, '');
+
+    // Dispatch /v1/pages/<path>/history here because Hono's wildcard match
+    // swallows the more-specific route. Read-only listing — gated like other
+    // GETs (localhost reads are open even with a token set).
+    if (rawPath.endsWith('/history')) {
+      const denial = checkRead(c, ctx.adminToken);
+      if (denial) return denial;
+      const pagePath = rawPath.slice(0, -'/history'.length);
+      const url = new URL(c.req.url);
+      const limit = parseInt(url.searchParams.get('limit') ?? '10', 10);
+      if (!ctx.history) return c.json({ entries: [], note: 'No history backend available.' });
+      const entries = ctx.history.list(pagePath, isNaN(limit) ? 10 : limit);
+      return c.json({ entries, total: entries.length });
+    }
+
+    const userPath = rawPath;
     const format = c.req.query('format') ?? 'json';
     try {
       const abs = safeJoinContent(ctx.contentRoot, userPath);
@@ -213,6 +266,26 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     }
     try {
       const abs = safeJoinContent(ctx.contentRoot, userPath);
+
+      // Snapshot the existing file (if any) into page_history before overwriting.
+      // Lets users roll back a save and gives the editor a per-page change log.
+      if (ctx.history) {
+        try {
+          const prev = await fs.readFile(abs, 'utf8');
+          ctx.history.append({ path: userPath, body: prev });
+          ctx.history.prune(userPath, 50);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+            // Snapshot failure is non-fatal — log it and continue with the save.
+            ctx.logs?.push({
+              level: 'warn',
+              source: 'history',
+              message: `Failed to snapshot ${userPath} before save: ${(err as Error).message}`,
+            });
+          }
+        }
+      }
+
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, body.body, 'utf8');
       // Reindex just this file so the change is searchable immediately.
@@ -225,6 +298,17 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       }
       throw err;
     }
+  });
+
+  // Page history — get one version's full body + frontmatter.
+  app.get('/v1/history/:id', (c) => {
+    const denial = checkRead(c, ctx.adminToken);
+    if (denial) return denial;
+    const id = parseInt(c.req.param('id'), 10);
+    if (isNaN(id) || !ctx.history) return c.json({ error: { code: 'NOT_FOUND', message: 'history entry not found' } }, 404);
+    const entry = ctx.history.get(id);
+    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: `no history entry with id ${id}` } }, 404);
+    return c.json({ entry });
   });
 
   // Mutations (admin-gated inline)
@@ -391,6 +475,30 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     if (!result.ok) {
       return c.json({ error: result.error }, 500);
     }
+
+    // Try hot-reload. Falls back to restart-required if no reloadConfig handler
+    // is wired or if rebuilding the pipeline from the new config fails.
+    if (ctx.reloadConfig) {
+      const reload = await ctx.reloadConfig();
+      if (reload.ok) {
+        return c.json({
+          ok: true,
+          written_to: result.written_to,
+          backup_path: result.backup_path,
+          restart_required: false,
+          reloaded_at: reload.reloaded_at,
+        });
+      }
+      return c.json({
+        ok: true,
+        written_to: result.written_to,
+        backup_path: result.backup_path,
+        restart_required: true,
+        reload_failed: reload.error,
+        hint: `Config saved but hot-reload failed: ${reload.error.message}. Restart with: Ctrl+C → remember start`,
+      });
+    }
+
     return c.json({
       ok: true,
       written_to: result.written_to,
@@ -398,6 +506,25 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       restart_required: true,
       hint: 'Restart the core API (Ctrl+C → remember start) to pick up the new config',
     });
+  });
+
+  // Recent operational events — errors, warnings, lifecycle. Powers the
+  // Diagnostics page. Capped at ~50 entries in-memory; not durable.
+  app.get('/v1/logs', (c) => {
+    const denial = checkAdmin(c, ctx.adminToken);
+    if (denial) return denial;
+
+    const url = new URL(c.req.url);
+    const level = (url.searchParams.get('level') ?? undefined) as LogLevel | undefined;
+    const limitRaw = url.searchParams.get('limit');
+    const limit = limitRaw ? Math.min(Math.max(parseInt(limitRaw, 10) || 50, 1), 200) : 50;
+
+    if (!ctx.logs) {
+      return c.json({ entries: [], total: 0, note: 'No log buffer attached to this server.' });
+    }
+
+    const entries = ctx.logs.list({ level, limit });
+    return c.json({ entries, total: ctx.logs.size() });
   });
 
   // Server-Sent Events. Viewer subscribes for live reload + index status.
@@ -520,12 +647,254 @@ async function listMarkdown(root: string): Promise<Array<{ path: string; size: n
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+const stringParam = (name: string, where: 'query' | 'path', required = false, description?: string) => ({
+  name,
+  in: where,
+  required,
+  schema: { type: 'string' },
+  ...(description ? { description } : {}),
+});
+const intParam = (name: string, where: 'query' | 'path', description?: string) => ({
+  name,
+  in: where,
+  schema: { type: 'integer' },
+  ...(description ? { description } : {}),
+});
+
+const jsonResponse = (description: string) => ({
+  [200]: { description, content: { 'application/json': {} } },
+});
+
 const openApiPaths = {
-  '/health': { get: { summary: 'Liveness check' } },
-  '/search': { get: { summary: 'Hybrid BM25 + vector search', parameters: [{ name: 'q', in: 'query', required: true }, { name: 'k', in: 'query' }] } },
-  '/pages': { get: { summary: 'List wiki pages' } },
-  '/pages/{path}': { get: { summary: 'Get one page' }, delete: { summary: 'Delete page' } },
-  '/index': { post: { summary: 'Trigger reindex' } },
-  '/status': { get: { summary: 'Index status' } },
-  '/tools': { get: { summary: 'AI tool definitions' } },
-};
+  // ─── Liveness ──────────────────────────────────────────────────────────
+  '/health': {
+    get: {
+      summary: 'Liveness check',
+      tags: ['system'],
+      responses: jsonResponse('ok'),
+    },
+  },
+  '/openapi.json': {
+    get: {
+      summary: 'This OpenAPI document',
+      tags: ['system'],
+      responses: jsonResponse('OpenAPI spec'),
+    },
+  },
+
+  // ─── Search ────────────────────────────────────────────────────────────
+  '/search': {
+    get: {
+      summary: 'Hybrid BM25 + vector + RRF fusion search',
+      tags: ['search'],
+      parameters: [
+        stringParam('q', 'query', true, 'Search query'),
+        intParam('k', 'query', 'Max results (default 10)'),
+        intParam('debug', 'query', '1 to include per-stage timings'),
+      ],
+      responses: jsonResponse('search hits with snippets, sources, and ranking'),
+    },
+  },
+  '/tools': {
+    get: {
+      summary: 'AI tool definitions (Anthropic / OpenAI schemas)',
+      tags: ['search'],
+      responses: jsonResponse('tool schemas: search_wiki, get_page, list_pages'),
+    },
+  },
+
+  // ─── Pages ─────────────────────────────────────────────────────────────
+  '/pages': {
+    get: {
+      summary: 'List + filter + sort pages',
+      tags: ['pages'],
+      parameters: [
+        stringParam('q', 'query', false, 'FTS over page bodies'),
+        stringParam('sort', 'query', false, 'Sort by frontmatter key, prefix with - for desc'),
+        intParam('limit', 'query'),
+        intParam('offset', 'query'),
+      ],
+      responses: jsonResponse('paginated page list with frontmatter'),
+    },
+  },
+  '/pages/{path}': {
+    get: {
+      summary: 'Get one page (markdown + frontmatter)',
+      tags: ['pages'],
+      parameters: [
+        stringParam('path', 'path', true, 'URL-encoded page path'),
+        stringParam('format', 'query', false, 'json (default) | text'),
+      ],
+      responses: jsonResponse('page record'),
+    },
+    put: {
+      summary: 'Write a page and reindex it',
+      tags: ['pages'],
+      security: [{ adminToken: [] }],
+      parameters: [stringParam('path', 'path', true)],
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: { type: 'object', properties: { body: { type: 'string' } } } } },
+      },
+      responses: jsonResponse('ok with chunk count'),
+    },
+    delete: {
+      summary: 'Delete a page',
+      tags: ['pages'],
+      security: [{ adminToken: [] }],
+      parameters: [stringParam('path', 'path', true)],
+      responses: jsonResponse('ok with chunks_removed count'),
+    },
+  },
+  '/pages/move': {
+    post: {
+      summary: 'Move or rename a page',
+      tags: ['pages'],
+      security: [{ adminToken: [] }],
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, required: ['from', 'to'] } } },
+      },
+      responses: jsonResponse('ok'),
+    },
+  },
+  '/attrs': {
+    get: {
+      summary: 'List all frontmatter keys in use',
+      tags: ['pages'],
+      responses: jsonResponse('array of frontmatter keys'),
+    },
+  },
+  '/pages/{path}/history': {
+    get: {
+      summary: 'List past versions of a page (newest first)',
+      tags: ['pages'],
+      security: [{ adminToken: [] }],
+      parameters: [stringParam('path', 'path', true), intParam('limit', 'query', 'Default 10, cap 100')],
+      responses: jsonResponse('entries[] with id, sha256, byte_size, written_at'),
+    },
+  },
+  '/history/{id}': {
+    get: {
+      summary: 'Get a specific history entry (full body + frontmatter)',
+      tags: ['pages'],
+      security: [{ adminToken: [] }],
+      parameters: [intParam('id', 'path', 'History entry id')],
+      responses: jsonResponse('history entry'),
+    },
+  },
+
+  // ─── Folders ───────────────────────────────────────────────────────────
+  '/folders': {
+    post: {
+      summary: 'Create a folder',
+      tags: ['folders'],
+      security: [{ adminToken: [] }],
+      responses: jsonResponse('ok'),
+    },
+  },
+  '/folders/{path}': {
+    delete: {
+      summary: 'Delete a folder + all pages within',
+      tags: ['folders'],
+      security: [{ adminToken: [] }],
+      parameters: [stringParam('path', 'path', true)],
+      responses: jsonResponse('ok with pages_removed count'),
+    },
+  },
+  '/folders/rename': {
+    post: {
+      summary: 'Rename a folder',
+      tags: ['folders'],
+      security: [{ adminToken: [] }],
+      responses: jsonResponse('ok'),
+    },
+  },
+
+  // ─── Index ─────────────────────────────────────────────────────────────
+  '/index': {
+    post: {
+      summary: 'Trigger an incremental or full reindex',
+      tags: ['index'],
+      security: [{ adminToken: [] }],
+      parameters: [stringParam('mode', 'query', false, 'incremental (default) | full')],
+      responses: jsonResponse('files_indexed + chunks_added + duration_ms'),
+    },
+  },
+  '/status': {
+    get: {
+      summary: 'Index state, page/chunk counts, model info',
+      tags: ['index'],
+      responses: jsonResponse('index status object'),
+    },
+  },
+
+  // ─── Config ────────────────────────────────────────────────────────────
+  '/config': {
+    get: {
+      summary: 'Get the active config (read-only view)',
+      tags: ['config'],
+      responses: jsonResponse('config object'),
+    },
+    put: {
+      summary: 'Save new remember.config.ts source + hot-reload',
+      tags: ['config'],
+      security: [{ adminToken: [] }],
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: { type: 'object', properties: { source: { type: 'string' } }, required: ['source'] } } },
+      },
+      responses: jsonResponse('ok with written_to, backup_path, restart_required, reloaded_at'),
+    },
+  },
+
+  // ─── Observability ─────────────────────────────────────────────────────
+  '/logs': {
+    get: {
+      summary: 'Recent operational events (last ~50, in-memory)',
+      tags: ['observability'],
+      security: [{ adminToken: [] }],
+      parameters: [
+        stringParam('level', 'query', false, 'error | warn | info | debug'),
+        intParam('limit', 'query', 'Max entries to return (default 50, cap 200)'),
+      ],
+      responses: jsonResponse('entries[] + total'),
+    },
+  },
+  '/events': {
+    get: {
+      summary: 'Server-Sent Events stream (live index + config events)',
+      tags: ['observability'],
+      security: [{ adminToken: [] }],
+      responses: {
+        [200]: { description: 'SSE stream', content: { 'text/event-stream': {} } },
+      },
+    },
+  },
+
+  // ─── Connectors ────────────────────────────────────────────────────────
+  '/connectors': {
+    get: {
+      summary: 'List configured connectors + their last sync state',
+      tags: ['connectors'],
+      responses: jsonResponse('connectors[]'),
+    },
+  },
+  '/connectors/{name}/sync': {
+    post: {
+      summary: 'Run a single connector now',
+      tags: ['connectors'],
+      security: [{ adminToken: [] }],
+      parameters: [stringParam('name', 'path', true)],
+      responses: jsonResponse('sync result'),
+    },
+  },
+  '/connectors/sync': {
+    post: {
+      summary: 'Run every configured connector',
+      tags: ['connectors'],
+      security: [{ adminToken: [] }],
+      responses: jsonResponse('per-connector result map'),
+    },
+  },
+} as const;

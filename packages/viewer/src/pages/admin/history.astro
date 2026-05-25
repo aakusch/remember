@@ -1,0 +1,222 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { getPageRaw, getHistoryEntry } from '../../lib/api.ts';
+
+const pagePath = Astro.url.searchParams.get('path') ?? '';
+const idStr = Astro.url.searchParams.get('id');
+const id = idStr ? parseInt(idStr, 10) : NaN;
+
+const [current, historic] = await Promise.all([
+  pagePath ? getPageRaw(pagePath) : Promise.resolve(null),
+  !isNaN(id) ? getHistoryEntry(id) : Promise.resolve(null),
+]);
+
+const fmtTime = (iso: string) => {
+  const d = new Date(iso);
+  return d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+};
+
+// Trivial line-by-line difference highlight — flag lines present in one body
+// but not the other. Not a true diff (no LCS) — enough for an at-a-glance
+// "what's different" view at v0.1. We pre-render each line to an HTML string
+// because Astro's parser dislikes nested JSX with literal newline expressions.
+const currentLines = (current ?? '').split('\n');
+const historicLines = (historic?.body ?? '').split('\n');
+const currentSet = new Set(currentLines);
+const historicSet = new Set(historicLines);
+
+const escape = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const renderDiff = (lines: string[], otherSet: Set<string>) =>
+  lines
+    .map((line, i) => {
+      const changed = !otherSet.has(line);
+      const cls = changed ? 'diff-line diff-line-changed' : 'diff-line';
+      const gutter = `<span class="diff-gutter">${i + 1}</span>`;
+      const body = `<span class="diff-body">${escape(line) || '&nbsp;'}</span>`;
+      return `<div class="${cls}">${gutter}${body}</div>`;
+    })
+    .join('');
+const historicHtml = renderDiff(historicLines, currentSet);
+const currentHtml = renderDiff(currentLines, historicSet);
+const changedCount =
+  historicLines.filter((l) => !currentSet.has(l)).length +
+  currentLines.filter((l) => !historicSet.has(l)).length;
+---
+<Layout title={`History · ${pagePath}`} hideSidebar={true}>
+  <div class="main-col history-page">
+    <div class="hp-header">
+      <div>
+        <h1 style="margin: 0 0 0.25rem 0;">Page history</h1>
+        <p class="muted" style="margin: 0;">
+          <code>{pagePath}</code>
+          {historic && <span> · viewing version <code>#{historic.id}</code> from {fmtTime(historic.written_at)}</span>}
+        </p>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <a class="btn secondary" href={`/admin/edit/${pagePath.replace(/\.md$/, '')}`}>Back to editor</a>
+        {historic && (
+          <button
+            class="btn"
+            type="button"
+            id="restore-btn"
+            data-path={pagePath}
+            data-id={historic.id}
+          >
+            Restore this version
+          </button>
+        )}
+      </div>
+    </div>
+
+    {!historic && (
+      <div class="alert error" style="margin-top: 1rem;">
+        No history entry loaded. Pass <code>?path=…&amp;id=…</code> to view a specific version.
+      </div>
+    )}
+
+    {historic && (
+      <>
+        {changedCount > 0 && (
+          <p class="diff-summary muted">
+            {changedCount} line{changedCount === 1 ? '' : 's'} differ between this version and current
+          </p>
+        )}
+        <div class="diff-grid">
+          <div class="diff-side">
+            <div class="diff-pane-label">
+              <span class="diff-label-text">Historical</span>
+              <span class="diff-label-time">{fmtTime(historic.written_at)}</span>
+            </div>
+            <div class="diff-pane" set:html={historicHtml}></div>
+          </div>
+          <div class="diff-side">
+            <div class="diff-pane-label">
+              <span class="diff-label-text">Current</span>
+              <span class="diff-label-time">on disk now</span>
+            </div>
+            <div class="diff-pane" set:html={currentHtml}></div>
+          </div>
+        </div>
+      </>
+    )}
+  </div>
+</Layout>
+
+<style>
+  .history-page { max-width: 1280px; padding: 1rem 1.5rem; }
+  .hp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .diff-summary {
+    margin: 0 0 1rem 0;
+    font-size: 0.85rem;
+  }
+  .diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .diff-side { min-width: 0; }
+  .diff-pane-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
+  }
+  .diff-label-text {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .diff-label-time {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .diff-pane {
+    margin: 0;
+    padding: 0.75rem 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    max-height: 70vh;
+    overflow: auto;
+  }
+  /* Each rendered line — gutter + body */
+  .diff-pane :global(.diff-line) {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr;
+    gap: 0.75rem;
+    padding: 0 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .diff-pane :global(.diff-line-changed) {
+    background: rgba(217, 119, 6, 0.08);
+    border-left: 2px solid #d97706;
+    padding-left: calc(0.5rem - 2px);
+  }
+  .diff-pane :global(.diff-gutter) {
+    color: var(--muted);
+    opacity: 0.55;
+    text-align: right;
+    user-select: none;
+    font-size: 11px;
+    padding-top: 0.05em;
+  }
+  .diff-pane :global(.diff-body) { color: var(--text); }
+  .diff-pane :global(.diff-line-changed .diff-gutter) {
+    color: #d97706;
+    opacity: 0.85;
+  }
+  @media (max-width: 1000px) {
+    .diff-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<script is:inline define:vars={{ apiBase: import.meta.env.REMEMBER_API ?? 'http://127.0.0.1:4320/v1' }}>
+  // Restore handler — fetches the historic entry's body, PUTs it back to the
+  // current path, snapshots the current state first (the server does this in
+  // its PUT handler), then navigates to the editor.
+  const btn = document.getElementById('restore-btn');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      const path = btn.dataset.path;
+      const id = btn.dataset.id;
+      if (!path || !id) return;
+      if (!confirm('Restore this version? The current file will be snapshotted first, then replaced.')) {
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Restoring…';
+      try {
+        const entryRes = await fetch(`${apiBase}/history/${id}`);
+        if (!entryRes.ok) throw new Error(`Failed to fetch history entry: ${entryRes.status}`);
+        const { entry } = await entryRes.json();
+        const putRes = await fetch(`${apiBase}/pages/${encodeURI(path)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: entry.body }),
+        });
+        if (!putRes.ok) throw new Error(`Failed to write: ${putRes.status}`);
+        window.location.href = `/admin/edit/${path.replace(/\.md$/, '')}`;
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Restore this version';
+        alert(`Restore failed: ${err.message}`);
+      }
+    });
+  }
+</script>

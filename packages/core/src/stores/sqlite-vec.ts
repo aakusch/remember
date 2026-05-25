@@ -2,16 +2,43 @@ import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import crypto from 'node:crypto';
 import type { Chunk, PageQuery, PageRecord, SearchResult, Store } from '../types.js';
+import { extractSnippet } from '../search/snippet.js';
 
 export interface SqliteVecStoreOptions {
   path?: string;
   dim?: number;
 }
 
+export interface HistoryWriteInput {
+  path: string;
+  body: string;
+  frontmatter?: Record<string, unknown>;
+}
+export interface HistoryEntry {
+  id: number;
+  path: string;
+  sha256: string;
+  byte_size: number;
+  written_at: string;
+}
+export interface HistoryFull extends HistoryEntry {
+  body: string;
+  frontmatter: Record<string, unknown>;
+}
+
 export interface SqliteVecStore extends Store {
   close(): void;
   setDimension(dim: number): void;
+  appendHistory(entry: HistoryWriteInput): number;
+  listHistory(path: string, limit?: number): HistoryEntry[];
+  getHistoryEntry(id: number): HistoryFull | null;
+  pruneHistory(path: string, keep?: number): number;
+}
+
+function sha256(s: string): string {
+  return crypto.createHash('sha256').update(s).digest('hex');
 }
 
 export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Promise<SqliteVecStore> {
@@ -77,7 +104,7 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       return ids.length;
     },
 
-    async searchVector(embedding, k) {
+    async searchVector(embedding, k, query) {
       const buf = Buffer.from(new Float32Array(embedding).buffer);
       const rows = db
         .prepare(
@@ -99,7 +126,7 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       return rows.map((r) => ({
         path: r.source_path,
         chunk_idx: r.chunk_idx,
-        snippet: makeSnippet(r.text),
+        snippet: makeSnippet(r.text, query),
         frontmatter: getFrontmatter(db, r.source_path),
         score: 1 / (1 + r.distance),
         retrievers: ['vector'] as ('bm25' | 'vector')[],
@@ -280,6 +307,81 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       return rows.map((r) => r.key);
     },
 
+    // ─── Page history ─────────────────────────────────────────────────────
+    appendHistory(entry: HistoryWriteInput): number {
+      const sha = sha256(entry.body);
+      const written_at = new Date().toISOString();
+      const info = db
+        .prepare(
+          `INSERT INTO page_history (path, sha256, body, frontmatter, byte_size, written_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          entry.path,
+          sha,
+          entry.body,
+          JSON.stringify(entry.frontmatter ?? {}),
+          Buffer.byteLength(entry.body, 'utf8'),
+          written_at,
+        );
+      return Number(info.lastInsertRowid);
+    },
+    listHistory(path: string, limit = 10): HistoryEntry[] {
+      const rows = db
+        .prepare(
+          `SELECT id, path, sha256, byte_size, written_at FROM page_history
+           WHERE path = ?
+           ORDER BY written_at DESC LIMIT ?`,
+        )
+        .all(path, Math.max(1, Math.min(limit, 100))) as Array<{
+        id: number;
+        path: string;
+        sha256: string;
+        byte_size: number;
+        written_at: string;
+      }>;
+      return rows;
+    },
+    getHistoryEntry(id: number): HistoryFull | null {
+      const row = db
+        .prepare(
+          `SELECT id, path, sha256, body, frontmatter, byte_size, written_at FROM page_history WHERE id = ?`,
+        )
+        .get(id) as
+        | {
+            id: number;
+            path: string;
+            sha256: string;
+            body: string;
+            frontmatter: string;
+            byte_size: number;
+            written_at: string;
+          }
+        | undefined;
+      if (!row) return null;
+      return {
+        id: row.id,
+        path: row.path,
+        sha256: row.sha256,
+        body: row.body,
+        frontmatter: safeJsonParse(row.frontmatter),
+        byte_size: row.byte_size,
+        written_at: row.written_at,
+      };
+    },
+    pruneHistory(path: string, keep = 50): number {
+      const info = db
+        .prepare(
+          `DELETE FROM page_history
+           WHERE id IN (
+             SELECT id FROM page_history WHERE path = ?
+             ORDER BY written_at DESC LIMIT -1 OFFSET ?
+           )`,
+        )
+        .run(path, Math.max(1, keep));
+      return info.changes;
+    },
+
     close() {
       db.close();
     },
@@ -333,6 +435,17 @@ function initSchema(db: Database.Database, dim: number): void {
     CREATE INDEX IF NOT EXISTS idx_page_attrs_path ON page_attrs(path);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS fts_chunks USING fts5(text, content='', contentless_delete=1);
+
+    CREATE TABLE IF NOT EXISTS page_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      path TEXT NOT NULL,
+      sha256 TEXT NOT NULL,
+      body TEXT NOT NULL,
+      frontmatter TEXT NOT NULL DEFAULT '{}',
+      byte_size INTEGER NOT NULL,
+      written_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_history_path ON page_history(path, written_at DESC);
   `);
   db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(embedding float[${dim}])`);
 }
@@ -345,10 +458,11 @@ function safeJsonParse(s: string): Record<string, unknown> {
   }
 }
 
-function makeSnippet(text: string, _query?: string): string {
-  const max = 280;
-  if (text.length <= max) return text;
-  return text.slice(0, max).trim() + '…';
+// makeSnippet was replaced by extractSnippet (see ../search/snippet.ts).
+// Kept as a thin shim so existing callers don't have to change their call
+// shape; the new module handles query-aware passage extraction.
+function makeSnippet(text: string, query?: string): string {
+  return extractSnippet(text, query);
 }
 
 function getFrontmatter(_db: Database.Database, _sourcePath: string): Record<string, unknown> {

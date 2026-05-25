@@ -84,7 +84,7 @@ export interface PageQuery {
 export interface Store {
   upsert(chunks: Array<Chunk & { embedding: number[] }>): Promise<void>;
   deleteByPath(path: string): Promise<number>;
-  searchVector(embedding: number[], k: number): Promise<SearchResult[]>;
+  searchVector(embedding: number[], k: number, query?: string): Promise<SearchResult[]>;
   searchBm25(query: string, k: number): Promise<SearchResult[]>;
   getManifest(): Promise<
     Record<string, { sha256: string; chunk_count: number; last_indexed: string }>

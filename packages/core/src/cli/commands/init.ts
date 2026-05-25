@@ -1,7 +1,20 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import crypto from 'node:crypto';
 
-const CONFIG_TEMPLATE = `import { defineConfig, defaults } from '@remember/core';
+/**
+ * Generate a cryptographically-strong admin token, encoded as URL-safe base64
+ * without padding. ~32 bytes of entropy.
+ */
+function generateAdminToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+const CONFIG_TEMPLATE = (opts: { adminToken: string | null }) => {
+  const tokenLine = opts.adminToken
+    ? `    // Generated at init. Required to bind to non-loopback hosts and to use\n    // any write/admin endpoint from a remote machine. Keep it secret.\n    adminToken: process.env.REMEMBER_ADMIN_TOKEN ?? '${opts.adminToken}',\n`
+    : `    // adminToken: process.env.REMEMBER_ADMIN_TOKEN, // required for non-loopback binds\n`;
+  return `import { defineConfig, defaults } from '@remember/core';
 
 export default defineConfig({
   name: 'My Knowledge Base',
@@ -13,7 +26,7 @@ export default defineConfig({
     host: '127.0.0.1',
     apiPort: 4320,
     port: 4321,
-  },
+${tokenLine}  },
 
   pipeline: {
     walker: defaults.walker.chokidar({ respectGitignore: true }),
@@ -57,6 +70,7 @@ export default defineConfig({
   schemaVersion: 1,
 });
 `;
+};
 
 const README_TEMPLATE = `---
 title: Welcome
@@ -236,6 +250,7 @@ const PACKAGE_TEMPLATE = (name: string) => ({
   },
   dependencies: {
     '@remember/core': '*',
+    '@remember/viewer': '*',
   },
 });
 
@@ -260,6 +275,7 @@ const ENV_EXAMPLE_TEMPLATE = `# Copy to .env and fill in if you want to override
 
 export interface InitOptions {
   template?: 'minimal' | 'starter';
+  noToken?: boolean;
 }
 
 export async function init(targetDir: string, opts: InitOptions = {}): Promise<void> {
@@ -279,9 +295,11 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 
+  const adminToken = opts.noToken ? null : generateAdminToken();
+
   await fs.mkdir(path.join(absTarget, 'content'), { recursive: true });
   await fs.writeFile(path.join(absTarget, 'content', 'README.md'), README_TEMPLATE);
-  await fs.writeFile(path.join(absTarget, 'remember.config.ts'), CONFIG_TEMPLATE);
+  await fs.writeFile(path.join(absTarget, 'remember.config.ts'), CONFIG_TEMPLATE({ adminToken }));
   await fs.writeFile(path.join(absTarget, '.gitignore'), GITIGNORE_TEMPLATE);
   await fs.writeFile(path.join(absTarget, '.rememberignore'), REMEMBERIGNORE_TEMPLATE);
   await fs.writeFile(path.join(absTarget, '.env.example'), ENV_EXAMPLE_TEMPLATE);
@@ -299,18 +317,27 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     );
   }
 
-  process.stdout.write(
-    [
+  const lines = [
+    ``,
+    `✓ Initialized remember wiki in ${absTarget}`,
+    ``,
+    `Next steps:`,
+    `  cd ${targetDir}`,
+    `  pnpm install            # or: npm install`,
+    `  pnpm dev                # or: npx @remember/cli dev`,
+    ``,
+    `Then open http://localhost:4321 — the in-browser setup wizard walks you through configuration.`,
+  ];
+  if (adminToken) {
+    lines.push(
       ``,
-      `✓ Initialized remember wiki in ${absTarget}`,
+      `Admin token (also written to remember.config.ts):`,
+      `  ${adminToken}`,
       ``,
-      `Next steps:`,
-      `  cd ${targetDir}`,
-      `  pnpm install            # or: npm install`,
-      `  pnpm dev                # or: npx @remember/cli dev`,
-      ``,
-      `Then open http://localhost:4321 — the in-browser setup wizard walks you through configuration.`,
-      ``,
-    ].join('\n'),
-  );
+      `Use it as the REMEMBER_ADMIN_TOKEN env var, or paste it into the Admin UI when prompted.`,
+      `Required to bind to a non-loopback host or to write/edit from a remote machine.`,
+    );
+  }
+  lines.push('');
+  process.stdout.write(lines.join('\n'));
 }

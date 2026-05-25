@@ -6,6 +6,15 @@ let healthOk = false;
 let openapi: { paths?: Record<string, unknown> } | null = null;
 let tools: { tools?: Array<{ name: string; description?: string }> } | null = null;
 
+interface LogEntry {
+  at: string;
+  level: 'error' | 'warn' | 'info' | 'debug';
+  source: string;
+  message: string;
+  detail?: Record<string, unknown>;
+}
+let logsPayload: { entries?: LogEntry[]; total?: number; note?: string } | null = null;
+
 try {
   const h = await fetch(`${API_BASE}/health`);
   healthOk = h.ok;
@@ -21,7 +30,36 @@ try {
   if (t.ok) tools = await t.json();
 } catch { /* fall through */ }
 
+try {
+  const l = await fetch(`${API_BASE}/logs?limit=50`);
+  if (l.ok) logsPayload = await l.json();
+} catch { /* fall through */ }
+
 const [status, config] = await Promise.all([getStatus(), getConfig()]);
+
+const logEntries = logsPayload?.entries ?? [];
+const logCounts = logEntries.reduce(
+  (acc, e) => {
+    acc[e.level] = (acc[e.level] ?? 0) + 1;
+    return acc;
+  },
+  {} as Record<string, number>,
+);
+const fmtTime = (iso: string) => {
+  const d = new Date(iso);
+  const now = Date.now();
+  const delta = (now - d.getTime()) / 1000;
+  if (delta < 60) return `${Math.floor(delta)}s ago`;
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  return d.toISOString().slice(0, 16).replace('T', ' ');
+};
+const levelColor = (l: string) => ({
+  error: 'var(--danger)',
+  warn: '#d97706',
+  info: 'var(--muted)',
+  debug: 'var(--muted)',
+}[l] ?? 'var(--muted)');
 ---
 <Layout title="Diagnostics · Admin">
   <div class="main-col">
@@ -62,6 +100,50 @@ const [status, config] = await Promise.all([getStatus(), getConfig()]);
         </table>
       </div>
     )}
+
+    <div class="diag-section">
+      <div class="diag-section-header">
+        <h3>Recent events <span class="muted count-tag">{logsPayload?.total ?? 0}</span></h3>
+        <div class="level-counts">
+          {(['error', 'warn', 'info'] as const).map((lvl) => (
+            <span class="level-count" style={`color: ${levelColor(lvl)};`}>
+              <strong>{logCounts[lvl] ?? 0}</strong> {lvl}
+            </span>
+          ))}
+        </div>
+        <button type="button" id="logs-refresh" class="btn secondary refresh-btn">Refresh</button>
+      </div>
+      {logEntries.length === 0 ? (
+        <p class="muted empty-note">
+          {logsPayload?.note ?? 'No events recorded yet — the buffer holds the last 50 errors, warnings, and lifecycle events.'}
+        </p>
+      ) : (
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Level</th>
+              <th>Source</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logEntries.map((entry) => (
+              <tr>
+                <td class="log-time muted" title={entry.at}>{fmtTime(entry.at)}</td>
+                <td>
+                  <span class="log-level" style={`color: ${levelColor(entry.level)}; border-color: ${levelColor(entry.level)};`}>
+                    {entry.level}
+                  </span>
+                </td>
+                <td class="log-source muted">{entry.source}</td>
+                <td class="log-message">{entry.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
 
     {config && (
       <div style="margin-top: 2rem;">
@@ -114,4 +196,81 @@ const [status, config] = await Promise.all([getStatus(), getConfig()]);
   h3 { font-size: 1rem; color: var(--accent); margin-top: 0; }
   ul { margin: 0.5rem 0; padding-left: 1.5rem; }
   li { margin: 0.25rem 0; }
+
+  .diag-section { margin-top: 2rem; }
+  .diag-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 0.85rem;
+    flex-wrap: wrap;
+  }
+  .diag-section-header h3 { margin: 0; }
+  .count-tag {
+    font-weight: 400;
+    font-size: 0.85rem;
+    margin-left: 0.25rem;
+  }
+  .level-counts {
+    display: flex;
+    gap: 1rem;
+    margin-left: auto;
+    font-size: 0.8rem;
+  }
+  .level-count strong { font-weight: 600; }
+  .refresh-btn {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.7rem;
+  }
+  .empty-note { margin: 0.5rem 0; font-size: 0.9rem; }
+
+  .logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .logs-table th {
+    text-align: left;
+    padding: 0.5rem 0.85rem 0.5rem 0;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+  .logs-table td {
+    padding: 0.5rem 0.85rem 0.5rem 0;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .logs-table tr:last-child td { border-bottom: none; }
+  .log-time { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; min-width: 5rem; }
+  .log-level {
+    display: inline-block;
+    padding: 0.05rem 0.5rem;
+    border: 1px solid;
+    border-radius: 99px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: transparent;
+  }
+  .log-source { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+  .log-message { color: var(--text); word-break: break-word; }
 </style>
+
+<script is:inline>
+  // Logs refresh — re-fetches /v1/logs and reloads the list without a full
+  // page reload.
+  (() => {
+    const btn = document.getElementById('logs-refresh');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      window.location.reload();
+    });
+  })();
+</script>
