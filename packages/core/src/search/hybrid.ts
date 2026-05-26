@@ -16,6 +16,21 @@ export interface HybridSearchOptions {
    * scale proportionally. Set to 0 to disable. Default 2 → up to 3× score.
    */
   pathBoostFactor?: number;
+  /**
+   * Multiplier applied per query term found in a chunk's `heading_path`
+   * (the markdown heading hierarchy the chunk lives under). Cheap signal —
+   * a chunk under `# Authentication > ## OAuth flow` is more relevant for
+   * "oauth flow" than the same text inside `# Misc Notes`. Default 1 →
+   * up to 2× score.
+   */
+  headingBoostFactor?: number;
+  /**
+   * When true (default), collapse chunks-from-same-page so each page
+   * contributes at most one hit. A long page with 3 similar chunks would
+   * otherwise dominate the top 10; this keeps result diversity high.
+   * Set false to retain the per-chunk shape for debugging.
+   */
+  dedupByPage?: boolean;
 }
 
 export function createHybridSearchEngine(
@@ -30,6 +45,8 @@ export function createHybridSearchEngine(
   const finalK = opts.finalK ?? 10;
   const rrfK = opts.rrfK ?? 60;
   const pathBoostFactor = opts.pathBoostFactor ?? 2;
+  const headingBoostFactor = opts.headingBoostFactor ?? 1;
+  const dedupByPage = opts.dedupByPage ?? true;
 
   return {
     async query(q, queryOpts) {
@@ -70,11 +87,22 @@ export function createHybridSearchEngine(
       // mentioning short page above the canonical one because of TF/length
       // normalisation; this post-fusion pass corrects for that.
       const boostStart = Date.now();
-      const boosted = applyPathBoost(fused, q, pathBoostFactor);
+      let boosted = applyPathBoost(fused, q, pathBoostFactor);
+      boosted = applyHeadingBoost(boosted, q, headingBoostFactor);
       debug.path_boost_ms = Date.now() - boostStart;
 
+      // Page-level dedup: collapse multiple chunks from the same page down
+      // to the top-scoring one. Without this, a long page with three
+      // semantically-similar chunks dominates the top 10 — the agent then
+      // sees three near-identical snippets from one page and misses other
+      // relevant pages entirely. Industry-standard fix for hybrid search.
+      const dedupStart = Date.now();
+      const deduped = dedupByPage ? collapsePerPage(boosted) : boosted;
+      debug.dedup_ms = Date.now() - dedupStart;
+      debug.dedup_count = deduped.length;
+
       const rerankStart = Date.now();
-      const reranked = await reranker.rerank(q, boosted);
+      const reranked = await reranker.rerank(q, deduped);
       debug.rerank_ms = Date.now() - rerankStart;
 
       const results = reranked.slice(0, k);
@@ -85,6 +113,59 @@ export function createHybridSearchEngine(
       };
     },
   };
+}
+
+/**
+ * Collapse multiple hits from the same `path` down to the highest-scoring
+ * one. Preserves the global score ordering — first iteration captures the
+ * best chunk per page, subsequent encounters skip.
+ */
+export function collapsePerPage(hits: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  const out: SearchResult[] = [];
+  // Input is assumed already sorted by score (path-boost re-sorts).
+  for (const hit of hits) {
+    const path = hit.path ?? '';
+    if (seen.has(path)) continue;
+    seen.add(path);
+    out.push(hit);
+  }
+  return out;
+}
+
+/**
+ * Tokenize a chunk's `heading_path` (the markdown heading hierarchy the
+ * chunk lives under) on whitespace + common punctuation, then count how
+ * many query terms appear. A chunk under `# Authentication > ## OAuth flow`
+ * for query "oauth flow" gets the full boost; partial matches scale.
+ *
+ * Multiplier shape matches applyPathBoost: 1 + (matched/total)*factor.
+ */
+export function applyHeadingBoost(
+  hits: SearchResult[],
+  query: string,
+  factor: number,
+): SearchResult[] {
+  if (factor <= 0) return hits;
+  const queryTerms = tokenizeQuery(query);
+  if (queryTerms.length === 0) return hits;
+
+  const boosted = hits.map((hit) => {
+    const headings = hit.heading_path;
+    if (!Array.isArray(headings) || headings.length === 0) return hit;
+    const headingTokens = headings
+      .filter((h): h is string => typeof h === 'string')
+      .flatMap((h) => h.toLowerCase().split(/[\s_\-.,;:!?]+/))
+      .filter((t) => t.length > 0);
+    const tokenSet = new Set(headingTokens);
+    const matched = queryTerms.filter((t) => tokenSet.has(t)).length;
+    if (matched === 0) return hit;
+    const multiplier = 1 + (matched / queryTerms.length) * factor;
+    return { ...hit, score: hit.score * multiplier };
+  });
+
+  boosted.sort((a, b) => b.score - a.score);
+  return boosted;
 }
 
 /**

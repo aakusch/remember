@@ -465,13 +465,46 @@ function makeSnippet(text: string, query?: string): string {
   return extractSnippet(text, query);
 }
 
-function getFrontmatter(_db: Database.Database, _sourcePath: string): Record<string, unknown> {
-  // v1: store frontmatter per chunk would be wasteful. Frontmatter is page-level;
-  // the indexer can backfill this via a side table later. For now return empty.
-  return {};
+function getFrontmatter(
+  db: Database.Database,
+  sourcePath: string,
+): Record<string, unknown> {
+  // Frontmatter lives in `pages.frontmatter` as a JSON string; we already
+  // write it on upsertPage. Returning {} (the v1 behavior) meant agents
+  // couldn't filter search results by tags after the fact, even though
+  // the data was right there in the same DB. One indexed lookup per hit.
+  try {
+    const row = db
+      .prepare('SELECT frontmatter FROM pages WHERE path = ? LIMIT 1')
+      .get(sourcePath) as { frontmatter?: string } | undefined;
+    if (!row?.frontmatter) return {};
+    return JSON.parse(row.frontmatter) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
+/**
+ * Build an FTS5 query from user input. The old version wrapped everything
+ * in `"..."` which forced phrase-mode — a query like "alexander the great"
+ * only matched the exact phrase, killing recall on natural-language input.
+ *
+ * New behavior: tokenize the input, quote each token individually to
+ * escape FTS5 special characters, then join with OR. FTS5 ranks matches
+ * by BM25 against the chunk text, so the more terms hit the higher the
+ * score — exactly what we want.
+ *
+ * Empty input becomes a no-match sentinel so the caller's prepared
+ * statement doesn't blow up.
+ */
 function escapeFts(query: string): string {
-  // Simple FTS5 escape: quote the whole query so special chars don't blow up.
-  return `"${query.replace(/"/g, '""')}"`;
+  // FTS5 phrase terms: split on whitespace, drop empties, escape internal
+  // double-quotes by doubling them (FTS5 quoting rules match SQL strings).
+  const tokens = query
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && /[a-z0-9]/i.test(t))
+    .map((t) => `"${t.replace(/"/g, '""')}"`);
+  if (tokens.length === 0) return '""'; // empty match — won't error
+  return tokens.join(' OR ');
 }

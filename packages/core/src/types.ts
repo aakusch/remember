@@ -44,6 +44,13 @@ export interface SearchResult {
   score: number;
   retrievers: ('bm25' | 'vector')[];
   chunk_id: string;
+  /**
+   * Markdown heading hierarchy the chunk lives under, e.g.
+   * `['Authentication', 'OAuth flow']`. Stored at chunk-time by the
+   * indexer; consumed by `applyHeadingBoost` to score chunks under
+   * relevant headings higher.
+   */
+  heading_path?: string[];
 }
 
 export interface SearchEngine {
