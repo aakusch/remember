@@ -12,8 +12,8 @@ pkill -f "bin/remember.js" 2>/dev/null || true
 pkill -f "astro dev"        2>/dev/null || true
 sleep 1
 
-echo "→ building @remember/core"
-pnpm --filter @remember/core build > /dev/null
+echo "→ building @useremember/core"
+pnpm --filter @useremember/core build > /dev/null
 
 echo "→ starting core API on :4320"
 (
@@ -31,7 +31,7 @@ done
 echo " core ready"
 
 echo "→ starting Astro viewer on :4321"
-pnpm --filter @remember/viewer dev &
+pnpm --filter @useremember/viewer dev &
 VIEWER_PID=$!
 
 cleanup() {

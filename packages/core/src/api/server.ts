@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { registerRoutes, type RouteContext } from './routes.js';
 
 export function createApp(ctx?: Partial<RouteContext>): Hono {
@@ -9,15 +10,23 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
   // log buffer so the Diagnostics page can show "what just broke" without
   // requiring the user to dig through stdout.
   app.onError((err, c) => {
+    // Correlation id ties the client-facing 500 to the detailed server-side log
+    // entry. Why: err.message can leak absolute fs paths / sqlite internals;
+    // only client-safe error codes (thrown with their own response upstream)
+    // should surface detail. Generic 500s stay opaque to the client.
+    const correlationId = randomUUID();
     if (ctx?.logs) {
       ctx.logs.push({
         level: 'error',
         source: 'http',
-        message: `${c.req.method} ${new URL(c.req.url).pathname}: ${err.message}`,
+        message: `[${correlationId}] ${c.req.method} ${new URL(c.req.url).pathname}: ${err.message}`,
         detail: { stack: err.stack?.split('\n').slice(0, 3).join(' | ') },
       });
     }
-    return c.json({ error: { code: 'INTERNAL', message: err.message } }, 500);
+    return c.json(
+      { error: { code: 'INTERNAL', message: 'internal error', correlation_id: correlationId } },
+      500,
+    );
   });
 
   if (ctx && ctx.store && ctx.embedder && ctx.search && ctx.reindex && ctx.contentRoot) {

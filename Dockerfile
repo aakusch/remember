@@ -20,8 +20,8 @@ RUN --mount=type=cache,target=/pnpm/store pnpm install --frozen-lockfile=false
 
 # Now copy source + build both packages.
 COPY . .
-RUN pnpm --filter @remember/core build
-RUN pnpm --filter @remember/viewer build
+RUN pnpm --filter @useremember/core build
+RUN pnpm --filter @useremember/viewer build
 
 # ─── Runtime stage ──────────────────────────────────────────────────────────
 FROM node:20-bookworm-slim AS runtime

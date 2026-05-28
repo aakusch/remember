@@ -10,6 +10,9 @@ import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sql
 
 const VERSION = '0.0.1';
 
+/** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
+const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
+
 export interface RouteContext {
   contentRoot: string;
   store: Store;
@@ -263,6 +266,11 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     const body = (await c.req.json().catch(() => ({}))) as { body?: unknown };
     if (typeof body.body !== 'string') {
       return c.json({ error: { code: 'BAD_REQUEST', message: 'PUT /v1/pages/<path> requires { body: string } (full markdown including frontmatter)' } }, 400);
+    }
+    // Reject oversized writes rather than buffering + reindexing huge payloads.
+    // Why: same memory-DoS class as the walker/indexOne size caps.
+    if (Buffer.byteLength(body.body, 'utf8') > MAX_PAGE_BODY_BYTES) {
+      return c.json({ error: { code: 'PAYLOAD_TOO_LARGE', message: `Page body exceeds ${MAX_PAGE_BODY_BYTES} bytes` } }, 413);
     }
     try {
       const abs = safeJoinContent(ctx.contentRoot, userPath);

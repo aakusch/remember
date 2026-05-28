@@ -3,7 +3,9 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
-## [Unreleased]
+## [0.0.1] - 2026-05-25
+
+First published release of `@useremember/core` and `@useremember/viewer` (npm 0.0.1).
 
 ### Added — Wave 5: Editor + nav + table view
 - **Slash commands in editor** — 20 commands (`/h1`-`/h4`, `/bullet`, `/numbered`, `/todo`, `/code`, `/code-ts/py/sh`, `/quote`, `/table`, `/hr`, `/link`, `/image`, `/math`, `/mermaid`, `/frontmatter`, `/tag`). Keyboard-navigable popup with filter-as-you-type. `Cmd/Ctrl+S` to save.

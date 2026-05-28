@@ -1,6 +1,13 @@
 import path from 'node:path';
 import type { Chunker, Embedder, Parser, Store, Walker } from '../types.js';
 
+/**
+ * Upper bound on a single file read by indexOne. Matches the walker's default
+ * cap so the single-file path can't be used to buffer an arbitrarily large
+ * file into memory (the bulk walk already enforces its own limit).
+ */
+const MAX_INDEXABLE_FILE_BYTES = 5 * 1024 * 1024;
+
 export interface IndexerOptions {
   walker: Walker;
   parser: Parser;
@@ -130,9 +137,24 @@ export function createIndexer(opts: IndexerOptions) {
     async indexOne(root: string, relPath: string): Promise<{ chunks_added: number }> {
       const { promises: fs } = await import('node:fs');
       const { createHash } = await import('node:crypto');
-      const abs = path.resolve(root, relPath);
-      const content = await fs.readFile(abs, 'utf8');
+      // Enforce content-root containment here rather than trusting the caller.
+      // Why: indexOne touches the filesystem directly (readFile/stat); the FS
+      // layer must own its own path-traversal invariant even if every current
+      // caller already validates (routes.ts does). Mirrors safeJoinContent.
+      const normalized = path.normalize(relPath).replace(/^[/\\]+/, '');
+      const abs = path.resolve(root, normalized);
+      const rel = path.relative(root, abs);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new Error(`Refused path traversal: "${relPath}" resolves outside ${root}`);
+      }
       const stat = await fs.stat(abs);
+      // Reject oversized files rather than buffering them whole (memory-DoS guard).
+      if (stat.size > MAX_INDEXABLE_FILE_BYTES) {
+        throw new Error(
+          `File too large to index: "${relPath}" is ${stat.size} bytes (limit ${MAX_INDEXABLE_FILE_BYTES})`,
+        );
+      }
+      const content = await fs.readFile(abs, 'utf8');
       const sha256 = createHash('sha256').update(content).digest('hex');
       const nowIso = new Date().toISOString();
 

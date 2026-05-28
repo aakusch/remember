@@ -38,8 +38,8 @@ export default defineConfig({
   },
 
   // Pull external content into the index via connectors.
-  // Synced files land in content/_<connector-name>/ and flow through the same
-  // pipeline as your hand-written pages.
+  // Synced files land in content/external/<connector-name>/ and flow through the
+  // same pipeline as your hand-written pages.
   connectors: [
     defaults.connector.obsidian({
       name: 'obsidian',
