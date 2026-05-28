@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { getConnInfo } from '@hono/node-server/conninfo';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -21,6 +22,12 @@ export interface RouteContext {
   reindex: (mode: 'incremental' | 'full') => Promise<{ files_indexed: number; chunks_added: number; duration_ms: number }>;
   reindexOne: (relPath: string) => Promise<{ chunks_added: number }>;
   adminToken: string | null;
+  /**
+   * The host the server is actually bound to (server.host). This is the
+   * AUTHORITATIVE signal for "is this a trusted local request" — never the
+   * client-supplied Host / X-Forwarded-Host header. See isTrustedLocal().
+   */
+  boundHost: string;
   remoteAllowed: boolean;
   configPath: string | null;
   configRoot: string;
@@ -50,20 +57,67 @@ const notImplemented = (endpoint: string) => ({
   },
 });
 
-function isLocalhost(host: string | undefined): boolean {
+/** True for any loopback hostname form. Used on the BOUND host (trusted), never on the client Host header. */
+function isLoopbackHost(host: string | undefined): boolean {
   if (!host) return false;
-  const h = host.split(':')[0]!;
-  return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]';
+  // Strip a trailing :port and any IPv6 brackets.
+  let h = host.trim();
+  if (h.startsWith('[')) {
+    const close = h.indexOf(']');
+    h = close >= 0 ? h.slice(1, close) : h.slice(1);
+  } else if (h.includes(':') && h.split(':').length === 2) {
+    // host:port (IPv4 or hostname). Bare "::1" has >2 segments, so it's left intact.
+    h = h.split(':')[0]!;
+  }
+  return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h.startsWith('127.');
+}
+
+/** True if an IP literal (from the real socket) is a loopback address. */
+function isLoopbackAddress(addr: string | undefined): boolean {
+  if (!addr) return false;
+  let a = addr.trim();
+  // Normalize IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) and bracketed forms.
+  if (a.startsWith('[') && a.endsWith(']')) a = a.slice(1, -1);
+  const mapped = a.toLowerCase().replace(/^::ffff:/, '');
+  return mapped === '::1' || mapped === '127.0.0.1' || mapped.startsWith('127.');
+}
+
+/**
+ * Decide whether a request is a trusted LOCAL request — based on the real
+ * connection, NOT the client-supplied Host / X-Forwarded-Host header.
+ *
+ * Why: the Host header is attacker-controlled. A previous bug short-circuited
+ * `if (isLocalhost(Host)) return trusted` BEFORE any token check, so a remote
+ * client sending `Host: localhost` to a 0.0.0.0-bound server bypassed read
+ * auth and could read /v1/config (which leaks adminToken → write/RCE).
+ *
+ * Rules:
+ *  - Bound to a loopback interface (127.x / ::1 / localhost): the OS only
+ *    routes genuine loopback traffic here, so every request is trusted-local.
+ *  - Bound to 0.0.0.0 / a public host: do NOT trust the Host header. Use the
+ *    real peer address from @hono/node-server (incoming.socket.remoteAddress)
+ *    and trust only when that actual IP is loopback. If the peer address is
+ *    unavailable (e.g. unit tests, non-node adapters), grant NO local-trust —
+ *    callers fall through to the Bearer-token requirement.
+ */
+function isTrustedLocal(c: Context, boundHost: string): boolean {
+  if (isLoopbackHost(boundHost)) return true;
+  // Non-loopback bind: the only trustworthy "local" signal is the real socket.
+  try {
+    const info = getConnInfo(c);
+    return isLoopbackAddress(info.remote.address);
+  } catch {
+    // No node-server binding on c.env (peer address unknown) → not trusted.
+    return false;
+  }
 }
 
 /**
  * Inline admin check. Returns a Response if unauthorized, null if allowed.
  * Calling it inline in each handler keeps Hono's path typing clean.
  */
-function checkAdmin(c: Context, adminToken: string | null): Response | null {
-  const fwdHost = c.req.header('host');
-  const fromLocal = isLocalhost(fwdHost);
-  if (fromLocal && !adminToken) return null;
+function checkAdmin(c: Context, adminToken: string | null, boundHost: string): Response | null {
+  if (isTrustedLocal(c, boundHost) && !adminToken) return null;
 
   const auth = c.req.header('authorization');
   if (!auth || !auth.startsWith('Bearer ')) {
@@ -78,11 +132,11 @@ function checkAdmin(c: Context, adminToken: string | null): Response | null {
 
 /**
  * Read-side check — gates GETs on non-loopback exposure when a token is set.
- * Localhost reads stay open by default (preserves zero-config viewer experience).
+ * Trusted-local reads stay open by default (preserves zero-config viewer
+ * experience). Trust derives from the real connection, never the Host header.
  */
-function checkRead(c: Context, adminToken: string | null): Response | null {
-  const fwdHost = c.req.header('host');
-  if (isLocalhost(fwdHost)) return null;
+function checkRead(c: Context, adminToken: string | null, boundHost: string): Response | null {
+  if (isTrustedLocal(c, boundHost)) return null;
   if (!adminToken) return null;
   const auth = c.req.header('authorization');
   if (!auth || !auth.startsWith('Bearer ')) {
@@ -99,7 +153,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   // Apply remote-read gating to every /v1 endpoint except /health.
   app.use('/v1/*', async (c, next) => {
     if (c.req.path === '/v1/health') return next();
-    const denial = checkRead(c, ctx.adminToken);
+    const denial = checkRead(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     return next();
   });
@@ -220,7 +274,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     // swallows the more-specific route. Read-only listing — gated like other
     // GETs (localhost reads are open even with a token set).
     if (rawPath.endsWith('/history')) {
-      const denial = checkRead(c, ctx.adminToken);
+      const denial = checkRead(c, ctx.adminToken, ctx.boundHost);
       if (denial) return denial;
       const pagePath = rawPath.slice(0, -'/history'.length);
       const url = new URL(c.req.url);
@@ -260,7 +314,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Write page (admin-gated). Editor surface for the viewer.
   app.put('/v1/pages/*', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const userPath = c.req.path.replace(/^\/v1\/pages\//, '');
     const body = (await c.req.json().catch(() => ({}))) as { body?: unknown };
@@ -310,7 +364,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Page history — get one version's full body + frontmatter.
   app.get('/v1/history/:id', (c) => {
-    const denial = checkRead(c, ctx.adminToken);
+    const denial = checkRead(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id) || !ctx.history) return c.json({ error: { code: 'NOT_FOUND', message: 'history entry not found' } }, 404);
@@ -321,7 +375,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Mutations (admin-gated inline)
   app.delete('/v1/pages/*', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const userPath = c.req.path.replace(/^\/v1\/pages\//, '');
     try {
@@ -342,7 +396,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   });
 
   app.post('/v1/pages/move', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const body = (await c.req.json()) as { from?: string; to?: string };
     if (!body.from || !body.to) {
@@ -365,7 +419,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   });
 
   app.post('/v1/folders', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const body = (await c.req.json()) as { path?: string };
     if (!body.path) {
@@ -384,7 +438,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   });
 
   app.delete('/v1/folders/*', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const userPath = c.req.path.replace(/^\/v1\/folders\//, '');
     const recursive = c.req.query('recursive') === 'true';
@@ -408,7 +462,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   });
 
   app.post('/v1/folders/rename', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const body = (await c.req.json()) as { from?: string; to?: string };
     if (!body.from || !body.to) {
@@ -430,7 +484,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Index lifecycle
   app.post('/v1/index', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const body = (await c.req.json().catch(() => ({}))) as { mode?: 'incremental' | 'full' };
     const mode = body.mode ?? 'incremental';
@@ -463,7 +517,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     });
   });
   app.put('/v1/config', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
 
     const body = (await c.req.json().catch(() => ({}))) as { source?: unknown };
@@ -519,7 +573,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   // Recent operational events — errors, warnings, lifecycle. Powers the
   // Diagnostics page. Capped at ~50 entries in-memory; not durable.
   app.get('/v1/logs', (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
 
     const url = new URL(c.req.url);
@@ -537,7 +591,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Server-Sent Events. Viewer subscribes for live reload + index status.
   app.get('/v1/events', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
 
     return streamSSE(c, async (stream) => {
@@ -572,14 +626,14 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   // Connectors
   app.get('/v1/connectors', (c) => c.json({ connectors: ctx.connectors.list() }));
   app.post('/v1/connectors/:name/sync', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const name = c.req.param('name');
     const r = await ctx.connectors.syncOne(name);
     return c.json(r);
   });
   app.post('/v1/connectors/sync', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken);
+    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
     if (denial) return denial;
     const r = await ctx.connectors.syncAll();
     return c.json({ ok: true, results: r });

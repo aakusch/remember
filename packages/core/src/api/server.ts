@@ -40,6 +40,9 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
         ctx.reindexOne ??
         (async () => ({ chunks_added: 0 })),
       adminToken: ctx.adminToken ?? null,
+      // Authoritative bind host for local-trust decisions. Defaults to loopback
+      // so unconfigured test apps keep the zero-config open-reads behavior.
+      boundHost: ctx.boundHost ?? '127.0.0.1',
       remoteAllowed: ctx.remoteAllowed ?? false,
       configPath: ctx.configPath ?? null,
       configRoot: ctx.configRoot ?? ctx.contentRoot,
