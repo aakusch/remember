@@ -7,7 +7,16 @@ import type { Walker } from '../types.js';
 export interface ChokidarWalkerOptions {
   respectGitignore?: boolean;
   ignore?: string[];
+  /**
+   * Maximum file size (bytes) to read into memory during a walk. Files larger
+   * than this are skipped (with a stderr warning) rather than buffered whole.
+   * Why: unbounded `readFile` on a multi-GB file is a memory-DoS vector.
+   * Default 5 MiB — generous for markdown, cheap to raise via config.
+   */
+  maxFileBytes?: number;
 }
+
+const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const DEFAULT_IGNORES = [
   'node_modules',
@@ -19,12 +28,13 @@ const DEFAULT_IGNORES = [
 ];
 
 export function createChokidarWalker(opts: ChokidarWalkerOptions = {}): Walker {
+  const maxFileBytes = opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
   return {
     async *walk(root) {
       const absRoot = path.resolve(root);
       const ig = await loadIgnore(absRoot, opts);
 
-      for await (const entry of walkDir(absRoot, absRoot, ig)) {
+      for await (const entry of walkDir(absRoot, absRoot, ig, maxFileBytes)) {
         yield entry;
       }
     },
@@ -59,6 +69,7 @@ async function* walkDir(
   absRoot: string,
   dir: string,
   ig: Ignore,
+  maxFileBytes: number,
 ): AsyncGenerator<{ path: string; content: string; mtime: Date; sha256: string }> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
 
@@ -72,10 +83,17 @@ async function* walkDir(
     }
 
     if (entry.isDirectory()) {
-      yield* walkDir(absRoot, abs, ig);
+      yield* walkDir(absRoot, abs, ig, maxFileBytes);
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
-      const content = await fs.readFile(abs, 'utf8');
       const stat = await fs.stat(abs);
+      // Skip oversized files rather than buffering them whole (memory-DoS guard).
+      if (stat.size > maxFileBytes) {
+        process.stderr.write(
+          `[remember] skipping ${relPosix}: ${stat.size} bytes exceeds maxFileBytes (${maxFileBytes})\n`,
+        );
+        continue;
+      }
+      const content = await fs.readFile(abs, 'utf8');
       yield {
         path: relPosix,
         content,

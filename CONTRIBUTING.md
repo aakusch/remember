@@ -71,7 +71,8 @@ remember/
 ## Workflow
 
 - All work happens off `main` via feature branches.
-- PRs need green CI (lint, typecheck, tests) and one reviewer.
+- PRs need green CI (typecheck, tests) and one reviewer. (ESLint is not yet
+  configured — the `lint` script is a placeholder and CI does not run it.)
 - Conventional commits preferred: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
 - Adapter interfaces are versioned; any breaking change to an adapter requires a major bump on `@useremember/core`.
 

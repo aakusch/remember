@@ -199,6 +199,7 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     ctx.embedder = newRuntime.embedder;
     ctx.search = newRuntime.search;
     ctx.adminToken = newCfg.validated.server.adminToken;
+    ctx.boundHost = newCfg.validated.server.host;
     ctx.remoteAllowed = newCfg.validated.server.host !== '127.0.0.1';
     ctx.configPath = newCfg.configPath;
     ctx.configRoot = newCfg.rootDir;
@@ -242,6 +243,9 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
       return r;
     },
     adminToken: cfg.validated.server.adminToken,
+    // Authoritative bind host — local-trust derives from this + the real peer
+    // socket, never the client Host header.
+    boundHost: cfg.validated.server.host,
     remoteAllowed: cfg.validated.server.host !== '127.0.0.1',
     configPath: cfg.configPath,
     configRoot: cfg.rootDir,
