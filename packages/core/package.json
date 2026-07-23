@@ -42,6 +42,7 @@
     "./parsers/remark": "./dist/parsers/remark.js",
     "./stores/sqlite-vec": "./dist/stores/sqlite-vec.js",
     "./search/hybrid": "./dist/search/hybrid.js",
+    "./evaluation": "./dist/evaluation/index.js",
     "./rerankers/none": "./dist/rerankers/none.js"
   },
   "bin": {
@@ -57,6 +58,7 @@
     "dev": "tsx watch src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "benchmark": "node --import tsx src/cli/benchmark.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo '(eslint not yet configured)'"
   },

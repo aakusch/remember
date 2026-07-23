@@ -11,6 +11,7 @@ COMMANDS:
   start            Start the production server (assumes index is up to date)
   index            (Re)index the content directory
   status           Print index status
+  benchmark         Run the versioned retrieval evaluation
 
 OPTIONS:
   -v, --version    Print version
@@ -71,6 +72,11 @@ export async function run(argv: string[]): Promise<void> {
       case 'status': {
         const { statusCommand } = await import('./commands/status-cmd.js');
         await statusCommand();
+        return;
+      }
+      case 'benchmark': {
+        const { benchmarkCommand } = await import('./commands/benchmark-cmd.js');
+        await benchmarkCommand(argv.slice(1));
         return;
       }
       default:

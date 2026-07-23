@@ -86,6 +86,24 @@ Type into the search bar (top right of every page) or visit `/search`. Each resu
 
 ![Search results](./docs/images/03-search.png)
 
+### Retrieval benchmark
+
+Search changes are checked against a versioned 30-query fixture spanning
+exact, semantic, ambiguous, multi-document, contradictory, and unanswerable
+cases. The deterministic CI profile is fully offline:
+
+```bash
+pnpm --filter @useremember/core benchmark -- \
+  --profile ci \
+  --output ../../benchmarks/results/latest-ci.json
+```
+
+It reports recall@1/5/10, candidate recall, MRR, nDCG@5/10,
+wrong-source/empty-result rates, latency percentiles, per-query failures, and
+per-class breakdowns. The separate `fast` release profile uses local BGE
+embeddings and may download that model when explicitly selected. See
+[`benchmarks/retrieval/README.md`](./benchmarks/retrieval/README.md).
+
 ### In-browser editor with slash commands
 
 Click ✎ Edit on any page. The editor has a markdown source pane and a live preview side-by-side. Type `/` at the start of a line for the command palette — 20 commands covering headings, lists, code blocks, tables, math, mermaid diagrams, frontmatter scaffolds, and more.

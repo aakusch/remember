@@ -33,6 +33,7 @@ export { createIndexer } from './indexer/index.js';
 export { createHashEmbedder } from './embedders/hash.js';
 export { createLocalOnnxEmbedder } from './embedders/local-onnx.js';
 export { createOpenAIEmbedder } from './embedders/openai.js';
+export * from './evaluation/index.js';
 
 export {
   createConnectorManager,

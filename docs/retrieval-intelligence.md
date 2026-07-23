@@ -162,6 +162,16 @@ layers additionally report citation validity and unsupported-claim rate.
 The repository should gain a benchmark command before model-backed ranking
 becomes the default.
 
+### Versioned baseline
+
+The repository now includes a 30-query sample-wiki fixture and an offline
+`ci-hash` runner. The recorded v0.0.1 baseline lives at
+`benchmarks/results/remember-v0.0.1-local.json`; its metadata identifies the
+corpus, questions, engine profile, and embedder by stable hashes. The hash
+profile is for deterministic pipeline regression, not semantic-model quality.
+Release evaluation uses the explicit `fast` profile with local BGE embeddings
+and is kept separate from CI.
+
 ## Privacy and safety
 
 - Retrieved documents are untrusted data, not model instructions.
