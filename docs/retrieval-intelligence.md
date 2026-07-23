@@ -174,6 +174,13 @@ becomes the default.
 
 ## Rollout
 
+Search quality leads the product, but the human viewer must become a usable
+product surface before broad Answer preview. The dedicated
+[viewer productization plan](./plans/2026-07-23-viewer-productization.md)
+defines the information architecture, component system, responsive behavior,
+progressive disclosure, and nontechnical onboarding work for
+`packages/viewer`.
+
 ### Phase 1 — competitive retrieval foundation
 
 1. Create a versioned benchmark fixture and baseline current hybrid retrieval.
@@ -185,7 +192,27 @@ becomes the default.
 6. Define the evidence-package contract required by Answer composition.
 7. Publish quality, latency, context, and resource comparisons.
 
-### Phase 2 — Answer composition in Cloud
+### Phase 2 — viewer productization and human retrieval surface
+
+1. Replace the dual-rail developer console with one responsive workspace
+   navigation model.
+2. Establish reusable, accessible design tokens and product components before
+   adding more route-specific UI.
+3. Make Home, Search, Library, Sources, and Settings the user-facing
+   information architecture.
+4. Guide first source, indexing readiness, first Search, and agent connection
+   without requiring config-file or terminal work on supported paths.
+5. Rebuild Search around the stable Phase 1 evidence and trace contracts.
+6. Keep scores, traces, index controls, raw config, diagnostics, and API detail
+   available through contextual or Advanced disclosure.
+7. Validate the primary journeys at mobile and desktop widths with
+   accessibility, end-to-end, visual-regression, and observed-usability gates.
+
+Component-foundation work may overlap the end of Phase 1. The consumer Search
+journey must be complete before a broad Answer preview so Answer extends a
+coherent product surface instead of creating another technical demo.
+
+### Phase 3 — Answer composition in Cloud
 
 1. Pack the smallest useful authorized evidence set.
 2. Add adjacent-chunk retrieval without bypassing access controls.
@@ -193,7 +220,7 @@ becomes the default.
 4. Validate citations server-side and abstain on insufficient evidence.
 5. Add provider fallback, budgets, idempotency, and feedback.
 
-### Phase 3 — feedback and provenance
+### Phase 4 — feedback and provenance
 
 1. Link retrieval and Answer events to resulting agent artifacts.
 2. Measure useful, wrong-source, incomplete, stale, and unsupported outcomes.
