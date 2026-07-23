@@ -1,6 +1,6 @@
 {
   "name": "@useremember/core",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [
@@ -42,11 +42,13 @@
     "./parsers/remark": "./dist/parsers/remark.js",
     "./stores/sqlite-vec": "./dist/stores/sqlite-vec.js",
     "./search/hybrid": "./dist/search/hybrid.js",
+    "./search/evidence": "./dist/search/evidence.js",
     "./evaluation": "./dist/evaluation/index.js",
+    "./query-planners/passthrough": "./dist/query-planners/passthrough.js",
     "./rerankers/none": "./dist/rerankers/none.js"
   },
   "bin": {
-    "remember": "./bin/remember.js"
+    "remember": "bin/remember.js"
   },
   "files": [
     "bin",

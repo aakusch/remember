@@ -54,8 +54,19 @@ export const search = {
       vector?: { enabled?: boolean; weight?: number };
       fusion?: 'rrf';
       rerank?: unknown;
+      planner?: unknown;
+      limits?: {
+        perRetrieverK?: number;
+        candidateK?: number;
+        finalK?: number;
+      };
       topK?: number;
+      candidateK?: number;
       finalK?: number;
+      rrfK?: number;
+      pathBoostFactor?: number;
+      headingBoostFactor?: number;
+      dedupByPage?: boolean;
     } = {},
   ) {
     return {
@@ -64,8 +75,11 @@ export const search = {
         bm25: { enabled: true, weight: 0.5 },
         vector: { enabled: true, weight: 0.5 },
         fusion: 'rrf' as const,
-        topK: 20,
-        finalK: 10,
+        limits: {
+          perRetrieverK: 30,
+          candidateK: 30,
+          finalK: 10,
+        },
         ...opts,
       },
     } as const;
@@ -75,6 +89,12 @@ export const search = {
 export const rerank = {
   none() {
     return { _kind: 'rerank:none' } as const;
+  },
+};
+
+export const queryPlanner = {
+  passthrough() {
+    return { _kind: 'query-planner:passthrough' } as const;
   },
 };
 

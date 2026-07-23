@@ -36,13 +36,15 @@ export interface Embedder {
   embed(texts: string[]): Promise<number[][]>;
 }
 
+export type RetrieverName = 'bm25' | 'vector';
+
 export interface SearchResult {
   path: string;
   chunk_idx: number;
   snippet: string;
   frontmatter: Record<string, unknown>;
   score: number;
-  retrievers: ('bm25' | 'vector')[];
+  retrievers: RetrieverName[];
   chunk_id: string;
   /**
    * Markdown heading hierarchy the chunk lives under, e.g.
@@ -53,19 +55,181 @@ export interface SearchResult {
   heading_path?: string[];
 }
 
+export interface QueryInput {
+  query: string;
+  intent?: string;
+}
+
+export interface QueryVariation {
+  id: string;
+  text: string;
+  /**
+   * Relative contribution within one planner output. The original query uses
+   * weight 1; expansion variants are bounded by the engine before retrieval.
+   */
+  weight: number;
+}
+
+export interface QueryPlan {
+  original: string;
+  lexical: QueryVariation[];
+  semantic: QueryVariation[];
+}
+
+export interface QueryPlanner {
+  readonly id: string;
+  plan(input: QueryInput): Promise<QueryPlan>;
+}
+
+export interface RankedList {
+  retriever: RetrieverName;
+  queryId: string;
+  weight: number;
+  results: SearchResult[];
+}
+
+export interface RankContribution {
+  retriever: RetrieverName;
+  query_id: string;
+  rank: number;
+  weight: number;
+  rrf_contribution: number;
+}
+
+export interface RetrievalLimits {
+  perRetrieverK: number;
+  candidateK: number;
+  finalK: number;
+}
+
+export interface RankingSignalTrace {
+  chunk_id: string;
+  retrieval_score: number;
+  signaled_score: number;
+  final_score: number;
+  exact_match: boolean;
+  path_match_fraction: number;
+  heading_match_fraction: number;
+  contributions: RankContribution[];
+}
+
+export interface SearchTimings {
+  planner_ms: number;
+  bm25_ms: number;
+  embed_ms: number;
+  vector_ms: number;
+  candidate_retrieval_ms: number;
+  fusion_ms: number;
+  signals_ms: number;
+  dedup_ms: number;
+  rerank_ms: number;
+  diversity_ms: number;
+  query_ms: number;
+}
+
+export interface SearchTrace {
+  query: {
+    normalized: string;
+    intent?: string;
+  };
+  planner: {
+    id: string;
+    lexical_variation_ids: string[];
+    semantic_variation_ids: string[];
+  };
+  limits: RetrievalLimits;
+  candidates: {
+    by_retriever: Record<RetrieverName, number>;
+    fused_count: number;
+    deduplicated_count: number;
+    before_rerank_ids: string[];
+    after_rerank_ids: string[];
+    final_ids: string[];
+  };
+  ranking: RankingSignalTrace[];
+  timings: SearchTimings;
+  fallback?: {
+    stage: 'planner' | 'reranker';
+    reason: string;
+  };
+}
+
+export interface SearchQueryOptions {
+  k?: number;
+  debug?: boolean;
+  trace?: boolean;
+  mode?: 'fast' | 'enhanced';
+}
+
 export interface SearchEngine {
   query(
-    q: string,
-    opts: { k?: number; debug?: boolean },
+    q: string | QueryInput,
+    opts?: SearchQueryOptions,
   ): Promise<{
     results: SearchResult[];
     query_ms: number;
-    debug?: unknown;
+    debug?: SearchTrace;
+    trace?: SearchTrace;
   }>;
 }
 
+export interface RerankContext {
+  intent?: string;
+  mode: 'fast' | 'enhanced';
+}
+
+export interface RerankedResult extends SearchResult {
+  retrievalScore: number;
+  rerankerScore?: number;
+  finalScore: number;
+}
+
 export interface Reranker {
-  rerank(query: string, candidates: SearchResult[]): Promise<SearchResult[]>;
+  readonly id?: string;
+  rerank(
+    query: string,
+    candidates: SearchResult[],
+    context?: RerankContext,
+  ): Promise<Array<SearchResult | RerankedResult>>;
+}
+
+export interface EvidenceAccessScope {
+  scope_id?: string;
+  scope_hash?: string;
+}
+
+export interface EvidencePassage {
+  citation_id: string;
+  source_id: string;
+  chunk_id: string;
+  path: string;
+  canonical_url?: string;
+  revision?: string;
+  heading_path: string[];
+  text: string;
+  signals: {
+    score: number;
+    retrievers: RetrieverName[];
+    retrieval_score?: number;
+    reranker_score?: number;
+  };
+  access_scope?: EvidenceAccessScope;
+  estimated_tokens: number;
+}
+
+export interface EvidenceConflict {
+  id: string;
+  passage_ids: string[];
+  description: string;
+}
+
+export interface EvidencePackage {
+  query: QueryInput;
+  corpusVersion?: string;
+  passages: EvidencePassage[];
+  conflicts: EvidenceConflict[];
+  gaps: string[];
+  estimatedTokens: number;
 }
 
 export interface PageRecord {

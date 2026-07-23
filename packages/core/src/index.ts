@@ -12,7 +12,25 @@ export type {
   Store,
   SearchEngine,
   SearchResult,
+  SearchQueryOptions,
+  SearchTrace,
+  SearchTimings,
+  QueryInput,
+  QueryPlan,
+  QueryPlanner,
+  QueryVariation,
+  RankedList,
+  RankContribution,
+  RankingSignalTrace,
+  RetrievalLimits,
+  RetrieverName,
   Reranker,
+  RerankedResult,
+  RerankContext,
+  EvidenceAccessScope,
+  EvidenceConflict,
+  EvidencePackage,
+  EvidencePassage,
   RememberConfig,
   PageRecord,
   PageQuery,
@@ -26,9 +44,24 @@ export { createRemarkParser } from './parsers/remark.js';
 export { createSmartSplitChunker } from './chunkers/smart-split.js';
 export { createSqliteVecStore } from './stores/sqlite-vec.js';
 export { createHybridSearchEngine } from './search/hybrid.js';
-export { rrfFuse } from './search/rrf.js';
+export {
+  rrfFuse,
+  rrfFuseWithTrace,
+  type RrfFusionResult,
+  type RrfOptions,
+} from './search/rrf.js';
+export {
+  createEvidencePackage,
+  estimateTokens,
+  type EvidenceCandidate,
+  type EvidencePackageOptions,
+} from './search/evidence.js';
 export { extractSnippet, extractAnswer, tokenizeQuery, splitSentences } from './search/snippet.js';
 export { createPassthroughReranker } from './rerankers/none.js';
+export {
+  createPassthroughQueryPlanner,
+  passthroughQueryPlan,
+} from './query-planners/passthrough.js';
 export { createIndexer } from './indexer/index.js';
 export { createHashEmbedder } from './embedders/hash.js';
 export { createLocalOnnxEmbedder } from './embedders/local-onnx.js';

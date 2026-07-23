@@ -64,7 +64,7 @@ describe('HTTP API (wired)', () => {
   it('GET /v1/health', async () => {
     const res = await app.request('/v1/health');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: '0.0.1' });
+    expect(await res.json()).toEqual({ ok: true, version: '0.1.0' });
   });
 
   it('GET /v1/search returns results', async () => {
@@ -72,6 +72,41 @@ describe('HTTP API (wired)', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { results: unknown[] };
     expect(body.results.length).toBeGreaterThan(0);
+  });
+
+  it('GET /v1/search accepts intent/mode and maps debug to a structured trace', async () => {
+    const res = await app.request(
+      '/v1/search?q=welcome&intent=find%20the%20landing%20page&mode=fast&debug=1',
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      results: unknown[];
+      debug: {
+        query: { normalized: string; intent?: string };
+        planner: { id: string };
+        timings: { candidate_retrieval_ms: number };
+        ranking: unknown[];
+      };
+    };
+    expect(body.results.length).toBeGreaterThan(0);
+    expect(body.debug.query).toEqual({
+      normalized: 'welcome',
+      intent: 'find the landing page',
+    });
+    expect(body.debug.planner.id).toBe('passthrough-v1');
+    expect(body.debug.timings.candidate_retrieval_ms).toEqual(expect.any(Number));
+    expect(body.debug.ranking.length).toBeGreaterThan(0);
+  });
+
+  it('GET /v1/search rejects an unknown mode', async () => {
+    const res = await app.request('/v1/search?q=welcome&mode=magic');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: 'INVALID_SEARCH_MODE',
+        message: 'mode must be "fast" or "enhanced"',
+      },
+    });
   });
 
   it('GET /v1/pages lists wiki pages', async () => {

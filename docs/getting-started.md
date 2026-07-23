@@ -69,7 +69,8 @@ Try it:
 curl 'http://localhost:4320/v1/search?q=how+do+I+rollback&k=5&debug=1' | jq .
 ```
 
-`debug=1` shows per-stage timings + which retriever surfaced each hit.
+`debug=1` shows the structured ranking trace: candidate counts, RRF
+contributions, metadata signals, result IDs, fallbacks, and per-stage timings.
 
 ### 3. AI plugs in via `/v1/tools`
 

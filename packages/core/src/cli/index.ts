@@ -1,4 +1,4 @@
-const VERSION = '0.0.1';
+const VERSION = '0.1.0';
 
 const HELP = `remember v${VERSION} — local-first AI-ready wiki
 

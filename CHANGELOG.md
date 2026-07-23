@@ -3,6 +3,36 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [0.1.0] - 2026-07-23
+
+### Added
+
+- Versioned 30-query retrieval benchmark with deterministic CI and local-BGE
+  release profiles, per-query/class results, comparison deltas, and a recall
+  regression gate.
+- Optional typed query intent and a zero-cost passthrough `QueryPlanner`.
+- Structured ranking traces with planner variations, candidate counts, RRF
+  contributions, metadata signals, result IDs, fallbacks, and stage timings.
+- Provider-neutral, token-bounded evidence-package contract with stable
+  citation IDs, access-boundary filtering, conflicts, and gaps.
+
+### Changed
+
+- Weighted RRF now consumes configured BM25/vector weights and fuses to a
+  candidate limit rather than the final result limit.
+- Search now overlaps BM25 work with the embedding/vector branch, applies
+  boosts and chunk deduplication before bounded reranking, then performs page
+  diversity and backfill before the final slice.
+- Planner and reranker failures fall back to deterministic original-query
+  search without exposing provider error details.
+
+### Fixed
+
+- SQLite search results now retain `heading_path`, activating the documented
+  heading relevance signal.
+- Page deduplication can backfill enough distinct pages to satisfy `k` when
+  candidates are available.
+
 ## [0.0.1] - 2026-05-25
 
 First published release of `@useremember/core` and `@useremember/viewer` (npm 0.0.1).

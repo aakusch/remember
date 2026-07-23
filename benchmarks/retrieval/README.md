@@ -45,6 +45,6 @@ are also broken down by query class. Unanswerable queries have no recall or
 nDCG denominator; returning any source for them counts as a wrong-source
 outcome.
 
-The v0.0.1 baseline uses a second deterministic query at `candidateK` because
-that engine does not expose its pre-final candidates. Final-result quality and
-latency still come from the production-shaped `finalK` query.
+The v0.0.1 `ci-hash` and local-BGE baselines use a second query at `candidateK`
+because that engine does not expose its pre-final candidates. Final-result
+quality and latency still come from the production-shaped `finalK` query.

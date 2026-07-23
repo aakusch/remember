@@ -24,7 +24,10 @@ describe('@useremember/core surface', () => {
     });
     expect(defaults.search.hybrid()).toMatchObject({
       _kind: 'search:hybrid',
-      opts: { fusion: 'rrf', topK: 20, finalK: 10 },
+      opts: {
+        fusion: 'rrf',
+        limits: { perRetrieverK: 30, candidateK: 30, finalK: 10 },
+      },
     });
   });
 
@@ -32,7 +35,7 @@ describe('@useremember/core surface', () => {
     const app = createApp();
     const res = await app.request('/v1/health');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: '0.0.1' });
+    expect(await res.json()).toEqual({ ok: true, version: '0.1.0' });
   });
 
   it('scaffold createApp returns 501 NOT_IMPLEMENTED on /v1/search', async () => {

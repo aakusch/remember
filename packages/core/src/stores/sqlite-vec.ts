@@ -131,6 +131,7 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
         score: 1 / (1 + r.distance),
         retrievers: ['vector'] as ('bm25' | 'vector')[],
         chunk_id: r.chunk_id,
+        heading_path: parseHeadingPath(r.heading_path),
       }));
     },
 
@@ -163,6 +164,7 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
         score: 1 / (1 + Math.abs(r.rank)),
         retrievers: ['bm25'] as ('bm25' | 'vector')[],
         chunk_id: r.chunk_id,
+        heading_path: parseHeadingPath(r.heading_path),
       }));
     },
 
@@ -396,6 +398,17 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       );
     },
   };
+}
+
+function parseHeadingPath(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((heading): heading is string => typeof heading === 'string')
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function initSchema(db: Database.Database, dim: number): void {

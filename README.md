@@ -82,7 +82,7 @@ Every content page gets breadcrumbs, frontmatter tags rendered as pills, a headi
 
 ### Hybrid search
 
-Type into the search bar (top right of every page) or visit `/search`. Each result shows which retrievers contributed (BM25, vector, or both) and the fused score. Add `?debug=1` to the API URL for per-stage timings.
+Type into the search bar (top right of every page) or visit `/search`. Each result shows which retrievers contributed (BM25, vector, or both) and the fused score. Add `?debug=1` to the API URL for the structured ranking trace and per-stage timings.
 
 ![Search results](./docs/images/03-search.png)
 
@@ -279,8 +279,8 @@ Full architecture deep dive: [`docs/architecture.md`](./docs/architecture.md).
 
 | Version | Highlights |
 |---|---|
-| **v0.0.1** | Lean local-first OSS — *current* |
-| v0.1 | Retrieval benchmark, corrected candidate pipeline, optional intent, bounded reranker evaluation, brew tap, standalone binary |
+| v0.0.1 | Lean local-first OSS foundation |
+| **v0.1** | Retrieval benchmark, corrected candidate pipeline, optional intent, structured traces, evidence packages — *current* |
 | v0.2 | Block-level references, backlinks panel, branding/theme |
 | v0.3 | RBAC + OIDC/SAML auth |
 | **v1.0** | First production-stable release |

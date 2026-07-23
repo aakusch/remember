@@ -104,7 +104,8 @@ curl 'http://localhost:4320/v1/search?q=how+do+I+deploy&k=5&debug=1'
 }
 ```
 
-`?debug=1` shows per-stage timings + how many candidates each retriever produced.
+`?debug=1` shows the structured ranking trace, including retriever candidate
+counts, RRF contributions, metadata signals, fallbacks, and per-stage timings.
 
 **AI tool definitions** — for Claude, GPT, or anything that takes Anthropic/OpenAI-shaped tool definitions:
 

@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const retrievalLimitsSchema = z.object({
+  perRetrieverK: z.number().int().positive().default(30),
+  candidateK: z.number().int().positive().default(30),
+  finalK: z.number().int().positive().default(10),
+});
+
 export const configSchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
@@ -24,6 +30,11 @@ export const configSchema = z.object({
       landing: z.string().default('README.md'),
       showAdmin: z.boolean().default(true),
       breadcrumbs: z.boolean().default(true),
+    })
+    .default({}),
+  search: z
+    .object({
+      engine: z.unknown().optional(),
     })
     .default({}),
   schemaVersion: z.number().int().default(1),

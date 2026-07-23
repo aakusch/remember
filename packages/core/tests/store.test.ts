@@ -41,6 +41,7 @@ describe('SqliteVecStore', () => {
     const hits = await store.searchBm25('fox', 5);
     expect(hits.length).toBeGreaterThanOrEqual(1);
     expect(hits[0]!.path).toBe('a.md');
+    expect(hits[0]!.heading_path).toEqual(['a']);
   });
 
   it('upserts + retrieves via vector cosine search', async () => {
@@ -66,6 +67,7 @@ describe('SqliteVecStore', () => {
     const hits = await store.searchVector([1, 0, 0, 0], 5);
     expect(hits.length).toBeGreaterThanOrEqual(1);
     expect(hits[0]!.path).toBe('a.md');
+    expect(hits[0]!.heading_path).toEqual([]);
   });
 
   it('deleteByPath removes all chunks for a path', async () => {

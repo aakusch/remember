@@ -20,7 +20,7 @@ import {
 } from '../../evaluation/index.js';
 import type { EvaluationRun } from '../../evaluation/types.js';
 
-const CORE_VERSION = '0.0.1';
+const CORE_VERSION = '0.1.0';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
 
 export async function benchmarkCommand(argv: string[]): Promise<void> {
@@ -78,23 +78,39 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       store,
       embedder,
       createPassthroughReranker(),
-      { topK: candidateK, finalK },
+      {
+        limits: {
+          perRetrieverK: candidateK,
+          candidateK,
+          finalK,
+        },
+      },
     );
     const candidateEngine = createHybridSearchEngine(
       store,
       embedder,
       createPassthroughReranker(),
-      { topK: candidateK, finalK: candidateK },
+      {
+        limits: {
+          perRetrieverK: candidateK,
+          candidateK,
+          finalK: candidateK,
+        },
+      },
     );
 
     const run = await runEvaluation(
       cases,
       async (evaluationCase) => {
-        const final = await finalEngine.query(evaluationCase.query, {
+        const queryInput = {
+          query: evaluationCase.query,
+          ...(evaluationCase.intent ? { intent: evaluationCase.intent } : {}),
+        };
+        const final = await finalEngine.query(queryInput, {
           k: finalK,
           debug: false,
         });
-        const candidates = await candidateEngine.query(evaluationCase.query, {
+        const candidates = await candidateEngine.query(queryInput, {
           k: candidateK,
           debug: false,
         });
@@ -129,6 +145,12 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
           `MRR ${formatSigned(comparison.deltas.mrr)}, ` +
           `p95 ${formatSigned(comparison.deltas.latency_p95_ms)}ms\n`,
       );
+      if (args.failOnRegression) {
+        enforceRecallGate(run, baseline);
+        process.stdout.write('  recall regression gate: passed\n');
+      }
+    } else if (args.failOnRegression) {
+      throw new Error('--fail-on-regression requires --compare');
     }
 
     const json = `${JSON.stringify(run, null, 2)}\n`;
@@ -155,6 +177,7 @@ interface BenchmarkArgs {
   k?: string;
   candidateK?: string;
   warmup?: string;
+  failOnRegression?: boolean;
   help?: boolean;
 }
 
@@ -163,6 +186,10 @@ function parseArgs(argv: string[]): BenchmarkArgs {
   for (let index = 0; index < argv.length; index++) {
     const token = argv[index]!;
     if (token === '--') continue;
+    if (token === '--fail-on-regression') {
+      args.failOnRegression = true;
+      continue;
+    }
     if (token === '-h' || token === '--help') {
       args.help = true;
       continue;
@@ -235,6 +262,33 @@ function portableIdentifier(target: string): string {
   return relative && !relative.startsWith('../') ? relative : path.basename(target);
 }
 
+function enforceRecallGate(current: EvaluationRun, baseline: EvaluationRun): void {
+  const tolerance = 0.02;
+  const regressions: string[] = [];
+  const compare = (label: string, currentValue: number | null, baselineValue: number | null) => {
+    if (
+      currentValue !== null &&
+      baselineValue !== null &&
+      currentValue < baselineValue - tolerance
+    ) {
+      regressions.push(
+        `${label} ${currentValue.toFixed(3)} < ${(baselineValue - tolerance).toFixed(3)}`,
+      );
+    }
+  };
+  compare('overall recall@5', current.summary.recall_at_5, baseline.summary.recall_at_5);
+  for (const queryClass of Object.keys(current.by_query_class).sort()) {
+    compare(
+      `${queryClass} recall@5`,
+      current.by_query_class[queryClass as keyof typeof current.by_query_class].recall_at_5,
+      baseline.by_query_class[queryClass as keyof typeof baseline.by_query_class].recall_at_5,
+    );
+  }
+  if (regressions.length > 0) {
+    throw new Error(`recall regression gate failed: ${regressions.join('; ')}`);
+  }
+}
+
 const BENCHMARK_HELP = `remember benchmark — run a versioned retrieval evaluation
 
 USAGE:
@@ -249,5 +303,6 @@ OPTIONS:
   --warmup <number>       Warmup queries excluded from latency (default: 2)
   --output <json>         Write machine-readable results
   --compare <json>        Print metric deltas against a prior result
+  --fail-on-regression    Fail when overall or per-class recall@5 drops > 0.02
   -h, --help              Show this help
 `;

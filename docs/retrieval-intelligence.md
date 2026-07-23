@@ -1,7 +1,7 @@
 # Search engine and retrieval intelligence roadmap
 
-Status: architecture direction; the current release still uses deterministic
-hybrid retrieval and a passthrough reranker.
+Status: Phase 1 deterministic retrieval foundation implemented; optional
+model-backed reranking remains gated by evaluation.
 
 ## Product principle
 
@@ -43,9 +43,9 @@ Cloud deployments may add answer synthesis after retrieval. The OSS engine's
 primary contract remains inspectable evidence so downstream agents can choose
 whether and how to generate.
 
-## Current limitations
+## v0.0.1 baseline limitations
 
-The v0.0.1 pipeline is the benchmark baseline:
+The recorded v0.0.1 pipeline is the benchmark baseline:
 
 - configured BM25/vector weights are not yet applied by fusion;
 - fusion truncates before boosts, deduplication, and reranking;
@@ -53,8 +53,10 @@ The v0.0.1 pipeline is the benchmark baseline:
 - page deduplication can return fewer distinct pages than requested; and
 - the implemented reranker is passthrough.
 
-These limitations are intentionally documented so improvements are measured
-against the real implementation rather than a marketing description.
+v0.1 corrects the weights, candidate window, stage ordering, page backfill,
+and BM25/embedding overlap. The implemented planner and reranker remain
+passthrough, and model-backed candidates remain unpromoted until they clear
+the benchmark gates.
 
 ## Why keep the layers separate
 
@@ -165,12 +167,29 @@ becomes the default.
 ### Versioned baseline
 
 The repository now includes a 30-query sample-wiki fixture and an offline
-`ci-hash` runner. The recorded v0.0.1 baseline lives at
-`benchmarks/results/remember-v0.0.1-local.json`; its metadata identifies the
-corpus, questions, engine profile, and embedder by stable hashes. The hash
-profile is for deterministic pipeline regression, not semantic-model quality.
-Release evaluation uses the explicit `fast` profile with local BGE embeddings
-and is kept separate from CI.
+`ci-hash` runner. Its v0.0.1 baseline lives at
+`benchmarks/results/remember-v0.0.1-ci-hash.json`. The release baseline at
+`benchmarks/results/remember-v0.0.1-local.json` uses local
+`BAAI/bge-small-en-v1.5` embeddings. Artifact metadata identifies the corpus,
+questions, engine profile, and embedder by stable hashes, keeping deterministic
+CI regression separate from representative release evaluation.
+
+### v0.1 results
+
+Measured on the public 30-query sample-wiki fixture:
+
+| Profile | Version | Recall@5 | Recall@10 | Candidate recall | MRR | nDCG@5 | Wrong-source | p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| deterministic `ci-hash` | 0.0.1 | 0.787 | 0.787 | 0.960 | 0.825 | 0.698 | 0.367 | 2 ms |
+| deterministic `ci-hash` | 0.1.0 | 0.787 | 0.807 | 0.960 | 0.857 | 0.733 | 0.333 | 2 ms |
+| local BGE | 0.0.1 | 0.980 | 0.980 | 0.980 | 0.980 | 0.963 | 0.200 | 9 ms |
+| local BGE | 0.1.0 | 0.980 | 0.980 | 0.980 | 0.980 | 0.962 | 0.200 | 9 ms |
+
+Latency is a warm local run on one machine, not a service SLO. The corrected
+pipeline improves deterministic ranking/backfill checks while the small public
+corpus is effectively saturated by local BGE. No model-backed reranker cleared
+or was evaluated against the promotion gate, so v0.1 keeps passthrough as the
+only shipped reranker.
 
 ## Privacy and safety
 

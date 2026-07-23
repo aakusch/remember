@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "metadata": {
-    "engine_version": "0.0.1",
+    "engine_version": "0.1.0",
     "engine_profile": "fast-local-bge",
-    "corpus_id": "content",
+    "corpus_id": "examples/sample-wiki/content",
     "corpus_hash": "f46079ba8fe99dadfa1b23f2e70c96c154c47fb7809289c29c6720749ef2f8e7",
     "embedder_id": "BAAI/bge-small-en-v1.5",
-    "questions_id": "sample-wiki.questions.jsonl",
+    "questions_id": "benchmarks/retrieval/sample-wiki.questions.jsonl",
     "questions_hash": "5a95d5e0957f326716926e0c92e0d556e5d569896852c25de5a812e9506a09c6"
   },
   "configuration": {
@@ -22,14 +22,14 @@
     "recall_at_10": 0.98,
     "candidate_recall": 0.98,
     "mrr": 0.98,
-    "ndcg_at_5": 0.963428,
-    "ndcg_at_10": 0.963428,
+    "ndcg_at_5": 0.961728,
+    "ndcg_at_10": 0.961728,
     "empty_result_rate": 0,
     "wrong_source_rate": 0.2,
     "latency_ms": {
-      "p50": 7,
+      "p50": 6,
       "p95": 9,
-      "max": 10
+      "max": 9
     }
   },
   "by_query_class": {
@@ -47,8 +47,8 @@
       "wrong_source_rate": 0,
       "latency_ms": {
         "p50": 3,
-        "p95": 5,
-        "max": 5
+        "p95": 3,
+        "max": 3
       }
     },
     "semantic": {
@@ -64,9 +64,9 @@
       "empty_result_rate": 0,
       "wrong_source_rate": 0,
       "latency_ms": {
-        "p50": 6,
-        "p95": 7,
-        "max": 7
+        "p50": 7,
+        "p95": 8,
+        "max": 8
       }
     },
     "ambiguous": {
@@ -82,7 +82,7 @@
       "empty_result_rate": 0,
       "wrong_source_rate": 0,
       "latency_ms": {
-        "p50": 3,
+        "p50": 4,
         "p95": 4,
         "max": 4
       }
@@ -100,9 +100,9 @@
       "empty_result_rate": 0,
       "wrong_source_rate": 0,
       "latency_ms": {
-        "p50": 8,
-        "p95": 10,
-        "max": 10
+        "p50": 7,
+        "p95": 9,
+        "max": 9
       }
     },
     "contradictory": {
@@ -113,12 +113,12 @@
       "recall_at_10": 1,
       "candidate_recall": 1,
       "mrr": 0.9,
-      "ndcg_at_5": 0.912802,
-      "ndcg_at_10": 0.912802,
+      "ndcg_at_5": 0.9043,
+      "ndcg_at_10": 0.9043,
       "empty_result_rate": 0,
       "wrong_source_rate": 0.2,
       "latency_ms": {
-        "p50": 8,
+        "p50": 7,
         "p95": 9,
         "max": 9
       }
@@ -136,7 +136,7 @@
       "empty_result_rate": 0,
       "wrong_source_rate": 1,
       "latency_ms": {
-        "p50": 7,
+        "p50": 6,
         "p95": 8,
         "max": 8
       }
@@ -194,7 +194,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 4
+      "latency_ms": 3
     },
     {
       "id": "ambiguous-compensation",
@@ -247,7 +247,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 3
+      "latency_ms": 4
     },
     {
       "id": "ambiguous-onboarding",
@@ -300,7 +300,7 @@
       "ndcg_at_10": 0.917319,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 2
+      "latency_ms": 3
     },
     {
       "id": "ambiguous-restore",
@@ -352,7 +352,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 2
+      "latency_ms": 4
     },
     {
       "id": "ambiguous-roadmap",
@@ -458,7 +458,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 8
+      "latency_ms": 7
     },
     {
       "id": "contradictory-monorepo-alternatives",
@@ -523,14 +523,14 @@
       "result_paths": [
         "product/roadmap.md",
         "product/user-research-process.md",
+        "product/feature-flags.md",
         "external/obsidian/Concepts/Roadmap Draft.md",
         "external/obsidian/Concepts/Team Capacity.md",
         "external/obsidian/Daily Notes/2026-05-20.md",
         "external/obsidian/Concepts/Architecture Decisions.md",
         "engineering/runbooks/deploy.md",
         "external/obsidian/Daily Notes/2026-05-21.md",
-        "external/obsidian/Concepts/BGE Embedding Models.md",
-        "engineering/adrs/adr-002-monorepo-structure.md"
+        "external/obsidian/Concepts/BGE Embedding Models.md"
       ],
       "candidate_paths": [
         "product/roadmap.md",
@@ -559,8 +559,8 @@
       "recall_at_10": 1,
       "candidate_recall": 1,
       "reciprocal_rank": 1,
-      "ndcg_at_5": 0.919721,
-      "ndcg_at_10": 0.919721,
+      "ndcg_at_5": 0.877215,
+      "ndcg_at_10": 0.877215,
       "empty_result": false,
       "wrong_source": false,
       "latency_ms": 7
@@ -722,7 +722,7 @@
       "ndcg_at_10": 0.973758,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 4
+      "latency_ms": 3
     },
     {
       "id": "exact-database-restore",
@@ -878,7 +878,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 5
+      "latency_ms": 3
     },
     {
       "id": "exact-rollback-runbook",
@@ -1037,7 +1037,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 10
+      "latency_ms": 9
     },
     {
       "id": "multi-incident-operations",
@@ -1091,7 +1091,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 8
+      "latency_ms": 7
     },
     {
       "id": "multi-onboarding-wiki",
@@ -1145,7 +1145,7 @@
       "ndcg_at_10": 0.630616,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 8
+      "latency_ms": 7
     },
     {
       "id": "multi-product-discovery",
@@ -1198,7 +1198,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 7
+      "latency_ms": 6
     },
     {
       "id": "semantic-deploy-safely",
@@ -1303,7 +1303,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 7
+      "latency_ms": 8
     },
     {
       "id": "semantic-incident-process",
@@ -1356,7 +1356,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 5
+      "latency_ms": 6
     },
     {
       "id": "semantic-monitoring-signals",
@@ -1460,7 +1460,7 @@
       "ndcg_at_10": 1,
       "empty_result": false,
       "wrong_source": false,
-      "latency_ms": 6
+      "latency_ms": 8
     },
     {
       "id": "unanswerable-customer-contract",
@@ -1510,7 +1510,7 @@
       "ndcg_at_10": null,
       "empty_result": false,
       "wrong_source": true,
-      "latency_ms": 7
+      "latency_ms": 6
     },
     {
       "id": "unanswerable-kubernetes-regions",
@@ -1560,7 +1560,7 @@
       "ndcg_at_10": null,
       "empty_result": false,
       "wrong_source": true,
-      "latency_ms": 8
+      "latency_ms": 7
     },
     {
       "id": "unanswerable-legal-retention",
@@ -1610,7 +1610,7 @@
       "ndcg_at_10": null,
       "empty_result": false,
       "wrong_source": true,
-      "latency_ms": 7
+      "latency_ms": 8
     },
     {
       "id": "unanswerable-lunch-menu",
@@ -1660,7 +1660,7 @@
       "ndcg_at_10": null,
       "empty_result": false,
       "wrong_source": true,
-      "latency_ms": 7
+      "latency_ms": 6
     },
     {
       "id": "unanswerable-mobile-release",
@@ -1710,7 +1710,7 @@
       "ndcg_at_10": null,
       "empty_result": false,
       "wrong_source": true,
-      "latency_ms": 7
+      "latency_ms": 6
     }
   ]
 }

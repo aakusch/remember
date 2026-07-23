@@ -8,7 +8,7 @@ import { createSqliteVecStore, type SqliteVecStore, type HistoryWriteInput } fro
 import { createChokidarWalker } from '../walkers/chokidar.js';
 import { createRemarkParser } from '../parsers/remark.js';
 import { createSmartSplitChunker } from '../chunkers/smart-split.js';
-import { createHybridSearchEngine } from '../search/hybrid.js';
+import { createHybridSearchEngine, type HybridSearchOptions } from '../search/hybrid.js';
 import { createPassthroughReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
 import { loadConfig, type LoadedConfig } from '../config/load.js';
@@ -47,7 +47,12 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
   });
   store.setDimension(embedder.dim);
   const reranker = createPassthroughReranker();
-  const search = createHybridSearchEngine(store, embedder, reranker, { topK: 20, finalK: 10 });
+  const search = createHybridSearchEngine(
+    store,
+    embedder,
+    reranker,
+    resolveHybridSearchOptions(cfg.raw.search?.engine),
+  );
   const indexer = createIndexer({ walker, parser, chunker, embedder, store });
 
   // Filesystem watcher — debounced auto-reindex on disk changes.
@@ -126,6 +131,20 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
     connectorManager,
     configSnapshot: cfg,
   };
+}
+
+function resolveHybridSearchOptions(descriptor: unknown): HybridSearchOptions {
+  if (
+    descriptor &&
+    typeof descriptor === 'object' &&
+    (descriptor as { _kind?: unknown })._kind === 'search:hybrid'
+  ) {
+    const options = (descriptor as { opts?: unknown }).opts;
+    return options && typeof options === 'object'
+      ? (options as HybridSearchOptions)
+      : {};
+  }
+  return {};
 }
 
 async function teardownRuntime(rt: Runtime): Promise<void> {

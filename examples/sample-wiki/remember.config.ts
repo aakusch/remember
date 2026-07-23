@@ -26,8 +26,11 @@ export default defineConfig({
       vector: { enabled: true, weight: 0.5 },
       fusion: 'rrf',
       rerank: defaults.rerank.none(),
-      topK: 20,
-      finalK: 10,
+      limits: {
+        perRetrieverK: 30,
+        candidateK: 30,
+        finalK: 10,
+      },
     }),
   },
 

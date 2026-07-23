@@ -11,10 +11,12 @@ into ranked, source-cited evidence for humans and agents. Provides:
 
 ## Status
 
-**v0.0.1 — working deterministic foundation.** Indexing, SQLite/sqlite-vec
-storage, BM25 and vector retrieval, RRF fusion, path/heading signals,
-page-level deduplication, HTTP routes, tool definitions, connectors, and the
-viewer are implemented. The reranker is currently passthrough.
+**v0.1.0 — evaluated deterministic retrieval.** Indexing, SQLite/sqlite-vec
+storage, concurrent BM25 + embedding/vector retrieval, weighted RRF over a
+bounded candidate set, path/heading signals, page-diversity backfill, optional
+intent, structured ranking traces, benchmark tooling, HTTP routes, tool
+definitions, connectors, and the viewer are implemented. The default planner
+and reranker remain zero-cost passthrough adapters.
 
 The competitive retrieval, evaluation, and future Answer direction is in
 [`docs/retrieval-intelligence.md`](../../docs/retrieval-intelligence.md).

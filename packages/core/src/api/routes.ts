@@ -9,7 +9,7 @@ import type { Embedder, SearchEngine, Store } from '../types.js';
 import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 
-const VERSION = '0.0.1';
+const VERSION = '0.1.0';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -202,10 +202,26 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     const q = c.req.query('q') ?? '';
     const k = Math.max(1, Math.min(50, Number(c.req.query('k') ?? '10')));
     const debug = c.req.query('debug') === '1';
+    const intent = c.req.query('intent')?.trim();
+    const modeParam = c.req.query('mode') ?? 'fast';
+    if (modeParam !== 'fast' && modeParam !== 'enhanced') {
+      return c.json(
+        {
+          error: {
+            code: 'INVALID_SEARCH_MODE',
+            message: 'mode must be "fast" or "enhanced"',
+          },
+        },
+        400,
+      );
+    }
     if (!q.trim()) {
       return c.json({ query: q, results: [], query_ms: 0 });
     }
-    const out = await ctx.search.query(q, { k, debug });
+    const out = await ctx.search.query(
+      { query: q, ...(intent ? { intent } : {}) },
+      { k, debug, mode: modeParam },
+    );
     return c.json({ query: q, ...out });
   });
 
@@ -651,6 +667,10 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
             type: 'object',
             properties: {
               query: { type: 'string', description: 'The natural-language query' },
+              intent: {
+                type: 'string',
+                description: 'Optional purpose used for planning and reranking, not corpus content',
+              },
               k: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
             },
             required: ['query'],
@@ -751,6 +771,8 @@ const openApiPaths = {
       tags: ['search'],
       parameters: [
         stringParam('q', 'query', true, 'Search query'),
+        stringParam('intent', 'query', false, 'Optional search intent'),
+        stringParam('mode', 'query', false, 'fast (default) or enhanced'),
         intParam('k', 'query', 'Max results (default 10)'),
         intParam('debug', 'query', '1 to include per-stage timings'),
       ],

@@ -83,8 +83,9 @@ Every component of the indexing pipeline is an adapter with a documented interfa
 | `Chunker` | `chunk(parsed): Chunk[]` | smart-split (900 tokens, 15% overlap) | `@useremember/core/chunkers/smart-split` |
 | `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai`, `/hash` |
 | `Store` | `upsert/delete/searchVector/searchBm25/getManifest/upsertPage/queryPages/listFrontmatterKeys` | SQLite + sqlite-vec | `@useremember/core/stores/sqlite-vec` |
-| `SearchEngine` | `query(q, opts): {results, query_ms, debug?}` | hybrid BM25+vector with RRF fusion | `@useremember/core/search/hybrid` |
-| `Reranker` | `rerank(query, candidates): SearchResult[]` | passthrough (cross-encoder reserved for v0.1) | `@useremember/core/rerankers/none` |
+| `SearchEngine` | `query(q, opts): {results, query_ms, trace?}` | hybrid BM25+vector with weighted RRF | `@useremember/core/search/hybrid` |
+| `QueryPlanner` | `plan({query, intent?}): QueryPlan` | deterministic passthrough | `@useremember/core/query-planners/passthrough` |
+| `Reranker` | `rerank(query, candidates, context): scored[]` | deterministic passthrough; model-backed candidates gated | `@useremember/core/rerankers/none` |
 | `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `@useremember/core/connectors` |
 
 The default implementations are wired automatically when `loadConfig()` runs. Override any of them in `remember.config.ts`:
@@ -107,35 +108,38 @@ export default defineConfig({
 GET /v1/search?q=<query>&k=10&debug=0
    │
    ▼
-1. BM25 retrieve topK                     (SQLite FTS5)
-2. Embed query, then vector retrieve topK (sqlite-vec)
-3. Reciprocal Rank Fusion
-4. Path and heading boosts
-5. Page-level deduplication
-6. Reranker (passthrough in v0.0.1)
-7. Slice to requested result count
-8. Return { results, query_ms, debug? }
+1. Passthrough query plan by default
+2. BM25 overlaps with embed → vector retrieval
+3. Weighted Reciprocal Rank Fusion to candidateK
+4. Exact, path, and heading signals
+5. Chunk deduplication
+6. Bounded reranker (passthrough by default)
+7. Page diversity with backfill
+8. Slice to finalK
+9. Return { results, query_ms, trace? }
 ```
 
 Each result includes path, chunk_idx, snippet, frontmatter, score, retrievers (`['bm25', 'vector']`), and a stable chunk_id (`<path>#<idx>`).
 
-`?debug=1` adds per-stage timings — useful for tuning and the diagnostics page.
+`?debug=1` adds a structured ranking trace: normalized query/intent, planner
+variations, retriever candidate counts, per-result RRF contributions and
+metadata signals, IDs before/after reranking, fallback reason, and per-stage
+timings. It exposes scoring evidence, never hidden model reasoning.
 
 ### Phase 1 correction
 
-The current implementation is a baseline, not the final competitive pipeline.
-The next release adds a versioned benchmark, overlaps BM25 with the
-embedding/vector branch, fuses to a wider candidate set, applies configured
-retriever weights, performs boosts/deduplication/reranking before final
-truncation, backfills distinct pages, and evaluates a bounded reranker behind
-an opt-in mode.
+v0.1 adds the versioned benchmark, overlaps BM25 with the embedding/vector
+branch, fuses to a wider candidate set, applies configured retriever weights,
+performs boosts/chunk-deduplication/reranking before final truncation, and
+backfills distinct pages. The planner and reranker seams are implemented, but
+their defaults remain deterministic passthrough adapters.
 
-### Planned search and Answer extensions
+### Search and planned Answer extensions
 
-The deterministic pipeline remains the default and fallback. Planned optional
-adapters add query intent, local or remote query expansion, and bounded
-reranking before results are returned. They do not replace BM25/vector
-retrieval or send the entire corpus to a model.
+The deterministic pipeline remains the default and fallback. Search accepts
+optional query intent, and optional adapters may add local or remote query
+expansion and bounded reranking before results are returned. They do not
+replace BM25/vector retrieval or send the entire corpus to a model.
 
 Cloud may use the ranked evidence to produce a separately metered, cited
 answer before a downstream agent spends its own context. Provider routing,

@@ -1,51 +1,124 @@
-import type { SearchResult } from '../types.js';
+import type {
+  RankedList,
+  RankContribution,
+  RetrieverName,
+  SearchResult,
+} from '../types.js';
+
+export interface RrfOptions {
+  k?: number;
+  candidateK?: number;
+  /** @deprecated Use candidateK. Kept for source compatibility. */
+  finalK?: number;
+}
+
+export interface RrfFusionResult {
+  results: SearchResult[];
+  contributions: Map<string, RankContribution[]>;
+}
 
 /**
- * Reciprocal Rank Fusion. Combines ranked lists from multiple retrievers into
- * one fused ranking. Score for document d = sum over lists L of 1 / (k + rank_L(d)).
+ * Weighted Reciprocal Rank Fusion.
  *
- * - `k` is a constant smoothing factor (60 is the canonical default from Cormack et al.).
- * - Lower distance / better match should already be reflected in the lists' ordering.
+ * Score(d) = sum(weight(list) / (k + rank(list, d))).
+ *
+ * Named lists make retriever and planner-variation weights explicit while the
+ * legacy SearchResult[][] input remains supported for existing callers.
  */
 export function rrfFuse(
-  lists: SearchResult[][],
-  options: { k?: number; finalK?: number } = {},
+  lists: RankedList[] | SearchResult[][],
+  options: RrfOptions = {},
 ): SearchResult[] {
-  const k = options.k ?? 60;
-  const finalK = options.finalK ?? 20;
+  return rrfFuseWithTrace(lists, options).results;
+}
 
+export function rrfFuseWithTrace(
+  lists: RankedList[] | SearchResult[][],
+  options: RrfOptions = {},
+): RrfFusionResult {
+  const k = options.k ?? 60;
+  const candidateK = options.candidateK ?? options.finalK ?? 20;
+  if (!Number.isFinite(k) || k < 0) throw new Error('rrf k must be a non-negative number');
+  if (!Number.isInteger(candidateK) || candidateK < 1) {
+    throw new Error('rrf candidateK must be a positive integer');
+  }
+
+  const rankedLists = normalizeLists(lists);
   const accum = new Map<
     string,
-    { result: SearchResult; score: number; retrievers: Set<'bm25' | 'vector'> }
+    {
+      result: SearchResult;
+      score: number;
+      retrievers: Set<RetrieverName>;
+      contributions: RankContribution[];
+      firstSeen: number;
+    }
   >();
+  let seenSequence = 0;
 
-  for (const list of lists) {
-    for (let rank = 0; rank < list.length; rank++) {
-      const hit = list[rank]!;
-      const id = hit.chunk_id;
-      const contribution = 1 / (k + rank + 1);
-      const existing = accum.get(id);
+  for (const list of rankedLists) {
+    if (!Number.isFinite(list.weight) || list.weight < 0) {
+      throw new Error(`rrf list ${list.queryId} has an invalid weight`);
+    }
+    if (list.weight === 0) continue;
+    for (let index = 0; index < list.results.length; index++) {
+      const hit = list.results[index]!;
+      const rank = index + 1;
+      const contribution = list.weight / (k + rank);
+      const detail: RankContribution = {
+        retriever: list.retriever,
+        query_id: list.queryId,
+        rank,
+        weight: list.weight,
+        rrf_contribution: contribution,
+      };
+      const existing = accum.get(hit.chunk_id);
       if (existing) {
         existing.score += contribution;
-        for (const r of hit.retrievers) existing.retrievers.add(r);
+        existing.contributions.push(detail);
+        existing.retrievers.add(list.retriever);
+        for (const retriever of hit.retrievers) existing.retrievers.add(retriever);
       } else {
-        accum.set(id, {
+        accum.set(hit.chunk_id, {
           result: hit,
           score: contribution,
-          retrievers: new Set(hit.retrievers),
+          retrievers: new Set([list.retriever, ...hit.retrievers]),
+          contributions: [detail],
+          firstSeen: seenSequence++,
         });
       }
     }
   }
 
-  const fused = Array.from(accum.values())
-    .sort((a, b) => b.score - a.score)
-    .slice(0, finalK)
-    .map(({ result, score, retrievers }) => ({
-      ...result,
-      score,
-      retrievers: Array.from(retrievers),
-    }));
+  const selected = Array.from(accum.values())
+    .sort((left, right) => right.score - left.score || left.firstSeen - right.firstSeen)
+    .slice(0, candidateK);
+  const contributions = new Map<string, RankContribution[]>();
+  const results = selected.map((entry) => {
+    contributions.set(entry.result.chunk_id, entry.contributions);
+    return {
+      ...entry.result,
+      score: entry.score,
+      retrievers: Array.from(entry.retrievers),
+    };
+  });
 
-  return fused;
+  return { results, contributions };
+}
+
+function normalizeLists(lists: RankedList[] | SearchResult[][]): RankedList[] {
+  if (lists.length === 0) return [];
+  if (Array.isArray(lists[0])) {
+    return (lists as SearchResult[][]).map((results, index) => ({
+      retriever: inferRetriever(results),
+      queryId: `legacy-${index}`,
+      weight: 1,
+      results,
+    }));
+  }
+  return lists as RankedList[];
+}
+
+function inferRetriever(results: SearchResult[]): RetrieverName {
+  return results[0]?.retrievers[0] ?? 'bm25';
 }

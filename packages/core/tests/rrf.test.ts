@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { rrfFuse } from '../src/search/rrf.js';
-import type { SearchResult } from '../src/types.js';
+import type { RankedList, SearchResult } from '../src/types.js';
 
 const r = (chunk_id: string, retriever: 'bm25' | 'vector'): SearchResult => ({
   path: `${chunk_id}.md`,
@@ -40,5 +40,43 @@ describe('rrfFuse', () => {
     const long = Array.from({ length: 30 }, (_, i) => r(`x${i}`, 'bm25'));
     const fused = rrfFuse([long], { finalK: 5 });
     expect(fused).toHaveLength(5);
+  });
+
+  it('uses configured list weights to alter ranking', () => {
+    const bm25 = [r('lexical', 'bm25'), r('semantic', 'bm25')];
+    const vector = [r('semantic', 'vector'), r('lexical', 'vector')];
+    const lists = (bm25Weight: number, vectorWeight: number): RankedList[] => [
+      {
+        retriever: 'bm25',
+        queryId: 'original',
+        weight: bm25Weight,
+        results: bm25,
+      },
+      {
+        retriever: 'vector',
+        queryId: 'original',
+        weight: vectorWeight,
+        results: vector,
+      },
+    ];
+
+    expect(rrfFuse(lists(4, 1))[0]!.chunk_id).toBe('lexical');
+    expect(rrfFuse(lists(1, 4))[0]!.chunk_id).toBe('semantic');
+  });
+
+  it('fuses to candidateK without applying the legacy final result limit', () => {
+    const long = Array.from({ length: 12 }, (_, i) => r(`x${i}`, 'bm25'));
+    const fused = rrfFuse(
+      [
+        {
+          retriever: 'bm25',
+          queryId: 'original',
+          weight: 1,
+          results: long,
+        },
+      ],
+      { candidateK: 8 },
+    );
+    expect(fused).toHaveLength(8);
   });
 });
