@@ -50,6 +50,22 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
   const search = createHybridSearchEngine(store, embedder, reranker, { topK: 20, finalK: 10 });
   const indexer = createIndexer({ walker, parser, chunker, embedder, store });
 
+  // Pre-warm the embedder so the one-time model download (~80 MB for the local
+  // ONNX default) happens at boot with a visible log line, rather than silently
+  // on a user's first search. Non-fatal: if it fails (e.g. offline), we log a
+  // clear hint and let the retry happen on first real request — getPipeline()
+  // no longer caches the failure, so recovery needs no restart.
+  process.stdout.write(`[remember] warming embedder (${embedder.modelId ?? 'embedder'})…\n`);
+  const warmStart = Date.now();
+  try {
+    await embedder.embed(['warmup']);
+    process.stdout.write(`[remember] embedder ready in ${Date.now() - warmStart}ms\n`);
+  } catch (err) {
+    const msg = (err as Error).message;
+    process.stderr.write(`[remember] embedder warm-up failed (will retry on first request): ${msg}\n`);
+    logs.push({ level: 'warn', source: 'embedder', message: `warm-up failed: ${msg}` });
+  }
+
   // Filesystem watcher — debounced auto-reindex on disk changes.
   const watcher = chokidar.watch(contentRoot, {
     ignored: [

@@ -34,10 +34,29 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
             `LocalOnnxEmbedder requires the optional dependency "@huggingface/transformers". Install it with: pnpm add @huggingface/transformers (filter @useremember/core). Underlying error: ${(err as Error).message}`,
           );
         }
-        return transformers.pipeline('feature-extraction', modelId, {
-          dtype: 'fp32',
-        });
+        try {
+          return await transformers.pipeline('feature-extraction', modelId, {
+            dtype: 'fp32',
+          });
+        } catch (err) {
+          // The model (~80 MB) is fetched from HuggingFace on first use. Surface
+          // a message the operator can act on instead of a bare transformers.js
+          // "Unable to get model file path or buffer".
+          throw new Error(
+            `Failed to load embedding model "${modelId}". This model is downloaded once on first use ` +
+              `(~80 MB) and cached locally, so first index/search needs network access to huggingface.co. ` +
+              `Check connectivity (or set HF_HUB_OFFLINE=0 / a proxy), then retry — no server restart needed. ` +
+              `Underlying error: ${(err as Error).message}`,
+          );
+        }
       })();
+      // Do NOT cache a rejected promise: a transient failure (offline, download
+      // interrupted) must not wedge every future embed() call until restart.
+      // Clearing the memo lets the next request retry from scratch.
+      pipelinePromise = pipelinePromise.catch((err) => {
+        pipelinePromise = null;
+        throw err;
+      });
     }
     return pipelinePromise;
   }
