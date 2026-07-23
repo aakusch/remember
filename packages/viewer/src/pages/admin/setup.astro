@@ -242,8 +242,8 @@ if (submitted && action === 'save') {
 
 // Compute per-field "diff from current" for the change indicators.
 function diffFlag(key: keyof WizardValues): boolean {
-  const current = (currentlyLoaded as Record<string, unknown>)[key];
-  const next = (values as Record<string, unknown>)[key];
+  const current = currentlyLoaded[key];
+  const next = values[key];
   // Treat undefined/null/empty-string as equivalent for the description/token fields
   const norm = (v: unknown) => (v === undefined || v === null ? '' : String(v));
   return norm(current) !== norm(next);
