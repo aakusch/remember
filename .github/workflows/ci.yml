@@ -27,7 +27,11 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm install --frozen-lockfile
 
+      # The viewer resolves @useremember/core through its package exports,
+      # whose types live in dist/. A clean CI checkout must build that
+      # dependency before Astro performs its strict check.
+      - run: pnpm --filter @useremember/core build
       - run: pnpm typecheck
       - run: pnpm test
