@@ -6,10 +6,14 @@ Headless engine for the [`remember`](../../README.md) wiki platform. Provides:
 - **HTTP API** (Hono) — `/v1/search`, `/v1/pages`, `/v1/index`, `/v1/config`, `/v1/tools`, `/v1/events` (SSE), `/v1/openapi.json`
 - **Indexer** — walks markdown, parses, chunks, embeds, stores
 - **Pluggable adapters** — `Walker`, `Parser`, `Chunker`, `Embedder`, `Store`, `SearchEngine`, `Reranker`
+- **Deterministic foundation** — model-backed planning and reranking are optional; search falls back to BM25 + vector + RRF
 
 ## Status
 
 **v0.0.1 — scaffold.** Adapter interfaces in place; concrete implementations land progressively. The Hono app responds to `/v1/health` and returns 501 for not-yet-implemented endpoints.
+
+The planned query-intelligence interfaces and evaluation approach are in
+[`docs/retrieval-intelligence.md`](../../docs/retrieval-intelligence.md).
 
 ## Use as a library
 

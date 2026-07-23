@@ -120,6 +120,21 @@ Each result includes path, chunk_idx, snippet, frontmatter, score, retrievers (`
 
 `?debug=1` adds per-stage timings — useful for tuning and the diagnostics page.
 
+### Planned intelligence extensions
+
+The deterministic pipeline remains the default and fallback. Planned optional
+adapters add query intent, local or remote query expansion, and bounded
+reranking before results are returned. They do not replace BM25/vector
+retrieval or send the entire corpus to a model.
+
+Cloud may use the ranked evidence to produce a separately metered, cited
+answer before a downstream agent spends its own context. Provider routing,
+answer generation, and billing remain Cloud concerns; reusable planning,
+reranking, evaluation, and citation contracts belong in the core.
+
+See [`retrieval-intelligence.md`](./retrieval-intelligence.md) for the design
+direction and rollout rules.
+
 ## Connector framework
 
 Connectors run inside the core process on startup and on demand. They write to `content/external/<connector-name>/`, where the file watcher picks them up just like any other markdown change.
@@ -220,6 +235,7 @@ The adapter interfaces are designed to support a multi-tenant cloud deployment w
 | Content source | local filesystem | S3 / Cloudflare R2 |
 | Auth | localhost-only / admin token | SSO via OIDC/SAML |
 | Embeddings | local ONNX or OpenAI | same options + provider routing |
+| Retrieval intelligence | optional local planner/reranker | hosted planner/reranker + cited answers |
 | Multi-tenancy | n/a | new `Tenant` adapter wrapping requests |
 | Billing | n/a | Stripe middleware |
 

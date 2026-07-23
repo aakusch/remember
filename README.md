@@ -260,13 +260,18 @@ Full architecture deep dive: [`docs/architecture.md`](./docs/architecture.md).
 | Version | Highlights |
 |---|---|
 | **v0.0.1** | Lean local-first OSS — *current* |
-| v0.1 | Cross-encoder reranker, brew tap, standalone binary, curl install one-liner |
+| v0.1 | Evaluation harness, optional intent + cross-encoder reranker, brew tap, standalone binary |
 | v0.2 | Block-level references, backlinks panel, branding/theme |
 | v0.3 | RBAC + OIDC/SAML auth |
 | **v1.0** | First production-stable release |
 | v2.0 | **Cloud premium** — managed multi-tenant SaaS with pgvector + S3 + team workspaces |
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
+The search-quality direction is documented in
+[`docs/retrieval-intelligence.md`](./docs/retrieval-intelligence.md): keep
+deterministic hybrid retrieval as the offline foundation, then add optional
+query expansion and bounded reranking. Cloud may synthesize separately
+metered, cited answers from the same evidence.
 
 <br>
 
@@ -288,6 +293,7 @@ PRs welcome on:
 - New connector implementations (`@useremember/core/connectors/<name>.ts`)
 - New embedder providers (Voyage, Cohere, etc.)
 - New rerankers (cross-encoder, LLM-based)
+- Query planners and retrieval evaluation fixtures
 - New viewer themes / layouts
 - New API clients (Python, Go, Rust)
 - Documentation improvements
