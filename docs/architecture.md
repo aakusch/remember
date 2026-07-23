@@ -107,20 +107,30 @@ export default defineConfig({
 GET /v1/search?q=<query>&k=10&debug=0
    │
    ▼
-1. Query embedding (~2ms with the local model)
-2. parallel:
-     ├─ BM25 retrieve top 50      (sqlite FTS5)
-     └─ Vector retrieve top 50    (sqlite-vec)
-3. Reciprocal Rank Fusion (k=60 default) → 20 candidates
-4. Reranker (passthrough in v1; cross-encoder in v0.1) → finalK
-5. Return { results, query_ms, debug? }
+1. BM25 retrieve topK                     (SQLite FTS5)
+2. Embed query, then vector retrieve topK (sqlite-vec)
+3. Reciprocal Rank Fusion
+4. Path and heading boosts
+5. Page-level deduplication
+6. Reranker (passthrough in v0.0.1)
+7. Slice to requested result count
+8. Return { results, query_ms, debug? }
 ```
 
 Each result includes path, chunk_idx, snippet, frontmatter, score, retrievers (`['bm25', 'vector']`), and a stable chunk_id (`<path>#<idx>`).
 
 `?debug=1` adds per-stage timings — useful for tuning and the diagnostics page.
 
-### Planned intelligence extensions
+### Phase 1 correction
+
+The current implementation is a baseline, not the final competitive pipeline.
+The next release adds a versioned benchmark, overlaps BM25 with the
+embedding/vector branch, fuses to a wider candidate set, applies configured
+retriever weights, performs boosts/deduplication/reranking before final
+truncation, backfills distinct pages, and evaluates a bounded reranker behind
+an opt-in mode.
+
+### Planned search and Answer extensions
 
 The deterministic pipeline remains the default and fallback. Planned optional
 adapters add query intent, local or remote query expansion, and bounded

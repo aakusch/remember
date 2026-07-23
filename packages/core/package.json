@@ -1,7 +1,7 @@
 {
   "name": "@useremember/core",
   "version": "0.0.1",
-  "description": "Headless engine for remember — local-first AI-ready wiki platform. Indexer, embeddings, HTTP API, CLI.",
+  "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [
     "wiki",

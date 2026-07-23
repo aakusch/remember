@@ -1,6 +1,7 @@
 # @useremember/core
 
-Headless engine for the [`remember`](../../README.md) wiki platform. Provides:
+Headless retrieval engine for [`remember`](../../README.md). It turns Markdown
+into ranked, source-cited evidence for humans and agents. Provides:
 
 - **CLI** (`remember init | dev | start | index | status`)
 - **HTTP API** (Hono) — `/v1/search`, `/v1/pages`, `/v1/index`, `/v1/config`, `/v1/tools`, `/v1/events` (SSE), `/v1/openapi.json`
@@ -10,9 +11,12 @@ Headless engine for the [`remember`](../../README.md) wiki platform. Provides:
 
 ## Status
 
-**v0.0.1 — scaffold.** Adapter interfaces in place; concrete implementations land progressively. The Hono app responds to `/v1/health` and returns 501 for not-yet-implemented endpoints.
+**v0.0.1 — working deterministic foundation.** Indexing, SQLite/sqlite-vec
+storage, BM25 and vector retrieval, RRF fusion, path/heading signals,
+page-level deduplication, HTTP routes, tool definitions, connectors, and the
+viewer are implemented. The reranker is currently passthrough.
 
-The planned query-intelligence interfaces and evaluation approach are in
+The competitive retrieval, evaluation, and future Answer direction is in
 [`docs/retrieval-intelligence.md`](../../docs/retrieval-intelligence.md).
 
 ## Use as a library

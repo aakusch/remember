@@ -1,9 +1,25 @@
-# Retrieval intelligence roadmap
+# Search engine and retrieval intelligence roadmap
 
 Status: architecture direction; the current release still uses deterministic
 hybrid retrieval and a passthrough reranker.
 
-## Principle
+## Product principle
+
+Remember's core value is retrieval efficiency: finding more useful evidence in
+fewer results, with less latency and less downstream agent context. The
+database, embedding provider, and individual ranking algorithms are
+replaceable components.
+
+The defensible system is:
+
+```text
+query
+  → evaluated candidate generation
+  → calibrated fusion and reranking
+  → bounded evidence package
+  → optional cited Answer
+  → outcome feedback
+```
 
 Remember's retrieval engine remains useful without a language model:
 
@@ -26,6 +42,19 @@ query + intent
 Cloud deployments may add answer synthesis after retrieval. The OSS engine's
 primary contract remains inspectable evidence so downstream agents can choose
 whether and how to generate.
+
+## Current limitations
+
+The v0.0.1 pipeline is the benchmark baseline:
+
+- configured BM25/vector weights are not yet applied by fusion;
+- fusion truncates before boosts, deduplication, and reranking;
+- BM25 is not yet overlapped with the embedding/vector branch;
+- page deduplication can return fewer distinct pages than requested; and
+- the implemented reranker is passthrough.
+
+These limitations are intentionally documented so improvements are measured
+against the real implementation rather than a marketing description.
 
 ## Why keep the layers separate
 
@@ -145,12 +174,30 @@ becomes the default.
 
 ## Rollout
 
-1. Create a benchmark fixture and baseline current hybrid retrieval.
-2. Add optional intent and a passthrough query-planner interface.
-3. Add local cross-encoder reranking behind configuration.
-4. Add optional query expansion and score blending.
-5. Publish benchmark results and resource costs.
-6. Let Cloud consume the same interfaces for cited answers and usage controls.
+### Phase 1 — competitive retrieval foundation
+
+1. Create a versioned benchmark fixture and baseline current hybrid retrieval.
+2. Correct candidate limits, configured weights, pipeline ordering, page
+   backfill, and retrieval-stage overlap.
+3. Add optional intent and a passthrough query-planner interface.
+4. Add structured ranking traces.
+5. Evaluate a bounded local or remote reranker behind configuration.
+6. Define the evidence-package contract required by Answer composition.
+7. Publish quality, latency, context, and resource comparisons.
+
+### Phase 2 — Answer composition in Cloud
+
+1. Pack the smallest useful authorized evidence set.
+2. Add adjacent-chunk retrieval without bypassing access controls.
+3. Generate a bounded Answer with structured source IDs.
+4. Validate citations server-side and abstain on insufficient evidence.
+5. Add provider fallback, budgets, idempotency, and feedback.
+
+### Phase 3 — feedback and provenance
+
+1. Link retrieval and Answer events to resulting agent artifacts.
+2. Measure useful, wrong-source, incomplete, stale, and unsupported outcomes.
+3. Use accepted feedback to improve evaluation, ranking, and corpus proposals.
 
 See the Cloud design for the hosted answer, provider, and billing layer:
 `remember-cloud/docs/specs/2026-07-23-retrieval-intelligence-layer.md`.

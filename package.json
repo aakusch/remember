@@ -2,7 +2,7 @@
   "name": "remember-monorepo",
   "private": true,
   "version": "0.0.0",
-  "description": "Local-first, AI-ready wiki platform — monorepo root",
+  "description": "Local-first, open-source search and retrieval engine for people and agents",
   "scripts": {
     "dev": "pnpm --filter @useremember/core dev",
     "build": "pnpm -r build",

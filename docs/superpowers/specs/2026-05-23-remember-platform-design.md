@@ -2,6 +2,12 @@
 
 **Status:** Draft for review
 **Date:** 2026-05-23
+
+> This document preserves the original platform design. The current product
+> priority is the evaluated search engine and future Answer composition; see
+> [`../../retrieval-intelligence.md`](../../retrieval-intelligence.md). Viewer
+> and wiki capabilities remain supported, but they do not lead the go-forward
+> product strategy.
 **Owner:** Aaron Kusch (aakusch)
 **Repo:** `~/Desktop/Repos/remember/` (public OSS, MIT)
 

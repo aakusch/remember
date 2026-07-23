@@ -2,9 +2,11 @@
 
 # remember
 
-**Your wiki. Your data. Your AI. Local-first.**
+**Search built for agents. Local-first and open source.**
 
-A free, open-source, AI-ready wiki platform. Markdown in, hybrid search out — running entirely on your machine in under 60 seconds.
+A free, open-source retrieval engine for Markdown knowledge. It indexes,
+ranks, and serves source-cited evidence to humans and agents—entirely on your
+machine by default.
 
 [![CI](https://github.com/aakusch/remember/actions/workflows/ci.yml/badge.svg)](https://github.com/aakusch/remember/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -41,7 +43,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 
 | | |
 |---|---|
-| **Hybrid search** | BM25 (sqlite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion. ~2 ms per query on a typical wiki. |
+| **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
 | **Local embeddings** | Bundled `BAAI/bge-small-en-v1.5` ONNX model (384-d). OpenAI is opt-in via `OPENAI_API_KEY`. |
 | **AI tool definitions** | `GET /v1/tools` returns Anthropic/OpenAI-shaped definitions — drop into a tool-use call. |
 | **Browser editor** | Split-pane markdown + live preview. Slash command palette (`/h1`, `/code`, `/table`, `/mermaid`, 16 more). `⌘/Ctrl+S` saves. |
@@ -260,18 +262,18 @@ Full architecture deep dive: [`docs/architecture.md`](./docs/architecture.md).
 | Version | Highlights |
 |---|---|
 | **v0.0.1** | Lean local-first OSS — *current* |
-| v0.1 | Evaluation harness, optional intent + cross-encoder reranker, brew tap, standalone binary |
+| v0.1 | Retrieval benchmark, corrected candidate pipeline, optional intent, bounded reranker evaluation, brew tap, standalone binary |
 | v0.2 | Block-level references, backlinks panel, branding/theme |
 | v0.3 | RBAC + OIDC/SAML auth |
 | **v1.0** | First production-stable release |
 | v2.0 | **Cloud premium** — managed multi-tenant SaaS with pgvector + S3 + team workspaces |
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
-The search-quality direction is documented in
+The core product direction is documented in
 [`docs/retrieval-intelligence.md`](./docs/retrieval-intelligence.md): keep
-deterministic hybrid retrieval as the offline foundation, then add optional
-query expansion and bounded reranking. Cloud may synthesize separately
-metered, cited answers from the same evidence.
+deterministic hybrid retrieval as the offline foundation, measure it, improve
+candidate generation and reranking, then let Cloud synthesize separately
+metered cited Answers from the same bounded evidence.
 
 <br>
 
