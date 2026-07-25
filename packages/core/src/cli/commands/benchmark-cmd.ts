@@ -12,6 +12,7 @@ import { createIndexer } from '../../indexer/index.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { createHybridSearchEngine } from '../../search/hybrid.js';
 import { createPassthroughReranker } from '../../rerankers/none.js';
+import { createCrossEncoderReranker } from '../../rerankers/cross-encoder.js';
 import {
   compareEvaluationRuns,
   hashCorpus,
@@ -117,6 +118,13 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   const candidateK = parsePositiveInteger(args.candidateK ?? '20', '--candidate-k');
   const warmupQueries = parseNonNegativeInteger(args.warmup ?? '2', '--warmup');
 
+  const rerankerName = args.reranker ?? 'none';
+  if (rerankerName !== 'none' && rerankerName !== 'cross-encoder') {
+    throw new Error(
+      `unsupported reranker "${rerankerName}" (expected none or cross-encoder)`,
+    );
+  }
+
   const cases = await loadEvaluationCases(questionsPath);
   const embedder =
     profile === 'ci'
@@ -140,6 +148,17 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     dim: embedder.dim,
   });
   store.setDimension(embedder.dim);
+
+  const reranker =
+    rerankerName === 'cross-encoder'
+      ? createCrossEncoderReranker({
+          ...(args.rerankerModel ? { model: args.rerankerModel } : {}),
+          topN: candidateK,
+          // Snippets are query-biased 280-char excerpts; the cross-encoder
+          // needs the real chunk bodies to discriminate.
+          textSource: (chunkIds) => store.getChunkTexts(chunkIds),
+        })
+      : createPassthroughReranker();
 
   try {
     const indexer = createIndexer({
@@ -168,7 +187,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     const finalEngine = createHybridSearchEngine(
       store,
       embedder,
-      createPassthroughReranker(),
+      reranker,
       {
         limits: {
           perRetrieverK: candidateK,
@@ -213,7 +232,9 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       },
       {
         engine_version: CORE_VERSION,
-        engine_profile: profile === 'ci' ? 'ci-hash' : 'fast-local-bge',
+        engine_profile: `${profile === 'ci' ? 'ci-hash' : 'fast-local-bge'}${
+          rerankerName === 'none' ? '' : `+${rerankerName}`
+        }`,
         corpus_id: portableIdentifier(corpusRoot),
         corpus_hash: corpusHash,
         embedder_id: embedder.modelId,
@@ -269,6 +290,8 @@ interface BenchmarkArgs {
   candidateK?: string;
   warmup?: string;
   indexCache?: string;
+  reranker?: string;
+  rerankerModel?: string;
   failOnRegression?: boolean;
   help?: boolean;
 }
@@ -297,6 +320,8 @@ function parseArgs(argv: string[]): BenchmarkArgs {
       '--candidate-k',
       '--warmup',
       '--index-cache',
+      '--reranker',
+      '--reranker-model',
     ].includes(flag);
     if (!takesValue) throw new Error(`unknown benchmark option "${token}"`);
     const value = inlineValue ?? argv[++index];
@@ -312,6 +337,8 @@ function parseArgs(argv: string[]): BenchmarkArgs {
     if (flag === '--candidate-k') args.candidateK = value;
     if (flag === '--warmup') args.warmup = value;
     if (flag === '--index-cache') args.indexCache = value;
+    if (flag === '--reranker') args.reranker = value;
+    if (flag === '--reranker-model') args.rerankerModel = value;
   }
   return args;
 }
@@ -397,6 +424,8 @@ OPTIONS:
   --warmup <number>       Warmup queries excluded from latency (default: 2)
   --index-cache <dir>     Reuse an index across runs when the corpus, embedder,
                           and chunker are unchanged (default: throwaway index)
+  --reranker <name>       none (default) or cross-encoder
+  --reranker-model <id>   Cross-encoder model (default: Xenova/ms-marco-MiniLM-L-6-v2)
   --output <json>         Write machine-readable results
   --compare <json>        Print metric deltas against a prior result
   --fail-on-regression    Fail when overall or per-class recall@5 drops > 0.02

@@ -228,33 +228,43 @@ export function createHybridSearchEngine(
       const finalScores = new Map(
         reranked.map((result) => [result.chunk_id, result.score] as const),
       );
-      const ranking = fusion.results.map((result): RankingSignalTrace => {
-        const signaledResult = signaled.find((candidate) => candidate.chunk_id === result.chunk_id);
-        return {
-          chunk_id: result.chunk_id,
-          retrieval_score: retrievalScores.get(result.chunk_id) ?? result.score,
-          signaled_score: signaledResult?.score ?? result.score,
-          final_score: finalScores.get(result.chunk_id) ?? signaledResult?.score ?? result.score,
-          exact_match: hasExactMatch(result, input.query),
-          path_match_fraction: pathMatchFraction(result, input.query),
-          heading_match_fraction: headingMatchFraction(result, input.query),
-          contributions: fusion.contributions.get(result.chunk_id) ?? [],
-        };
-      });
-      const trace = buildTrace({
-        input,
-        plannerId: planner.id,
-        plan,
-        limits,
-        rawCounts,
-        fused: fusion.results,
-        deduplicated,
-        reranked,
-        results,
-        ranking,
-        timings,
-        fallback,
-      });
+      // Only built when requested: this walks every candidate and does an
+      // O(n^2) lookup, which is wasted work on production queries and grows
+      // quadratically with candidateK.
+      const wantsTrace = Boolean(queryOpts.debug || queryOpts.trace);
+      const trace = wantsTrace
+        ? buildTrace({
+            input,
+            plannerId: planner.id,
+            plan,
+            limits,
+            rawCounts,
+            fused: fusion.results,
+            deduplicated,
+            reranked,
+            results,
+            ranking: fusion.results.map((result): RankingSignalTrace => {
+              const signaledResult = signaled.find(
+                (candidate) => candidate.chunk_id === result.chunk_id,
+              );
+              return {
+                chunk_id: result.chunk_id,
+                retrieval_score: retrievalScores.get(result.chunk_id) ?? result.score,
+                signaled_score: signaledResult?.score ?? result.score,
+                final_score:
+                  finalScores.get(result.chunk_id) ??
+                  signaledResult?.score ??
+                  result.score,
+                exact_match: hasExactMatch(result, input.query),
+                path_match_fraction: pathMatchFraction(result, input.query),
+                heading_match_fraction: headingMatchFraction(result, input.query),
+                contributions: fusion.contributions.get(result.chunk_id) ?? [],
+              };
+            }),
+            timings,
+            fallback,
+          })
+        : undefined;
 
       return {
         results,

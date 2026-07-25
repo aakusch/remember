@@ -59,6 +59,10 @@ export {
 export { extractSnippet, extractAnswer, tokenizeQuery, splitSentences } from './search/snippet.js';
 export { createPassthroughReranker } from './rerankers/none.js';
 export {
+  createCrossEncoderReranker,
+  type CrossEncoderRerankerOptions,
+} from './rerankers/cross-encoder.js';
+export {
   createPassthroughQueryPlanner,
   passthroughQueryPlan,
 } from './query-planners/passthrough.js';

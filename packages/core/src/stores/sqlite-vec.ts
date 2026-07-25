@@ -135,6 +135,22 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       }));
     },
 
+    /**
+     * Full chunk bodies by id. Search results only carry a ~280-char
+     * query-aware snippet, which is too little (and too query-biased) for a
+     * cross-encoder reranker to judge relevance from.
+     */
+    async getChunkTexts(chunkIds) {
+      const texts = new Map<string, string>();
+      if (chunkIds.length === 0) return texts;
+      const placeholders = chunkIds.map(() => '?').join(',');
+      const rows = db
+        .prepare(`SELECT id, text FROM chunks WHERE id IN (${placeholders})`)
+        .all(...chunkIds) as Array<{ id: string; text: string }>;
+      for (const row of rows) texts.set(row.id, row.text);
+      return texts;
+    },
+
     async searchBm25(query, k) {
       if (!query.trim()) return [];
       const rows = db

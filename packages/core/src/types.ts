@@ -257,6 +257,11 @@ export interface Store {
   deleteByPath(path: string): Promise<number>;
   searchVector(embedding: number[], k: number, query?: string): Promise<SearchResult[]>;
   searchBm25(query: string, k: number): Promise<SearchResult[]>;
+  /**
+   * Full chunk bodies by chunk id. Consumed by rerankers, which need more than
+   * the query-aware snippet carried on `SearchResult`.
+   */
+  getChunkTexts(chunkIds: string[]): Promise<Map<string, string>>;
   getManifest(): Promise<
     Record<string, { sha256: string; chunk_count: number; last_indexed: string }>
   >;

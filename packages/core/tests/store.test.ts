@@ -89,4 +89,35 @@ describe('SqliteVecStore', () => {
     const m2 = await store.getManifest();
     expect(m2['x.md']).toBeUndefined();
   });
+
+  it('returns full chunk text by id for reranking', async () => {
+    await store.upsert([
+      {
+        id: 'a.md#0',
+        source_path: 'a.md',
+        chunk_idx: 0,
+        text: 'full body of chunk a',
+        heading_path: ['a'],
+        embedding: [1, 0, 0, 0],
+      },
+      {
+        id: 'b.md#0',
+        source_path: 'b.md',
+        chunk_idx: 0,
+        text: 'full body of chunk b',
+        heading_path: ['b'],
+        embedding: [0, 1, 0, 0],
+      },
+    ]);
+
+    const texts = await store.getChunkTexts(['a.md#0', 'b.md#0', 'missing#0']);
+
+    expect(texts.get('a.md#0')).toBe('full body of chunk a');
+    expect(texts.get('b.md#0')).toBe('full body of chunk b');
+    expect(texts.has('missing#0')).toBe(false);
+  });
+
+  it('returns an empty map for no ids', async () => {
+    expect((await store.getChunkTexts([])).size).toBe(0);
+  });
 });
