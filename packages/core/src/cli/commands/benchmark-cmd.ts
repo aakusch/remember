@@ -117,6 +117,20 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   const finalK = parsePositiveInteger(args.k ?? '10', '--k');
   const candidateK = parsePositiveInteger(args.candidateK ?? '20', '--candidate-k');
   const warmupQueries = parseNonNegativeInteger(args.warmup ?? '2', '--warmup');
+  const rrfK = parseNonNegativeInteger(args.rrfK ?? '10', '--rrf-k');
+  const bm25Weight = parseWeight(args.bm25Weight ?? '0.5', '--bm25-weight');
+  const vectorWeight = parseWeight(args.vectorWeight ?? '0.5', '--vector-weight');
+  const fusionOptions = {
+    rrfK,
+    bm25: { weight: bm25Weight },
+    vector: { weight: vectorWeight },
+  };
+  // Non-default fusion settings change the numbers, so the artifact must not
+  // claim to be a like-for-like baseline.
+  const fusionSuffix =
+    rrfK === 10 && bm25Weight === 0.5 && vectorWeight === 0.5
+      ? ''
+      : `+rrf${rrfK}-w${bm25Weight}/${vectorWeight}`;
 
   const rerankerName = args.reranker ?? 'none';
   if (rerankerName !== 'none' && rerankerName !== 'cross-encoder') {
@@ -129,7 +143,11 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   const embedder =
     profile === 'ci'
       ? createHashEmbedder(384)
-      : createLocalOnnxEmbedder({ model: 'BAAI/bge-small-en-v1.5' });
+      : createLocalOnnxEmbedder({
+          model: 'BAAI/bge-small-en-v1.5',
+          ...(args.pooling ? { pooling: args.pooling as 'mean' | 'cls' } : {}),
+          ...(args.queryPrefix ? { queryPrefix: args.queryPrefix } : {}),
+        });
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'remember-benchmark-'));
 
   // Hashed up front so it can key the index cache as well as label the artifact.
@@ -189,6 +207,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       embedder,
       reranker,
       {
+        ...fusionOptions,
         limits: {
           perRetrieverK: candidateK,
           candidateK,
@@ -201,6 +220,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       embedder,
       createPassthroughReranker(),
       {
+        ...fusionOptions,
         limits: {
           perRetrieverK: candidateK,
           candidateK,
@@ -234,7 +254,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
         engine_version: CORE_VERSION,
         engine_profile: `${profile === 'ci' ? 'ci-hash' : 'fast-local-bge'}${
           rerankerName === 'none' ? '' : `+${rerankerName}`
-        }`,
+        }${fusionSuffix}`,
         corpus_id: portableIdentifier(corpusRoot),
         corpus_hash: corpusHash,
         embedder_id: embedder.modelId,
@@ -292,6 +312,11 @@ interface BenchmarkArgs {
   indexCache?: string;
   reranker?: string;
   rerankerModel?: string;
+  rrfK?: string;
+  pooling?: string;
+  queryPrefix?: string;
+  bm25Weight?: string;
+  vectorWeight?: string;
   failOnRegression?: boolean;
   help?: boolean;
 }
@@ -322,6 +347,11 @@ function parseArgs(argv: string[]): BenchmarkArgs {
       '--index-cache',
       '--reranker',
       '--reranker-model',
+      '--rrf-k',
+      '--pooling',
+      '--query-prefix',
+      '--bm25-weight',
+      '--vector-weight',
     ].includes(flag);
     if (!takesValue) throw new Error(`unknown benchmark option "${token}"`);
     const value = inlineValue ?? argv[++index];
@@ -339,8 +369,21 @@ function parseArgs(argv: string[]): BenchmarkArgs {
     if (flag === '--index-cache') args.indexCache = value;
     if (flag === '--reranker') args.reranker = value;
     if (flag === '--reranker-model') args.rerankerModel = value;
+    if (flag === '--rrf-k') args.rrfK = value;
+    if (flag === '--pooling') args.pooling = value;
+    if (flag === '--query-prefix') args.queryPrefix = value;
+    if (flag === '--bm25-weight') args.bm25Weight = value;
+    if (flag === '--vector-weight') args.vectorWeight = value;
   }
   return args;
+}
+
+function parseWeight(value: string, flag: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${flag} must be a non-negative number`);
+  }
+  return parsed;
 }
 
 function printSummary(run: EvaluationRun): void {
@@ -424,6 +467,11 @@ OPTIONS:
   --warmup <number>       Warmup queries excluded from latency (default: 2)
   --index-cache <dir>     Reuse an index across runs when the corpus, embedder,
                           and chunker are unchanged (default: throwaway index)
+  --pooling <mean|cls>    Embedding pooling (default: mean; bge models use cls)
+  --query-prefix <text>   Instruction prepended to queries only
+  --rrf-k <number>        RRF rank constant (default: 10)
+  --bm25-weight <number>  BM25 fusion weight (default: 0.5)
+  --vector-weight <num>   Vector fusion weight (default: 0.5)
   --reranker <name>       none (default) or cross-encoder
   --reranker-model <id>   Cross-encoder model (default: Xenova/ms-marco-MiniLM-L-6-v2)
   --output <json>         Write machine-readable results

@@ -33,7 +33,12 @@ export interface Chunker {
 export interface Embedder {
   readonly dim: number;
   readonly modelId: string;
-  embed(texts: string[]): Promise<number[][]>;
+  /**
+   * `role` lets an embedder treat queries differently from documents (e.g. the
+   * query-side instruction prefix BGE retrieval models are trained with).
+   * Optional so existing embedders remain valid.
+   */
+  embed(texts: string[], role?: 'query' | 'document'): Promise<number[][]>;
 }
 
 export type RetrieverName = 'bm25' | 'vector';
