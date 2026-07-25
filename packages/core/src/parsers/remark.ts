@@ -16,10 +16,48 @@ export function createRemarkParser(): Parser {
       // safe for any downstream consumer that might (prototype-pollution guard).
       const frontmatter = stripUnsafeKeys(data as Record<string, unknown>);
       const ast = processor.parse(content);
-      const plain = mdastToString(ast);
+      const plain = toStructuredText(ast);
       return { frontmatter, ast, plain };
     },
   };
+}
+
+interface MdastNode {
+  type: string;
+  depth?: number;
+  children?: MdastNode[];
+}
+
+/**
+ * Plain text that still carries block structure.
+ *
+ * `mdast-util-to-string` alone concatenates every text node with no separator,
+ * so "# Deploy runbook\n\nDeploys go out" collapsed to
+ * "Deploy runbookDeploys go out" — heading markers and every newline gone. The
+ * chunker matches headings with /^#{1,6}\s+/ to build `heading_path` and to
+ * split on section boundaries, so it never matched: every chunk in every index
+ * had an empty heading_path, disabling applyHeadingBoost entirely and reducing
+ * chunking to fixed-size slicing that ignores sections.
+ *
+ * Headings are re-emitted as markdown and blocks are newline-separated so the
+ * chunker sees the structure, while inline markup stays stripped for clean
+ * embedding text.
+ */
+function toStructuredText(ast: unknown): string {
+  const root = ast as MdastNode;
+  const blocks = root.children ?? [];
+  const lines: string[] = [];
+  for (const node of blocks) {
+    const text = mdastToString(node as never).trim();
+    if (!text) continue;
+    if (node.type === 'heading') {
+      const depth = Math.min(Math.max(node.depth ?? 1, 1), 6);
+      lines.push(`${'#'.repeat(depth)} ${text}`);
+    } else {
+      lines.push(text);
+    }
+  }
+  return lines.join('\n\n');
 }
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);

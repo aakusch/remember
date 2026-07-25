@@ -40,6 +40,13 @@ export interface HybridSearchOptions {
   /** Multiplier applied per query term found in heading_path. */
   headingBoostFactor?: number;
   /**
+   * Score multiplier for documents whose frontmatter declares a non-current
+   * lifecycle state (superseded, deprecated, archived, draft, rejected).
+   * 1 disables it. Defaults to 1 so corpora without status frontmatter and
+   * existing consumers are unaffected.
+   */
+  statusDemotionFactor?: number;
+  /**
    * When true (default), select the best chunk per page and continue down the
    * reranked candidate list until the requested number of pages is filled.
    */
@@ -76,6 +83,7 @@ export function createHybridSearchEngine(
   const rrfK = opts.rrfK ?? 10;
   const pathBoostFactor = opts.pathBoostFactor ?? 2;
   const headingBoostFactor = opts.headingBoostFactor ?? 1;
+  const statusDemotionFactor = opts.statusDemotionFactor ?? 1;
   const dedupByPage = opts.dedupByPage ?? true;
 
   return {
@@ -202,6 +210,7 @@ export function createHybridSearchEngine(
       const signalsStarted = performance.now();
       let signaled = applyPathBoost(fusion.results, input.query, pathBoostFactor);
       signaled = applyHeadingBoost(signaled, input.query, headingBoostFactor);
+      signaled = applyStatusDemotion(signaled, statusDemotionFactor);
       timings.signals_ms = elapsed(signalsStarted);
 
       const dedupStarted = performance.now();
@@ -319,6 +328,44 @@ export function applyHeadingBoost(
   });
   boosted.sort((left, right) => right.score - left.score);
   return boosted;
+}
+
+/**
+ * Lifecycle states that mean "do not treat this as the answer". Measured on the
+ * confusable fixture, a stale document took rank 1 on 54% of answerable queries
+ * versus the correct one on 42% — and 7 of the 8 offending documents already
+ * declared one of these states in frontmatter. The engine parsed that
+ * frontmatter, returned it to callers, and ignored it when ranking.
+ *
+ * This is deliberately driven by DECLARED status only. Inferring staleness from
+ * similarity plus age is unsafe: the one offender that declared `current` was
+ * a staging-vs-production pair, where the older document is perfectly live.
+ */
+const NON_CURRENT_STATUSES = new Set([
+  'superseded',
+  'deprecated',
+  'archived',
+  'draft',
+  'rejected',
+  'obsolete',
+  'retired',
+]);
+
+export function applyStatusDemotion(
+  hits: SearchResult[],
+  factor: number,
+): SearchResult[] {
+  if (factor >= 1 || factor <= 0) return hits;
+  const demoted = hits.map((hit) => {
+    const raw = hit.frontmatter?.['status'];
+    if (typeof raw !== 'string') return hit;
+    // Absence or an unrecognised value must never count as stale, or every
+    // unlabelled document in a normal corpus gets penalised.
+    if (!NON_CURRENT_STATUSES.has(raw.trim().toLowerCase())) return hit;
+    return { ...hit, score: hit.score * factor };
+  });
+  demoted.sort((left, right) => right.score - left.score);
+  return demoted;
 }
 
 export function applyPathBoost(

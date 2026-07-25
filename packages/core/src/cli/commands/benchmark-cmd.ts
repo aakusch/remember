@@ -26,7 +26,12 @@ const CORE_VERSION = '0.1.0';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
 
 const CHUNKER_OPTIONS = { size: 900, overlap: 0.15 } as const;
-const CHUNKER_ID = `smart-split-${CHUNKER_OPTIONS.size}-${CHUNKER_OPTIONS.overlap}`;
+// Bump when any indexing-path behavior changes (parser, chunker, indexer).
+// Without this the cache key only covers corpus + embedder + chunker options,
+// so a parser fix would silently reuse indexes built by the old pipeline and
+// report unchanged results.
+const PIPELINE_REV = 2;
+const CHUNKER_ID = `smart-split-${CHUNKER_OPTIONS.size}-${CHUNKER_OPTIONS.overlap}-rev${PIPELINE_REV}`;
 
 export interface IndexCacheKey {
   corpus_hash: string;
@@ -120,8 +125,10 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   const rrfK = parseNonNegativeInteger(args.rrfK ?? '10', '--rrf-k');
   const bm25Weight = parseWeight(args.bm25Weight ?? '0.5', '--bm25-weight');
   const vectorWeight = parseWeight(args.vectorWeight ?? '0.5', '--vector-weight');
+  const statusDemotion = parseWeight(args.statusDemotion ?? '1', '--status-demotion');
   const fusionOptions = {
     rrfK,
+    statusDemotionFactor: statusDemotion,
     bm25: { weight: bm25Weight },
     vector: { weight: vectorWeight },
   };
@@ -131,6 +138,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     rrfK === 10 && bm25Weight === 0.5 && vectorWeight === 0.5
       ? ''
       : `+rrf${rrfK}-w${bm25Weight}/${vectorWeight}`;
+  const statusSuffix = statusDemotion === 1 ? '' : `+status${statusDemotion}`;
 
   const rerankerName = args.reranker ?? 'none';
   if (rerankerName !== 'none' && rerankerName !== 'cross-encoder') {
@@ -254,7 +262,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
         engine_version: CORE_VERSION,
         engine_profile: `${profile === 'ci' ? 'ci-hash' : 'fast-local-bge'}${
           rerankerName === 'none' ? '' : `+${rerankerName}`
-        }${fusionSuffix}`,
+        }${fusionSuffix}${statusSuffix}`,
         corpus_id: portableIdentifier(corpusRoot),
         corpus_hash: corpusHash,
         embedder_id: embedder.modelId,
@@ -317,6 +325,7 @@ interface BenchmarkArgs {
   queryPrefix?: string;
   bm25Weight?: string;
   vectorWeight?: string;
+  statusDemotion?: string;
   failOnRegression?: boolean;
   help?: boolean;
 }
@@ -352,6 +361,7 @@ function parseArgs(argv: string[]): BenchmarkArgs {
       '--query-prefix',
       '--bm25-weight',
       '--vector-weight',
+      '--status-demotion',
     ].includes(flag);
     if (!takesValue) throw new Error(`unknown benchmark option "${token}"`);
     const value = inlineValue ?? argv[++index];
@@ -374,6 +384,7 @@ function parseArgs(argv: string[]): BenchmarkArgs {
     if (flag === '--query-prefix') args.queryPrefix = value;
     if (flag === '--bm25-weight') args.bm25Weight = value;
     if (flag === '--vector-weight') args.vectorWeight = value;
+    if (flag === '--status-demotion') args.statusDemotion = value;
   }
   return args;
 }
@@ -472,6 +483,8 @@ OPTIONS:
   --rrf-k <number>        RRF rank constant (default: 10)
   --bm25-weight <number>  BM25 fusion weight (default: 0.5)
   --vector-weight <num>   Vector fusion weight (default: 0.5)
+  --status-demotion <n>   Score multiplier for non-current frontmatter status
+                          (1 = off, default; e.g. 0.5 halves stale docs)
   --reranker <name>       none (default) or cross-encoder
   --reranker-model <id>   Cross-encoder model (default: Xenova/ms-marco-MiniLM-L-6-v2)
   --output <json>         Write machine-readable results
