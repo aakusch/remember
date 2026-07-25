@@ -10,3 +10,8 @@ coverage/
 .idea/
 *.tsbuildinfo
 .turbo/
+
+# Generated evaluation corpora. Rebuild with benchmarks/datasets/beir-fixture.mjs
+# build — selection.json pins the exact document set, so corpus_hash reproduces.
+benchmarks/datasets/*/corpus/
+benchmarks/datasets/.index-cache/

@@ -99,6 +99,28 @@ so the existing `sample-wiki` baselines stay valid.
   `unanswerable`, with graded relevance so nDCG distinguishes "the current
   runbook" (3) from "the superseded one" (1).
 
+**Measured outcome (2026-07-24): this fixture is a precision-and-abstention
+fixture, not a recall fixture.** At 20 documents, returning 5 results makes
+recall nearly free — the real-embedding profile scores recall@5 `.987`,
+recall@10 `1.000`, and candidate recall `1.000`. Recall is therefore
+uninformative here and must not be quoted as a quality signal.
+
+What it does measure, with real headroom:
+
+| Class | nDCG@5 | wrong-source |
+|---|---:|---:|
+| ambiguous | .745 | 0 |
+| contradictory | .700 | .143 |
+| unanswerable | n/a | 1.000 |
+
+The engine retrieves the correct cluster but ranks the superseded member too
+highly, which is exactly the graded-ranking failure effort **A** must fix; and it
+returns results for all five unanswerable queries, which is exactly what effort
+**B** must fix. Padding the corpus with unrelated filler to de-saturate recall was
+rejected: it would only re-measure retrieval, which the BEIR fixtures already
+cover, while diluting the confusable clusters that make this fixture unique.
+Headline metrics here are **nDCG@5 and per-class wrong-source**.
+
 ### Corpus hardness (critical)
 
 A random sample of distractors would re-saturate the benchmark — with only a few
@@ -165,9 +187,11 @@ BEIR archive (zip, streamed)
 - Validation: every generated fixture loads through the existing
   `loadEvaluationCases` validator, which already enforces "answerable implies
   non-empty relevant" and "unanswerable implies empty relevant".
-- Guard: assert each new fixture is **not saturated** on the real-embedding
-  profile (recall@5 materially below 1.0), otherwise the fixture failed its
-  purpose.
+- Guard: assert each fixture retains headroom in the metric it exists to move,
+  and treat a saturated metric as an invalid signal rather than a good score:
+  - BEIR fixtures — recall@5 materially below 1.0.
+  - `confusable-wiki` — nDCG@5 materially below 1.0. Its recall **is** saturated
+    by design (see above) and must not be used as a quality gate.
 
 ## Risks
 
