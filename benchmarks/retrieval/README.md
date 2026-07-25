@@ -117,6 +117,34 @@ headroom is in ranking the current document above the stale one — nDCG@5 is
 `.745` for `ambiguous` and `.700` for `contradictory` — and in abstention, where
 all five `unanswerable` queries still return a source.
 
+## Known ranking limitation (measured 2026-07-24)
+
+Widening the candidate pool reliably improves *reach* and cheaply, but the
+ranking stage cannot hold onto it. On `beir-fiqa`, real-embedding profile, with
+no reranker:
+
+| candidateK | candidate recall | recall@10 | p95 |
+|---|---:|---:|---:|
+| 20 | .600 | .490 | 40ms |
+| 50 | .720 | **.497** | 44ms |
+| 100 | .820 | .467 | 48ms |
+| 200 | .890 | .457 | 96ms |
+
+At narrow K the engine is retrieval-limited; at wide K it is ranking-limited,
+and badly — K=200 reaches .890 of the gold but delivers .457. **Use
+`--candidate-k 50`** as the working point until selection improves; it is where
+the two losses balance.
+
+Reading these numbers correctly: `recall@k` is the fraction of *all* gold
+documents found, and most FiQA queries have 2–3 gold documents, so it
+understates practical usefulness. For the "agent needs one good source" view,
+62% of queries surface at least one gold document in the top 10, 54% in the top
+5, and 34% at rank 1. Rank-1 quality is the weak spot, which is what
+`wrong_source_rate` (.717) measures.
+
+A cross-encoder reranker was tried and did not help — see the commit adding
+`createCrossEncoderReranker`. It stays opt-in and off by default.
+
 ## Index cache
 
 Embedding a 20k-document corpus takes ~15 minutes on the real-embedding profile,
