@@ -38,10 +38,15 @@ wrong numbers.
 
 ```bash
 pnpm --filter @useremember/core benchmark -- \
-  --profile fast --candidate-k 50 \
+  --profile fast --candidate-k 20 \
   --corpus <dir> --questions <jsonl> \
   --index-cache benchmarks/datasets/.index-cache
 ```
+
+Committed baselines in `benchmarks/results/` were generated at `candidate_k = 20`
+(the CLI default). Always match `candidate_k` when comparing against them — a
+delta across mismatched `candidate_k` is bogus. Runs at other values are fine
+for studies, but label them and never diff them against the k=20 baselines.
 
 Flags: `--profile ci|fast`, `--corpus`, `--questions`, `--k`, `--candidate-k`,
 `--rrf-k`, `--bm25-weight`, `--vector-weight`, `--status-demotion`, `--pooling`,
