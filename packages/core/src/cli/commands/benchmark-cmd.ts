@@ -1,5 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
 import { createHashEmbedder } from '../../embedders/hash.js';
@@ -22,6 +23,76 @@ import type { EvaluationRun } from '../../evaluation/types.js';
 
 const CORE_VERSION = '0.1.0';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
+
+const CHUNKER_OPTIONS = { size: 900, overlap: 0.15 } as const;
+const CHUNKER_ID = `smart-split-${CHUNKER_OPTIONS.size}-${CHUNKER_OPTIONS.overlap}`;
+
+export interface IndexCacheKey {
+  corpus_hash: string;
+  embedder_id: string;
+  dim: number;
+  chunker_id: string;
+}
+
+interface IndexCache {
+  databasePath: string;
+  reusable: boolean;
+  commit: () => Promise<void>;
+}
+
+/**
+ * Embedding a large evaluation corpus costs minutes, and the benchmark is run
+ * repeatedly while iterating on ranking. Reuse the index whenever the corpus,
+ * embedder, and chunker are all unchanged; anything else must rebuild, or the
+ * run would silently report stale results.
+ */
+export async function resolveIndexCache(
+  cacheRoot: string,
+  key: IndexCacheKey,
+): Promise<IndexCache> {
+  const fingerprint = createHash('sha256')
+    .update(JSON.stringify(key))
+    .digest('hex')
+    .slice(0, 16);
+  const entryDir = path.join(cacheRoot, fingerprint);
+  const databasePath = path.join(entryDir, 'index.db');
+  const manifestPath = path.join(entryDir, 'manifest.json');
+
+  let reusable = false;
+  try {
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as
+      | (IndexCacheKey & { complete?: boolean })
+      | null;
+    await fs.access(databasePath);
+    reusable =
+      manifest !== null &&
+      manifest.complete === true &&
+      manifest.corpus_hash === key.corpus_hash &&
+      manifest.embedder_id === key.embedder_id &&
+      manifest.dim === key.dim &&
+      manifest.chunker_id === key.chunker_id;
+  } catch {
+    reusable = false;
+  }
+
+  if (!reusable) {
+    // A partial index from an interrupted run is worse than none, so clear the
+    // entry before rebuilding and only mark it complete after indexing.
+    await fs.rm(entryDir, { recursive: true, force: true });
+    await fs.mkdir(entryDir, { recursive: true });
+  }
+
+  return {
+    databasePath,
+    reusable,
+    commit: async () => {
+      await fs.writeFile(
+        manifestPath,
+        `${JSON.stringify({ ...key, complete: true }, null, 2)}\n`,
+      );
+    },
+  };
+}
 
 export async function benchmarkCommand(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
@@ -52,8 +123,20 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       ? createHashEmbedder(384)
       : createLocalOnnxEmbedder({ model: 'BAAI/bge-small-en-v1.5' });
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'remember-benchmark-'));
+
+  // Hashed up front so it can key the index cache as well as label the artifact.
+  const corpusHash = await hashCorpus(corpusRoot);
+  const cache = args.indexCache
+    ? await resolveIndexCache(path.resolve(args.indexCache), {
+        corpus_hash: corpusHash,
+        embedder_id: embedder.modelId,
+        dim: embedder.dim,
+        chunker_id: CHUNKER_ID,
+      })
+    : undefined;
+
   const store = await createSqliteVecStore({
-    path: path.join(tempRoot, 'index.db'),
+    path: cache ? cache.databasePath : path.join(tempRoot, 'index.db'),
     dim: embedder.dim,
   });
   store.setDimension(embedder.dim);
@@ -62,14 +145,22 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     const indexer = createIndexer({
       walker: createChokidarWalker({ respectGitignore: true }),
       parser: createRemarkParser(),
-      chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
+      chunker: createSmartSplitChunker(CHUNKER_OPTIONS),
       embedder,
       store,
     });
-    process.stdout.write(
-      `remember benchmark: indexing ${path.basename(corpusRoot)} with ${embedder.modelId}\n`,
-    );
-    await indexer.indexAll(corpusRoot);
+    if (cache?.reusable) {
+      process.stdout.write(
+        `remember benchmark: reusing cached index for ${path.basename(corpusRoot)} ` +
+          `(${embedder.modelId})\n`,
+      );
+    } else {
+      process.stdout.write(
+        `remember benchmark: indexing ${path.basename(corpusRoot)} with ${embedder.modelId}\n`,
+      );
+      await indexer.indexAll(corpusRoot);
+      if (cache) await cache.commit();
+    }
 
     // Keep the production-shaped result window separate from the wider
     // candidate-recall probe. This lets the v0.0.1 baseline measure the real
@@ -124,7 +215,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
         engine_version: CORE_VERSION,
         engine_profile: profile === 'ci' ? 'ci-hash' : 'fast-local-bge',
         corpus_id: portableIdentifier(corpusRoot),
-        corpus_hash: await hashCorpus(corpusRoot),
+        corpus_hash: corpusHash,
         embedder_id: embedder.modelId,
         questions_id: portableIdentifier(questionsPath),
         questions_hash: await hashFile(questionsPath),
@@ -177,6 +268,7 @@ interface BenchmarkArgs {
   k?: string;
   candidateK?: string;
   warmup?: string;
+  indexCache?: string;
   failOnRegression?: boolean;
   help?: boolean;
 }
@@ -204,6 +296,7 @@ function parseArgs(argv: string[]): BenchmarkArgs {
       '--k',
       '--candidate-k',
       '--warmup',
+      '--index-cache',
     ].includes(flag);
     if (!takesValue) throw new Error(`unknown benchmark option "${token}"`);
     const value = inlineValue ?? argv[++index];
@@ -218,6 +311,7 @@ function parseArgs(argv: string[]): BenchmarkArgs {
     if (flag === '--k') args.k = value;
     if (flag === '--candidate-k') args.candidateK = value;
     if (flag === '--warmup') args.warmup = value;
+    if (flag === '--index-cache') args.indexCache = value;
   }
   return args;
 }
@@ -301,6 +395,8 @@ OPTIONS:
   --k <number>            Final result limit (default: 10)
   --candidate-k <number>  Candidate recall limit (default: 20)
   --warmup <number>       Warmup queries excluded from latency (default: 2)
+  --index-cache <dir>     Reuse an index across runs when the corpus, embedder,
+                          and chunker are unchanged (default: throwaway index)
   --output <json>         Write machine-readable results
   --compare <json>        Print metric deltas against a prior result
   --fail-on-regression    Fail when overall or per-class recall@5 drops > 0.02
