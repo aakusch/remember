@@ -1,6 +1,6 @@
 {
   "name": "@useremember/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [
@@ -53,7 +53,8 @@
   "files": [
     "bin",
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -65,11 +66,11 @@
     "lint": "echo '(eslint not yet configured)'"
   },
   "dependencies": {
-    "@hono/node-server": "^1.12.0",
+    "@hono/node-server": "^2.0.12",
     "better-sqlite3": "^11.3.0",
     "chokidar": "^4.0.0",
     "gray-matter": "^4.0.3",
-    "hono": "^4.5.0",
+    "hono": "^4.12.32",
     "ignore": "^6.0.2",
     "jiti": "^2.0.0",
     "mdast-util-to-string": "^4.0.0",

@@ -7,14 +7,22 @@ import { createSmartSplitChunker } from '../../chunkers/smart-split.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { createIndexer } from '../../indexer/index.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
-import { startViewer, type ViewerHandle } from '../start-viewer.js';
+import { VERSION } from '../../version.js';
+import { banner, header, keyValues, success, c, fmtMs, plural } from '../format.js';
 
+/**
+ * `remember dev` — index the content folder, then start the agent API with a
+ * live file watcher. CLI + API only; there is no browser UI in the OSS engine.
+ */
 export async function devCommand(): Promise<void> {
   const cfg = await loadConfig(process.cwd());
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
+  const contentDisplay = path.relative(process.cwd(), contentRoot) || '.';
+  const out = process.stdout;
 
-  process.stdout.write(`remember dev: indexing ${contentRoot}\n`);
+  out.write(`\n${banner(VERSION)}  ${c.dim('dev')}\n`);
 
+  // ─── Index ────────────────────────────────────────────────────────────────
   const embedder = await resolveEmbedder(cfg.raw);
   const store = await createSqliteVecStore({
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
@@ -31,35 +39,35 @@ export async function devCommand(): Promise<void> {
   });
 
   const initial = await indexer.indexAll(contentRoot);
-  process.stdout.write(
-    `  initial index: ${initial.files_indexed} files / ${initial.chunks_added} chunks in ${initial.duration_ms}ms\n`,
-  );
   store.close();
+  out.write(
+    `\n${success(
+      `indexed ${c.bold(plural(initial.files_indexed, 'file'))} · ` +
+        `${c.bold(plural(initial.chunks_added, 'chunk'))} ${c.dim(`in ${fmtMs(initial.duration_ms)}`)}`,
+    )}\n`,
+  );
 
+  // ─── Serve ──────────────────────────────────────────────────────────────
   const { url: apiUrl, close: stopApi } = await startServer({ rootDir: process.cwd() });
-  process.stdout.write(`\nremember dev: API listening at ${apiUrl}\n`);
-  process.stdout.write(`  Health:  ${apiUrl}/v1/health\n`);
-  process.stdout.write(`  Search:  ${apiUrl}/v1/search?q=...\n`);
-  process.stdout.write(`  Tools:   ${apiUrl}/v1/tools\n`);
 
-  // Spawn the viewer (Astro dev server) alongside the API. Degrades to
-  // API-only when @useremember/viewer isn't installed or REMEMBER_NO_VIEWER=1.
-  const viewer: ViewerHandle | null = await startViewer({
-    rootDir: process.cwd(),
-    host: cfg.validated.server.host,
-    port: cfg.validated.server.port,
-    apiUrl: `${apiUrl}/v1`,
-  });
+  out.write(header('API + agent endpoints'));
+  out.write(
+    '\n' +
+      keyValues([
+        ['content', `${contentDisplay}  ${c.dim('(watching for changes)')}`],
+        ['embedder', `${embedder.modelId} ${c.dim(`(${embedder.dim}-d)`)}`],
+        ['base', c.accent(apiUrl)],
+        ['health', `${apiUrl}/v1/health`],
+        ['search', `${apiUrl}/v1/search?q=…`],
+        ['pages', `${apiUrl}/v1/pages`],
+        ['tools', `${apiUrl}/v1/tools  ${c.dim('(agent tool defs)')}`],
+      ]) +
+      '\n',
+  );
+  out.write(`\n${c.dim('Watching for file changes — edits reindex within ~1s. Press Ctrl+C to stop.')}\n`);
 
-  if (viewer) {
-    process.stdout.write(`\nremember dev: Viewer at ${viewer.url}\n`);
-  }
-  process.stdout.write(`\nPress Ctrl+C to stop.\n`);
-
-  // Coordinated shutdown — kill viewer first, then stop the API.
   const shutdown = async () => {
-    process.stdout.write('\nremember dev: shutting down…\n');
-    if (viewer) viewer.kill();
+    out.write(`\n${c.dim('shutting down…')}\n`);
     if (stopApi) {
       try {
         await stopApi();
@@ -71,18 +79,6 @@ export async function devCommand(): Promise<void> {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-
-  // Re-throw a viewer crash to the main process so the user knows.
-  if (viewer) {
-    viewer.child.on('exit', (code, signal) => {
-      if (signal === 'SIGTERM' || signal === 'SIGINT') return;
-      if (code !== 0 && code !== null) {
-        process.stderr.write(
-          `\nremember dev: viewer exited unexpectedly (code ${code}). API still running.\n`,
-        );
-      }
-    });
-  }
 
   await new Promise<void>(() => {
     // Keep alive — shutdown handler does the exit.

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
+import { c, header, success } from '../format.js';
 
 /**
  * Generate a cryptographically-strong admin token, encoded as URL-safe base64
@@ -25,7 +26,6 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     apiPort: 4320,
-    port: 4321,
 ${tokenLine}  },
 
   pipeline: {
@@ -72,156 +72,136 @@ ${tokenLine}  },
 `;
 };
 
-const README_TEMPLATE = `---
-title: Welcome
-tags: [welcome, getting-started]
----
-
-# Welcome to your wiki
-
-This is your wiki's landing page. It renders at \`/\` because of the \`viewer.landing\` setting in \`remember.config.ts\`.
-
-## What can I do?
-
-- **Edit any page** in your editor of choice (VS Code, Cursor, Obsidian, vim). Save → reindex → searchable in <1 second.
-- **Or edit in the browser** — click ✎ Edit on any page. Markdown source + live preview side-by-side. Type \`/\` at line start for the command palette.
-- **Search** the wiki via the search bar above, or \`/search\`, or [GET /v1/search](http://localhost:4320/v1/search?q=welcome).
-- **Plug in your AI** via [GET /v1/tools](http://localhost:4320/v1/tools) — drop the Anthropic/OpenAI-shaped tool defs into any LLM tool-use call.
-
-## What's where?
-
-| | |
-|---|---|
-| **Landing** | This page — change in \`remember.config.ts\` via \`viewer.landing\` |
-| **Getting started** | [getting-started](./getting-started.md) — a 2-minute tour |
-| **Frontmatter example** | [examples/with-frontmatter](./examples/with-frontmatter.md) — sortable in the table view |
-| **Admin** | [/admin](http://localhost:4321/admin) — setup, files, reindex, settings, table view, connectors |
-| **Setup wizard** | [/admin/setup](http://localhost:4321/admin/setup) — first-run guided config |
-
-## Next steps
-
-- Add your own pages to \`content/\`
-- Open [/admin/setup](http://localhost:4321/admin/setup) to walk through configuration
-- Skim [getting-started](./getting-started.md) for the full feature tour
-- Configure connectors (Obsidian, Granola, any folder) in \`remember.config.ts\` to pull external content into the index
-`;
-
 const GETTING_STARTED_TEMPLATE = `---
 title: Getting started
-tags: [getting-started, onboarding]
+tags: [getting-started]
 ---
 
 # Getting started
 
-A two-minute tour of your new wiki.
+This is a local-first, AI-ready wiki. Your knowledge lives as plain markdown
+files in \`content/\`, indexed for hybrid (keyword + semantic) search, and served
+over an HTTP API your AI agents can call. Nothing leaves your machine.
 
 ## Add a page
 
-Drop any \`.md\` file in \`content/\` and it's automatically indexed:
+Drop any \`.md\` file into \`content/\`:
 
 \`\`\`bash
-echo "# My new page\\n\\nContent here." > content/my-page.md
+echo "# Deploy runbook\\n\\nProduction deploys go out Tuesdays." > content/deploy.md
 \`\`\`
 
-The file watcher catches the new file, runs it through the indexing pipeline (parse → chunk → embed → store), and it's searchable within ~1 second. The viewer auto-refreshes via Server-Sent Events.
+The watcher indexes it (parse → chunk → embed → store) within about a second.
 
-## Frontmatter
+## Search it
 
-Any markdown frontmatter you set is indexed and searchable:
+- **CLI:** \`remember search "deploy" -k 5\` — ranked result cards in your terminal
+- **HTTP:** \`curl 'http://localhost:4320/v1/search?q=deploy&k=5'\`
+- **JSON (for scripts/agents):** \`remember search "deploy" --json\`
 
-\`\`\`markdown
+## Point your agent at it
+
+See [agents.md](./agents.md) — the search endpoint, the ready-made tool
+definitions, and what a result does and doesn't mean.
+
+## Write for findability
+
+See [authoring.md](./authoring.md) — the small amount of frontmatter and
+structure that makes documents reliably retrievable.
+
+## It's just files
+
+Your wiki is markdown in a git repo. \`remember\` never touches git for you —
+edit, reorganize, then \`git commit\` when you're ready.
+`;
+
+const AGENTS_TEMPLATE = `---
+title: Using remember with AI agents
+tags: [agents, api]
 ---
-title: Deploy runbook
-tags: [runbook, ops]
-owner: platform
-severity: high
-status: tested
----
-\`\`\`
 
-This unlocks two things:
+# Using remember with AI agents
 
-1. **Tag pills** render in the page header automatically.
-2. **Table view** (\`/admin/views\`) lets you filter and sort by any frontmatter key.
+remember exists to answer one question for an agent: *given a query, which of
+my documents are the most relevant?* It returns ranked documents — not a
+generated answer.
 
 ## Search
 
-Three patterns:
-
-1. **Browser** — search bar at top of every page, or visit [/search](/search)
-2. **HTTP** — \`curl 'http://localhost:4320/v1/search?q=...'\`
-3. **AI tool definitions** — \`curl http://localhost:4320/v1/tools\` returns Anthropic/OpenAI tool defs ready to drop in
-
-## Edit in the browser
-
-Click ✎ Edit on any page. The browser editor has:
-
-- Side-by-side markdown source + live preview
-- Slash command palette (type \`/\` at line start) — \`/h1\`, \`/code\`, \`/table\`, \`/mermaid\`, and 16 more
-- Save with \`Cmd/Ctrl+S\` or the Save button
-- File is written to disk + reindexed immediately
-- Git stays hands-off — commit when you're satisfied
-
-## Connectors
-
-Pull external content into your wiki. Configure in \`remember.config.ts\` (commented example included). Three connectors out of the box:
-
-- **Obsidian** — point at a vault, wikilinks get rewritten, files land in \`content/external/obsidian/\`
-- **Granola** — pull meeting summaries via HTTP API or your own \`fetchMeetings\` callback
-- **Filesystem** — generic markdown-folder sync from anywhere
-
-Manage them at [/admin/connectors](http://localhost:4321/admin/connectors).
-
-## Commit when ready
-
-Your wiki is just markdown files in a git repo. \`remember\` doesn't touch git on your behalf. Edit, organize, restructure — then run \`git add\` and \`git commit\` when you're satisfied.
-
-## Further reading
-
-- [examples/with-frontmatter](./examples/with-frontmatter.md) — frontmatter that drives the table view
-- [Setup wizard](http://localhost:4321/admin/setup) — the in-browser config tour
-`;
-
-const EXAMPLE_FRONTMATTER_TEMPLATE = `---
-title: Frontmatter example
-tags: [example, reference]
-owner: you
-status: stable
-priority: medium
----
-
-# Frontmatter example
-
-This page demonstrates how frontmatter drives the table view.
-
-## What you wrote
-
-\`\`\`yaml
-title: Frontmatter example
-tags: [example, reference]
-owner: you
-status: stable
-priority: medium
+\`\`\`
+GET http://localhost:4320/v1/search?q=<query>&k=<how many results>
 \`\`\`
 
-## What it does
+Each result carries the document \`path\`, \`title\`, a query-relevant \`snippet\`,
+the full \`frontmatter\`, and a \`score\`. Fetch the whole document with
+\`GET /v1/pages/<path>\`.
 
-- \`title\` becomes the page title in the browser, the sidebar, and the table view
-- \`tags\` render as pills in the header AND become a filterable array
-- \`owner\`, \`status\`, \`priority\` — any field you add is queryable
+## Drop-in tool definitions
 
-## Try the table view
+\`\`\`
+GET http://localhost:4320/v1/tools
+\`\`\`
 
-Visit [/admin/views](http://localhost:4321/admin/views?columns=path,title,tags,owner,status). All your pages with all their frontmatter, sortable and filterable.
+Returns Anthropic/OpenAI-shaped tool definitions you can paste straight into a
+tool-use call, so an LLM can search the wiki itself.
 
-Try these queries:
+## What a result means — and doesn't
 
-- \`?filter[tags]=example\` — pages tagged \`example\` (array membership)
-- \`?filter[owner]=you\` — pages you own
-- \`?sort=-priority\` — by priority descending
-- \`?filter[status]=stable&sort=title\` — stable pages alphabetically
+A returned result means the corpus contains text that ranked for the query. It
+is **not** proof that an answer exists. If the right document isn't in the
+corpus, the engine still returns its closest matches — treat results as
+candidates to read, not as guaranteed answers.
 
-Build your own taxonomy. Define what fields matter for your team and use them across the corpus.
+## Narrowing
+
+Frontmatter fields are stored and returned, and can be filtered on — an agent
+that knows it wants only current runbooks can say so rather than hoping ranking
+sorts it out. See [authoring.md](./authoring.md) for the fields worth setting.
+`;
+
+const AUTHORING_TEMPLATE = `---
+title: Authoring for retrieval
+status: current
+type: guide
+tags: [authoring, frontmatter]
+---
+
+# Authoring for retrieval
+
+A document is only useful to an agent if it can be *found*. Two cheap habits do
+most of the work.
+
+## 1. Structure
+
+- Open every document with one \`# H1\` that names the thing.
+- Give sections meaningful \`##\` headings a reader would search for.
+- One topic per document. Split when it grows two.
+
+## 2. Frontmatter
+
+Frontmatter is parsed, stored, returned in every search result, and
+**filterable**. Useful keys:
+
+\`\`\`markdown
+---
+title: Deploy runbook          # indexed, shown, drives the page list
+type: runbook                  # your own vocabulary; filter on it
+status: current                # current | superseded | deprecated | draft
+owner: platform                # who to route a correction to
+date: 2026-07-01               # when it was written / last reviewed
+tags: [ops, deploy]            # filterable, adds lexical surface
+---
+\`\`\`
+
+An agent can read these off a result and filter by them (e.g. only
+\`status: current\`).
+
+## What the Pro engine adds
+
+In this open-source engine these fields are **metadata your agent can read and
+filter**. The Pro engine additionally makes them drive *ranking* — a
+\`status: superseded\` document is demoted so it stops outranking the current
+one, and heading structure boosts relevance. Same frontmatter, more leverage.
 `;
 
 const GITIGNORE_TEMPLATE = `.remember/
@@ -249,8 +229,8 @@ const PACKAGE_TEMPLATE = (name: string) => ({
     status: 'remember status',
   },
   dependencies: {
-    '@useremember/core': '*',
-    '@useremember/viewer': '*',
+    // Pinned to a real published range; `*` reads as "unmaintained" on a scaffold.
+    '@useremember/core': '^0.2.0',
   },
 });
 
@@ -259,7 +239,6 @@ const ENV_EXAMPLE_TEMPLATE = `# Copy to .env and fill in if you want to override
 
 # REMEMBER_HOST=127.0.0.1
 # REMEMBER_API_PORT=4320
-# REMEMBER_PORT=4321
 
 # Required if you bind to a non-loopback host (e.g. 0.0.0.0 for remote access).
 # Also gates remote reads when set.
@@ -298,7 +277,6 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
   const adminToken = opts.noToken ? null : generateAdminToken();
 
   await fs.mkdir(path.join(absTarget, 'content'), { recursive: true });
-  await fs.writeFile(path.join(absTarget, 'content', 'README.md'), README_TEMPLATE);
   await fs.writeFile(path.join(absTarget, 'remember.config.ts'), CONFIG_TEMPLATE({ adminToken }));
   await fs.writeFile(path.join(absTarget, '.gitignore'), GITIGNORE_TEMPLATE);
   await fs.writeFile(path.join(absTarget, '.rememberignore'), REMEMBERIGNORE_TEMPLATE);
@@ -308,34 +286,39 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     JSON.stringify(PACKAGE_TEMPLATE(basename), null, 2) + '\n',
   );
 
+  // Seed exactly three purposeful documents. getting-started.md is the entry
+  // point a human reads first. A `blank` template seeds only that one; the
+  // `starter` default adds the agent + authoring guides.
+  await fs.writeFile(path.join(absTarget, 'content', 'getting-started.md'), GETTING_STARTED_TEMPLATE);
   if (template === 'starter') {
-    await fs.writeFile(path.join(absTarget, 'content', 'getting-started.md'), GETTING_STARTED_TEMPLATE);
-    await fs.mkdir(path.join(absTarget, 'content', 'examples'), { recursive: true });
-    await fs.writeFile(
-      path.join(absTarget, 'content', 'examples', 'with-frontmatter.md'),
-      EXAMPLE_FRONTMATTER_TEMPLATE,
-    );
+    await fs.writeFile(path.join(absTarget, 'content', 'agents.md'), AGENTS_TEMPLATE);
+    await fs.writeFile(path.join(absTarget, 'content', 'authoring.md'), AUTHORING_TEMPLATE);
   }
 
   const lines = [
     ``,
-    `✓ Initialized remember wiki in ${absTarget}`,
+    success(`Initialized remember wiki in ${c.bold(absTarget)}`),
     ``,
-    `Next steps:`,
-    `  cd ${targetDir}`,
-    `  pnpm install            # or: npm install`,
-    `  pnpm dev                # or: npx @useremember/core dev`,
+    header('Next steps'),
+    `  ${c.dim('$')} cd ${targetDir}`,
+    `  ${c.dim('$')} npm install`,
+    `  ${c.dim('$')} npm run dev          ${c.dim('# index + serve the agent API')}`,
+    `  ${c.dim('$')} remember search "…"  ${c.dim('# search from the terminal')}`,
     ``,
-    `Then open http://localhost:4321 — the in-browser setup wizard walks you through configuration.`,
+    `  ${c.dim('API')}  ${c.accent('http://localhost:4320')}   ${c.dim('search + agent endpoints')}`,
+    ``,
+    c.dim(`First run downloads a ~100 MB embedding model, then caches it — you'll`),
+    c.dim(`see progress in the terminal.`),
   ];
   if (adminToken) {
     lines.push(
       ``,
-      `Admin token (also written to remember.config.ts):`,
-      `  ${adminToken}`,
+      header('Admin token'),
+      c.dim(`(also saved to remember.config.ts)`),
+      `  ${c.yellow(adminToken)}`,
       ``,
-      `Use it as the REMEMBER_ADMIN_TOKEN env var, or paste it into the Admin UI when prompted.`,
-      `Required to bind to a non-loopback host or to write/edit from a remote machine.`,
+      c.dim(`You only need it by hand for direct API writes (Authorization: Bearer`),
+      c.dim(`<token>) or to bind on a non-loopback host for remote access.`),
     );
   }
   lines.push('');

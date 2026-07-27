@@ -64,7 +64,32 @@ describe('HTTP API (wired)', () => {
   it('GET /v1/health', async () => {
     const res = await app.request('/v1/health');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: '0.1.0' });
+    expect(await res.json()).toEqual({ ok: true, version: '0.2.0' });
+  });
+
+  // 0.1.1 security: /v1/config must never return the raw adminToken value.
+  it('GET /v1/config redacts the adminToken from the payload', async () => {
+    const emb = createHashEmbedder(384);
+    const secured = createApp({
+      contentRoot: tmp,
+      store,
+      embedder: emb,
+      search: createHybridSearchEngine(store, emb, createPassthroughReranker()),
+      reindex: async () => ({ files_indexed: 0, chunks_added: 0, duration_ms: 0 }),
+      adminToken: 'super-secret-token',
+      boundHost: '127.0.0.1', // loopback → trusted-local read, the exposure case
+      getConfig: () => ({
+        content: tmp,
+        server: { host: '127.0.0.1', port: 4321, apiPort: 4320, adminToken: 'super-secret-token' },
+        viewer: { landing: 'README.md', showAdmin: true, breadcrumbs: true },
+        schemaVersion: 1,
+      }),
+    });
+    const res = await secured.request('/v1/config');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { config: { server: { adminToken: string | null } } };
+    expect(body.config.server.adminToken).not.toBe('super-secret-token');
+    expect(JSON.stringify(body)).not.toContain('super-secret-token');
   });
 
   it('GET /v1/search returns results', async () => {

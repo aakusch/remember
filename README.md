@@ -2,23 +2,19 @@
 
 # remember
 
-**Search built for agents. Local-first and open source.**
+**Search built for agents. Local-first, CLI-first, open source.**
 
 A free, open-source retrieval engine for Markdown knowledge. It indexes,
-ranks, and serves source-cited evidence to humans and agents—entirely on your
-machine by default.
+ranks, and serves source-cited evidence to humans and agents — entirely on your
+machine by default. Drive it from a rich terminal CLI or a small HTTP API.
 
 [![CI](https://github.com/aakusch/remember/actions/workflows/ci.yml/badge.svg)](https://github.com/aakusch/remember/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node ≥ 20](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](.nvmrc)
 
-[Quickstart](#quickstart) · [Tour](#a-quick-tour) · [Tutorial](./docs/getting-started.md) · [Architecture](./docs/architecture.md)
+[Quickstart](#quickstart) · [The CLI](#the-cli) · [Tutorial](./docs/getting-started.md) · [Architecture](./docs/architecture.md)
 
 </div>
-
-<br>
-
-![Page detail with TOC, breadcrumbs, tag pills, and edit pill](./docs/images/02-page-detail.png)
 
 <br>
 
@@ -28,14 +24,25 @@ machine by default.
 npx @useremember/core init my-wiki
 cd my-wiki
 pnpm install     # or: npm install
-pnpm dev
+pnpm dev         # index, then serve the agent API with a live file watcher
 ```
 
-Then open **<http://localhost:4321>**.
+Then, in another terminal, search it:
 
-That's the entire install. No API keys required. Zero outbound network calls in the default configuration. The bundled ONNX embedding model downloads once on first index (~80 MB) and is cached locally.
+```bash
+remember search "how do deploys work" -k 5
+```
+
+That's the entire install. No API keys required. Zero outbound network calls in
+the default configuration. The bundled ONNX embedding model downloads once on
+first index (~80 MB) and is cached locally.
 
 Other install paths: [from source](#from-source) · [Docker](#docker).
+
+> **Looking for the browser UI?** As of v0.2.0 the open-source engine is
+> **CLI + API only**. The browser viewer/editor is now a **Pro** feature, and
+> the previously-published `@useremember/viewer` npm package is deprecated. The
+> OSS experience is the terminal CLI documented below.
 
 <br>
 
@@ -44,103 +51,67 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
+| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `status` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
+| **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, and `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call). |
 | **Local embeddings** | Bundled `BAAI/bge-small-en-v1.5` ONNX model (384-d). OpenAI is opt-in via `OPENAI_API_KEY`. |
-| **AI tool definitions** | `GET /v1/tools` returns Anthropic/OpenAI-shaped definitions — drop into a tool-use call. |
-| **Browser editor** | Split-pane markdown + live preview. Slash command palette (`/h1`, `/code`, `/table`, `/mermaid`, 16 more). `⌘/Ctrl+S` saves. |
-| **Table view** | Query frontmatter as a sortable, filterable table. Bookmark URLs as saved views. |
-| **Multi-tab nav** | Sticky tab strip persisted in `localStorage`. Up to 12 tabs. |
-| **Live reload** | Filesystem watcher → incremental reindex → SSE → viewer auto-refreshes. Edits in your editor of choice show up in <1 s. |
+| **Live reload** | Filesystem watcher → incremental reindex in <1 s. Edit in your editor of choice; the index keeps up. |
 | **Connectors** | Pull external sources (Obsidian vault, Granola meetings, any folder) into the same searchable index. |
-| **Setup wizard** | Browser-based config with presets, model dropdown, and a "CHANGED" diff against the loaded config. Writes `remember.config.ts` directly. |
 | **Filesystem-canonical** | Plain markdown in a directory. Plays with Obsidian, Cursor, VS Code, Dropbox, git. No proprietary format. |
 | **Pluggable** | Walker · Parser · Chunker · Embedder · Store · SearchEngine · Reranker · Connector — every adapter has a documented interface. |
 | **MIT licensed** | Use it for anything. |
 
 <br>
 
-## A quick tour
+## The CLI
 
-### Landing page
+Everything the OSS engine does is a `remember` subcommand. Run `remember help`
+for the full list, or `remember help <command>` for per-command help.
 
-The viewer renders the configured landing markdown (`viewer.landing` in `remember.config.ts`, defaults to `README.md`). Sidebar tree shows the full folder hierarchy; tabs at the top track your open pages.
-
-![Home page](./docs/images/01-home.png)
-
-### Two collapsible left rails
-
-Two independent left panels — a **Workspace rail** with icon-based admin links (Dashboard, Setup, Reindex, Files, Table view, Connectors, Settings, Diagnostics) and a **Pages tree** showing your wiki hierarchy. Each panel collapses to a narrow strip with a single chevron toggle; state persists in `localStorage` across reloads.
-
-![Two collapsible left rails — admin workspace + pages tree, page detail with breadcrumbs, tag pills, TOC](./docs/images/02-page-detail.png)
-
-Collapsed state — both rails shrunk to single-button strips, maximum content width:
-
-![Both rails collapsed](./docs/images/09-rails-collapsed.png)
-
-### Page detail
-
-Every content page gets breadcrumbs, frontmatter tags rendered as pills, a heading-anchored table of contents on the right, prev/next nav at the bottom, and an ✎ Edit pill that drops you into the browser editor.
-
-### Hybrid search
-
-Type into the search bar (top right of every page) or visit `/search`. Each result shows which retrievers contributed (BM25, vector, or both) and the fused score. Add `?debug=1` to the API URL for the structured ranking trace and per-stage timings.
-
-![Search results](./docs/images/03-search.png)
-
-### Retrieval benchmark
-
-Search changes are checked against a versioned 30-query fixture spanning
-exact, semantic, ambiguous, multi-document, contradictory, and unanswerable
-cases. The deterministic CI profile is fully offline:
-
-```bash
-pnpm --filter @useremember/core benchmark -- \
-  --profile ci \
-  --output ../../benchmarks/results/latest-ci.json
+```
+remember init <dir>       Scaffold a new wiki (config + content + starter docs)
+remember dev              Index, then serve the agent API with a file watcher
+remember start            Serve the production API (assumes the index is built)
+remember index            (Re)index the content directory
+remember search "<q>"     Hybrid search, formatted result cards (or --json)
+remember status           Dashboard: page/chunk counts, model, index freshness
+remember benchmark        Versioned retrieval evaluation
 ```
 
-It reports recall@1/5/10, candidate recall, MRR, nDCG@5/10,
-wrong-source/empty-result rates, latency percentiles, per-query failures, and
-per-class breakdowns. The separate `fast` release profile uses local BGE
-embeddings and may download that model when explicitly selected. See
-[`benchmarks/retrieval/README.md`](./benchmarks/retrieval/README.md).
+### `remember search`
 
-### In-browser editor with slash commands
+```bash
+remember search "rollback procedure" -k 5
+```
 
-Click ✎ Edit on any page. The editor has a markdown source pane and a live preview side-by-side. Type `/` at the start of a line for the command palette — 20 commands covering headings, lists, code blocks, tables, math, mermaid diagrams, frontmatter scaffolds, and more.
+Prints ranked cards — rank, score, path, title, and a query-relevant snippet
+with the matched terms highlighted. Flags:
 
-![Editor with slash menu](./docs/images/08-editor-slash.png)
+- `-k <n>` — number of results (default 10, max 50)
+- `--json` — clean, color-free machine output for scripts and agents
+- `--open` — open the top result in `$EDITOR` (falls back to `$PAGER` / `less`)
 
-### Admin dashboard
+```bash
+# Feed an agent or a script:
+remember search "auth flow" --json | jq '.results[0].path'
+```
 
-`/admin` is the operator surface. Each card is a workflow: setup, reindex, structural file ops, table view, connectors, config display, diagnostics.
-
-![Admin dashboard](./docs/images/04-admin-dashboard.png)
-
-### Table view — query frontmatter as data
-
-Define your taxonomy in YAML frontmatter, then slice it however you want. Filter rules AND together; sort by any column (system or frontmatter); pick columns; bookmark the URL to save the view.
-
-![Table view](./docs/images/05-table-view.png)
-
-### Setup wizard
-
-`/admin/setup` builds a `remember.config.ts` interactively. Pick from 4 preset profiles (local quickstart, lightweight local, OpenAI-powered, team/remote with auto-generated admin token), tune any field, and save directly to disk with a timestamped `.bak` backup.
-
-![Setup wizard](./docs/images/06-setup-wizard.png)
-
-### Connectors
-
-Pull external markdown sources into your index. The ObsidianConnector walks a vault and rewrites `[[wikilinks]]`; the GranolaConnector pulls meetings via HTTP/API; the FilesystemConnector syncs any folder. Synced files land under `content/external/<connector>/` and flow through the normal indexing pipeline.
-
-![Connectors page](./docs/images/07-connectors.png)
+Color is enabled on a TTY and disabled automatically when piped or when
+`NO_COLOR` is set, so redirected output and CI logs stay clean.
 
 <br>
 
 ## How AI plugs in
 
-Two patterns, no special integration:
+Two patterns, no special integration.
 
-**Pattern A — raw HTTP** (any client that can `curl`):
+**Pattern A — the CLI, as a tool** (any agent that can run a shell command):
+
+```bash
+remember search "how do I rollback" -k 5 --json
+```
+
+**Pattern B — raw HTTP** (any client that can `curl`):
 
 ```bash
 curl 'http://localhost:4320/v1/search?q=how+do+I+rollback&k=5'
@@ -162,13 +133,35 @@ curl 'http://localhost:4320/v1/search?q=how+do+I+rollback&k=5'
 }
 ```
 
-**Pattern B — drop-in tool definitions** (Claude, GPT, any tool-calling LLM):
+**Pattern C — drop-in tool definitions** (Claude, GPT, any tool-calling LLM):
 
 ```bash
 curl http://localhost:4320/v1/tools
 ```
 
-Returns Anthropic/OpenAI-compatible tool definitions for `search_wiki`, `get_page`, `list_pages`. Drop them straight into a tool-use call — no wiring code needed.
+Returns Anthropic/OpenAI-compatible tool definitions for `search_wiki`,
+`get_page`, `list_pages`. Drop them straight into a tool-use call — no wiring
+code needed.
+
+<br>
+
+## Retrieval benchmark
+
+Search changes are checked against a versioned 30-query fixture spanning
+exact, semantic, ambiguous, multi-document, contradictory, and unanswerable
+cases. The deterministic CI profile is fully offline:
+
+```bash
+pnpm --filter @useremember/core benchmark -- \
+  --profile ci \
+  --output ../../benchmarks/results/latest-ci.json
+```
+
+It reports recall@1/5/10, candidate recall, MRR, nDCG@5/10,
+wrong-source/empty-result rates, latency percentiles, per-query failures, and
+per-class breakdowns. The separate `fast` release profile uses local BGE
+embeddings and may download that model when explicitly selected. See
+[`benchmarks/retrieval/README.md`](./benchmarks/retrieval/README.md).
 
 <br>
 
@@ -197,7 +190,8 @@ export default defineConfig({
 });
 ```
 
-The connector manager runs an initial sync on boot, then exposes per-connector and "sync all" triggers through `/v1/connectors` and `/admin/connectors`.
+The connector manager runs an initial sync on boot, then exposes per-connector
+and "sync all" triggers through `/v1/connectors`.
 
 <br>
 
@@ -221,10 +215,12 @@ git clone https://github.com/aakusch/remember.git
 cd remember
 pnpm install
 pnpm --filter @useremember/core build
-./scripts/dev.sh                  # runs core + viewer side by side
+./scripts/dev.sh                  # indexes + serves examples/sample-wiki on :4320
 ```
 
-The `scripts/dev.sh` helper starts the API on :4320 against `examples/sample-wiki/` (25 pages, frontmatter-rich, runbook + ADR + product + people content), then the Astro viewer on :4321.
+The `scripts/dev.sh` helper starts the API on :4320 against
+`examples/sample-wiki/` (25 pages, frontmatter-rich, runbook + ADR + product +
+people content).
 
 ### Docker
 
@@ -232,7 +228,10 @@ The `scripts/dev.sh` helper starts the API on :4320 against `examples/sample-wik
 docker compose up
 ```
 
-See [`docker-compose.yml`](./docker-compose.yml) for volume mounts and env vars. The image is multi-stage (build in Node 20-slim, runtime is also slim with the build artifacts copied over) and runs `remember start` by default. Healthcheck on `/v1/health` every 15 s.
+See [`docker-compose.yml`](./docker-compose.yml) for volume mounts and env vars.
+The image is multi-stage (build in Node 20-slim, runtime is also slim with the
+build artifacts copied over) and runs `remember start` by default. Healthcheck
+on `/v1/health` every 15 s.
 
 <br>
 
@@ -245,7 +244,9 @@ import { defineConfig } from '@useremember/core';
 export default defineConfig({});
 ```
 
-Everything has sensible defaults. Use the in-browser **Setup wizard** at `/admin/setup` to build a config interactively, or hand-write one referencing [`examples/sample-wiki/remember.config.ts`](./examples/sample-wiki/remember.config.ts) for a comprehensive example.
+Everything has sensible defaults. Hand-write a config referencing
+[`examples/sample-wiki/remember.config.ts`](./examples/sample-wiki/remember.config.ts)
+for a comprehensive example.
 
 Full schema reference: [`docs/getting-started.md#configuration-reference`](./docs/getting-started.md#configuration-reference).
 
@@ -253,25 +254,27 @@ Full schema reference: [`docs/getting-started.md#configuration-reference`](./doc
 
 ## Architecture
 
-Two packages, one pnpm-workspaces monorepo:
+One package, published to npm:
 
-- **`@useremember/core`** — headless engine. CLI + HTTP API + indexer + search + adapters. Node-only. Standalone-usable.
-- **`@useremember/viewer`** — Astro 5 SSR browser UI. Optional; bring your own UI if you want.
+- **`@useremember/core`** — the headless engine. Rich CLI + HTTP API + indexer +
+  search + adapters. Node-only. Standalone-usable.
 
 ```
-┌─────────────────────┐         ┌─────────────────────┐
-│   @useremember/core    │  HTTP   │  @useremember/viewer   │
-│  ─────────────────  │ ◄─────► │  ─────────────────  │
-│  • CLI              │   SSE   │  • Astro + React    │
-│  • Indexer          │         │  • Renderer         │
-│  • HTTP API (Hono)  │         │  • Editor           │
-│  • Embedder         │         │  • Admin            │
-│  • SQLite + vec0    │         │  • Table view       │
-│  • Connectors       │         │  • Setup wizard     │
-└─────────────────────┘         └─────────────────────┘
+┌──────────────────────────────────────────┐
+│              @useremember/core            │
+│  ──────────────────────────────────────  │
+│  • CLI (init · dev · search · status …)   │
+│  • Indexer (walk → parse → chunk → embed) │
+│  • HTTP API (Hono): /v1/search /v1/tools  │
+│  • Embedder (local ONNX · OpenAI)         │
+│  • SQLite + vec0 store                     │
+│  • Connectors                              │
+└──────────────────────────────────────────┘
 ```
 
-Full architecture deep dive: [`docs/architecture.md`](./docs/architecture.md).
+The browser viewer/editor is a **Pro** feature and lives outside this
+repository. Full architecture deep dive:
+[`docs/architecture.md`](./docs/architecture.md).
 
 <br>
 
@@ -280,27 +283,22 @@ Full architecture deep dive: [`docs/architecture.md`](./docs/architecture.md).
 | Version | Highlights |
 |---|---|
 | v0.0.1 | Lean local-first OSS foundation |
-| **v0.1** | Retrieval benchmark, corrected candidate pipeline, optional intent, structured traces, evidence packages — *current* |
-| v0.2 | Block-level references, backlinks panel, branding/theme |
+| v0.1 | Retrieval benchmark, corrected candidate pipeline, optional intent, structured traces, evidence packages |
+| **v0.2** | **CLI-first OSS** — first-class `remember search`, formatted CLI output, browser UI moves to Pro — *current* |
 | v0.3 | RBAC + OIDC/SAML auth |
 | **v1.0** | First production-stable release |
 | v2.0 | **Cloud premium** — managed multi-tenant SaaS with pgvector + S3 + team workspaces |
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
-The core product direction is documented in
-[`docs/retrieval-intelligence.md`](./docs/retrieval-intelligence.md): keep
-deterministic hybrid retrieval as the offline foundation, measure it, improve
-candidate generation and reranking, then let Cloud synthesize separately
-metered cited Answers from the same bounded evidence.
 
 <br>
 
 ## Why this vs alternatives
 
-- **vs Obsidian** — `remember` runs a server, so it has a real HTTP API and a hybrid search index. Obsidian is desktop-only with no programmatic surface for AI agents.
+- **vs Obsidian** — `remember` runs a server and a CLI, so it has a real HTTP API and hybrid search index. Obsidian is desktop-only with no programmatic surface for AI agents.
 - **vs Notion / Confluence** — your files, your machine, your AI. No cloud lock-in, no per-seat pricing, no API rate limits.
 - **vs SiYuan** — markdown-canonical, not a proprietary `.sy` format. Plays nicely with git, Cursor, VS Code, Obsidian — anything that reads `.md`.
-- **vs Outline / BookStack** — designed *for* AI integration from day one. `/v1/tools` ships out of the box; you don't have to bolt on a separate AI layer.
+- **vs Outline / BookStack** — designed *for* AI integration from day one. `remember search --json` and `/v1/tools` ship out of the box; you don't have to bolt on a separate AI layer.
 
 <br>
 
@@ -314,7 +312,7 @@ PRs welcome on:
 - New embedder providers (Voyage, Cohere, etc.)
 - New rerankers (cross-encoder, LLM-based)
 - Query planners and retrieval evaluation fixtures
-- New viewer themes / layouts
+- CLI ergonomics and output formatting
 - New API clients (Python, Go, Rust)
 - Documentation improvements
 

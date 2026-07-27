@@ -9,7 +9,6 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     apiPort: 4320,
-    port: 4321,
   },
 
   pipeline: {
@@ -32,12 +31,6 @@ export default defineConfig({
         finalK: 10,
       },
     }),
-  },
-
-  viewer: {
-    landing: 'README.md',
-    showAdmin: true,
-    breadcrumbs: true,
   },
 
   // Pull external content into the index via connectors.

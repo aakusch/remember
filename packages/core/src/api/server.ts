@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { registerRoutes, type RouteContext } from './routes.js';
+import { VERSION } from '../version.js';
 
 export function createApp(ctx?: Partial<RouteContext>): Hono {
   const app = new Hono();
@@ -82,7 +83,7 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
 }
 
 function registerScaffoldRoutes(app: Hono): void {
-  app.get('/v1/health', (c) => c.json({ ok: true, version: '0.1.0' }));
+  app.get('/v1/health', (c) => c.json({ ok: true, version: VERSION }));
   const ni = (endpoint: string) => ({
     error: {
       code: 'NOT_IMPLEMENTED' as const,
@@ -95,6 +96,6 @@ function registerScaffoldRoutes(app: Hono): void {
   app.get('/v1/status', (c) => c.json(ni('GET /v1/status'), 501));
   app.get('/v1/tools', (c) => c.json(ni('GET /v1/tools'), 501));
   app.get('/v1/openapi.json', (c) =>
-    c.json({ openapi: '3.1.0', info: { title: 'remember (scaffold)', version: '0.1.0' }, paths: {} }),
+    c.json({ openapi: '3.1.0', info: { title: 'remember (scaffold)', version: VERSION }, paths: {} }),
   );
 }

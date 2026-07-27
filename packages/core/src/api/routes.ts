@@ -8,8 +8,7 @@ import { safeJoinContent, PathOutsideContentError } from './path-utils.js';
 import type { Embedder, SearchEngine, Store } from '../types.js';
 import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
-
-const VERSION = '0.1.0';
+import { VERSION } from '../version.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -526,8 +525,18 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Config
   app.get('/v1/config', (c) => {
+    // Security: this endpoint is read-gated by the global /v1/* checkRead
+    // middleware, but it dumped the raw adminToken (which gates writes / RCE via
+    // PUT /v1/config) to every read-authorized caller — including any local
+    // process on a loopback bind. Redact the token from the payload so its value
+    // never crosses the wire. Read access to the non-secret config is unchanged.
+    const config = ctx.getConfig();
+    const redacted = {
+      ...config,
+      server: { ...config.server, adminToken: config.server.adminToken ? '***redacted***' : null },
+    };
     return c.json({
-      config: ctx.getConfig(),
+      config: redacted,
       config_path: ctx.configPath,
       config_root: ctx.configRoot,
     });

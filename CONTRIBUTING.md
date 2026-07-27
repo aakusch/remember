@@ -16,20 +16,23 @@ Requirements: Node 20+, pnpm 9+.
 
 ## Run the dev stack
 
-Two terminals:
+The OSS engine is CLI + API only. Serve the bundled sample wiki:
 
 ```bash
-# Terminal 1 — core API on :4320 with the bundled sample wiki
+# Index + serve the agent API on :4320 with the bundled sample wiki
+./scripts/dev.sh
+# …or by hand:
 cd examples/sample-wiki
-node ../../packages/core/bin/remember.js start
+node ../../packages/core/bin/remember.js dev
 ```
+
+Then search it from another terminal:
 
 ```bash
-# Terminal 2 — viewer on :4321
-pnpm --filter @useremember/viewer dev
+node packages/core/bin/remember.js search "deploy runbook" -k 5
+# or hit the API directly:
+curl 'http://localhost:4320/v1/search?q=deploy&k=5'
 ```
-
-Then open http://localhost:4321 to browse and edit.
 
 ## Repo layout
 
@@ -51,12 +54,6 @@ remember/
         stores/   sqlite-vec (with pages, page_attrs, fts_chunks, vec_chunks)
         walkers/  chokidar walker with ignore rules
       tests/      vitest
-    viewer/       @useremember/viewer — Astro 5 SSR
-      src/
-        layouts/  Layout.astro (header, sidebar, tab bar, footer, global CSS)
-        components/  Sidebar, TreeItem, Breadcrumbs, Toc
-        lib/      api client + tree helpers
-        pages/    `/`, `/[...slug]`, `/search`, `/admin/*`
   examples/
     sample-wiki/  Reference wiki used in tests + as `remember init` source
     sample-vault/ Mock Obsidian vault used by the obsidian connector demo

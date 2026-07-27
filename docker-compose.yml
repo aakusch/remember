@@ -4,10 +4,9 @@ services:
     image: remember:local
     container_name: remember
     restart: unless-stopped
-    # Bind both ports; viewer on 4321, API on 4320.
+    # The CLI + agent API listens on 4320.
     ports:
       - "127.0.0.1:4320:4320"
-      - "127.0.0.1:4321:4321"
     volumes:
       # Mount your wiki content + config. Edit ./my-wiki on the host; container reads/writes it.
       - ./my-wiki:/wiki
@@ -16,7 +15,6 @@ services:
       # restricts external access to 127.0.0.1 by default.
       REMEMBER_HOST: 0.0.0.0
       REMEMBER_API_PORT: "4320"
-      REMEMBER_PORT: "4321"
       # Recommended for any non-trivial deployment. Without a token,
       # remember refuses non-loopback binds on the host outside Docker.
       REMEMBER_ADMIN_TOKEN: ${REMEMBER_ADMIN_TOKEN:-}

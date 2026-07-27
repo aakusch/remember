@@ -3,6 +3,54 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [0.2.0] - 2026-07-27
+
+The open-source engine becomes **CLI + API only**. The browser UI is now a
+**Pro** feature; the previously-published `@useremember/viewer` npm package is
+**deprecated** and is no longer part of the OSS product. The terminal CLI is
+now the OSS user experience, and it got a substantial build-out.
+
+### Added
+
+- **`remember search "<query>"`** — first-class hybrid search from the terminal
+  (previously only available over HTTP). Formatted result cards with rank,
+  score, path, title, and a query-relevant snippet with matched terms
+  highlighted. Flags: `-k <n>`, `--json` (clean, color-free machine output for
+  scripts and agents), `--open` (open the top result in `$EDITOR`/`$PAGER`).
+- **Rich, consistent CLI formatting** across `init`, `dev`, `start`, `index`,
+  and `status`: aligned columns, section headers, a restrained color palette,
+  and clear success/error states. `status` is now a tidy dashboard (page count,
+  chunk count, model, index freshness).
+- **Well-formatted help**: `remember help`, `remember help <command>`, and
+  `remember <command> --help`, each with real examples.
+- Color support respects `NO_COLOR` and auto-disables on non-TTY output
+  (pipes, redirects, CI logs).
+
+### Changed
+
+- **The browser UI moved to Pro.** OSS ships CLI + API only. `remember dev` now
+  starts the API + file watcher and prints a clean CLI-focused startup block —
+  no browser-UI framing, no "install `@useremember/viewer`" hint.
+- `remember init` scaffolds a CLI/API product: the generated `package.json` no
+  longer depends on `@useremember/viewer`, and the generated `remember.config.ts`
+  and seeded docs read as a CLI + API product. Much lighter install (no Astro,
+  no `@astrojs/node`).
+- Single-sourced version bumped to `0.2.0` (CLI, HTTP API `/v1/health`,
+  OpenAPI).
+
+### Removed
+
+- `packages/viewer` (`@useremember/viewer`) is removed from the OSS repository,
+  workspace, CI, Docker image, and scaffold. The published npm package is
+  deprecated (see note above).
+
+### Fixed
+
+- **Model-download progress** is now clean on both a TTY (a single overwriting
+  line) and a non-TTY/pipe (throttled, one line per file per 10% step, one
+  `100%` per file). Previously, piping `remember dev`/`remember index` to a file
+  spammed hundreds of repeated `tokenizer.json: 100%` lines.
+
 ## [0.1.0] - 2026-07-23
 
 ### Added

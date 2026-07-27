@@ -19,8 +19,8 @@ import {
   runEvaluation,
 } from '../../evaluation/index.js';
 import type { EvaluationRun } from '../../evaluation/types.js';
+import { VERSION as CORE_VERSION } from '../../version.js';
 
-const CORE_VERSION = '0.1.0';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
 
 export async function benchmarkCommand(argv: string[]): Promise<void> {

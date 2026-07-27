@@ -25,12 +25,17 @@ export async function resolveEmbedder(raw: RememberConfig): Promise<Embedder> {
   // Check optional dependency presence without forcing a model download.
   try {
     await import('@huggingface/transformers');
-  } catch (err) {
+  } catch {
+    // Loud on purpose: on the hash embedder, search RUNS but returns
+    // semantically meaningless results. A quiet fallback reads as "bad search
+    // quality" instead of "missing a dependency" — the worst onboarding trap.
     process.stderr.write(
-      `[remember] @huggingface/transformers not installed; falling back to hash embedder ` +
-        `(deterministic but not semantically meaningful). Install it for real local embeddings:\n` +
-        `  pnpm --filter @useremember/core add @huggingface/transformers\n` +
-        `Underlying: ${(err as Error).message}\n`,
+      `\n` +
+        `  ⚠  remember is using the PLACEHOLDER embedder — search will return\n` +
+        `     meaningless results. Real semantic search needs one of:\n` +
+        `       • npm install @huggingface/transformers   (free, local, recommended)\n` +
+        `       • set OPENAI_API_KEY in your environment    (uses OpenAI embeddings)\n` +
+        `     Then restart. See https://github.com/aakusch/remember#embeddings\n\n`,
     );
     return createHashEmbedder(384);
   }

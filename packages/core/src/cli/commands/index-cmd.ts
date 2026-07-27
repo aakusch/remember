@@ -6,21 +6,36 @@ import { createSmartSplitChunker } from '../../chunkers/smart-split.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { createIndexer } from '../../indexer/index.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
+import { VERSION } from '../../version.js';
+import { banner, header, keyValues, success, c, fmtMs, plural, IS_TTY } from '../format.js';
 
+/**
+ * `remember index` — (re)index the content directory into the local store.
+ */
 export async function indexCommand(): Promise<void> {
   const cfg = await loadConfig(process.cwd());
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
+  const contentDisplay = path.relative(process.cwd(), contentRoot) || '.';
+  const out = process.stdout;
 
-  process.stdout.write(`remember index: scanning ${contentRoot}\n`);
+  out.write(`\n${banner(VERSION)}  ${c.dim('index')}\n`);
 
   const embedder = await resolveEmbedder(cfg.raw);
-  process.stdout.write(`  embedder: ${embedder.modelId} (${embedder.dim}-d)\n`);
-
   const store = await createSqliteVecStore({
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
     dim: embedder.dim,
   });
   store.setDimension(embedder.dim);
+
+  out.write(
+    header('scanning') +
+      '\n' +
+      keyValues([
+        ['content', contentDisplay],
+        ['embedder', `${embedder.modelId} ${c.dim(`(${embedder.dim}-d)`)}`],
+      ]) +
+      '\n\n',
+  );
 
   const indexer = createIndexer({
     walker: createChokidarWalker({ respectGitignore: true }),
@@ -30,17 +45,27 @@ export async function indexCommand(): Promise<void> {
     store,
   });
 
+  let lastFile = '';
   const result = await indexer.indexAll(contentRoot, (p) => {
-    if (p.stage === 'embed' && p.path) {
-      process.stdout.write(`  embedding ${p.path} (${p.total} chunks)\n`);
+    if (p.stage === 'embed' && p.path && p.path !== lastFile) {
+      lastFile = p.path;
+      // Overwrite on a TTY; one line per file on a pipe (no spam).
+      const line = `  ${c.dim('embedding')} ${p.path} ${c.dim(`(${p.total} chunks)`)}`;
+      if (IS_TTY) out.write(`\r${line}\x1b[K`);
+      else out.write(line + '\n');
     }
   });
+  if (IS_TTY && lastFile) out.write('\r\x1b[K');
 
   store.close();
 
-  process.stdout.write(
-    `\nDone in ${result.duration_ms}ms\n` +
-      `  ${result.files_indexed} files indexed (${result.files_skipped} unchanged, ${result.files_deleted} removed)\n` +
-      `  ${result.chunks_added} chunks added\n`,
+  out.write(
+    `${success(`indexed ${c.bold(plural(result.files_indexed, 'file'))} ${c.dim(`in ${fmtMs(result.duration_ms)}`)}`)}\n` +
+      keyValues([
+        ['added', c.bold(plural(result.chunks_added, 'chunk'))],
+        ['unchanged', plural(result.files_skipped, 'file')],
+        ['removed', plural(result.files_deleted, 'file')],
+      ]) +
+      '\n',
   );
 }
