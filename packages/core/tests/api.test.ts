@@ -203,4 +203,13 @@ describe('HTTP API (wired)', () => {
     expect(body.openapi).toMatch(/^3\./);
     expect(Object.keys(body.paths).length).toBeGreaterThan(0);
   });
+
+  it('unknown route returns a structured JSON 404, not plain text', async () => {
+    const res = await app.request('/v1/bogus');
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    const body = (await res.json()) as { error: { code: string; message: string; hint?: string } };
+    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.message).toContain('/v1/bogus');
+  });
 });

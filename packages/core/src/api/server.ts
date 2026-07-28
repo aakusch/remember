@@ -7,6 +7,22 @@ import { VERSION } from '../version.js';
 export function createApp(ctx?: Partial<RouteContext>): Hono {
   const app = new Hono();
 
+  // Unknown route → structured JSON, matching every other error on the API.
+  // Why: the default Hono 404 is plain-text "404 Not Found", which an agent
+  // parsing `error.code` off the body chokes on. Keep the whole surface JSON.
+  app.notFound((c) =>
+    c.json(
+      {
+        error: {
+          code: 'NOT_FOUND',
+          message: `No route for ${c.req.method} ${new URL(c.req.url).pathname}`,
+          hint: 'GET /v1/capabilities lists every available endpoint.',
+        },
+      },
+      404,
+    ),
+  );
+
   // Global error handler — captures any uncaught route exception into the
   // log buffer so the Diagnostics page can show "what just broke" without
   // requiring the user to dig through stdout.
