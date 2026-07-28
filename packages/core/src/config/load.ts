@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createJiti } from 'jiti';
 import { configSchema, type ValidatedConfig } from './schema.js';
 import type { RememberConfig } from '../types.js';
@@ -9,6 +10,39 @@ const CONFIG_NAMES = [
   'remember.config.mjs',
   'remember.config.js',
 ];
+
+/**
+ * The scaffolded remember.config.ts does
+ * `import { defineConfig, defaults } from '@useremember/core'`. When the CLI is
+ * installed globally (`npm i -g @useremember/core`) and run inside a wiki that
+ * never ran a local `npm install`, jiti — resolving from the project dir — can't
+ * find `@useremember/core` in any node_modules above the config, and loading
+ * fails. Point that bare specifier (and its subpaths) at THIS very package's
+ * build, wherever the CLI itself is installed, so a global install just works.
+ *
+ * `import.meta.url` here is <pkg>/dist/config/load.js; '../' is <pkg>/dist,
+ * whose index.js is the package entry and whose subdirs mirror the "./x"
+ * export map. A directory target lets jiti resolve both the bare name (→
+ * dist/index.js) and subpath exports (→ dist/<subpath>.js).
+ */
+const SELF_DIST_DIR = fileURLToPath(new URL('../', import.meta.url));
+const SELF_ALIAS: Record<string, string> = {
+  '@useremember/core': SELF_DIST_DIR,
+};
+
+/** True when a module-resolution failure is about our own package specifier. */
+function isCoreResolutionError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  const code = e?.code;
+  const msg = e?.message ?? '';
+  return (
+    (code === 'ERR_MODULE_NOT_FOUND' ||
+      code === 'MODULE_NOT_FOUND' ||
+      code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' ||
+      /cannot find|could not (?:load|resolve)|failed to resolve/i.test(msg)) &&
+    /@useremember\/core/.test(msg)
+  );
+}
 
 export interface LoadedConfig {
   raw: RememberConfig;
@@ -36,8 +70,29 @@ export async function loadConfig(rootDir: string): Promise<LoadedConfig> {
   if (configPath) {
     // moduleCache: false — required for hot-reload to actually pick up
     // a re-written config file. Without it, jiti returns the cached module.
-    const jiti = createJiti(absRoot, { interopDefault: true, moduleCache: false });
-    const mod = (await jiti.import(configPath)) as RememberConfig | { default: RememberConfig };
+    // alias — resolves `@useremember/core` to this installed build so a global
+    // CLI works in a project that never ran `npm install` (see SELF_ALIAS).
+    const jiti = createJiti(absRoot, {
+      interopDefault: true,
+      moduleCache: false,
+      alias: SELF_ALIAS,
+    });
+    let mod: RememberConfig | { default: RememberConfig };
+    try {
+      mod = (await jiti.import(configPath)) as RememberConfig | { default: RememberConfig };
+    } catch (err) {
+      if (isCoreResolutionError(err)) {
+        throw new Error(
+          `Could not load ${path.basename(configPath)}: it imports "@useremember/core", ` +
+            `which isn't resolvable from ${absRoot}.\n` +
+            `Fix it with either:\n` +
+            `  • npm install            (installs @useremember/core into this project), or\n` +
+            `  • npm install -g @useremember/core   (if you meant to use the global CLI)\n` +
+            `Underlying error: ${(err as Error).message}`,
+        );
+      }
+      throw err;
+    }
     raw = ('default' in (mod as object) ? (mod as { default: RememberConfig }).default : mod) as RememberConfig;
   }
 
