@@ -44,6 +44,16 @@ export interface HybridSearchOptions {
    * reranked candidate list until the requested number of pages is filled.
    */
   dedupByPage?: boolean;
+  /**
+   * OPT-IN, OFF BY DEFAULT. When true, break exact ties among fused RRF
+   * results by lexical-overlap density (fraction of distinct query terms
+   * present in a hit's text, then raw term frequency). This ONLY reorders
+   * candidates that share an identical fused score — it never changes the
+   * relative order of candidates whose fused scores differ, so it cannot
+   * regress well-separated results. Off => output is byte-for-byte identical
+   * to the default engine. Measured, not promoted; see CHANGELOG 0.2.x.
+   */
+  lexicalTieBreak?: boolean;
 }
 
 export function createHybridSearchEngine(
@@ -76,6 +86,7 @@ export function createHybridSearchEngine(
   const pathBoostFactor = opts.pathBoostFactor ?? 2;
   const headingBoostFactor = opts.headingBoostFactor ?? 1;
   const dedupByPage = opts.dedupByPage ?? true;
+  const lexicalTieBreak = opts.lexicalTieBreak ?? false;
 
   return {
     async query(query, queryOpts = {}) {
@@ -197,8 +208,15 @@ export function createHybridSearchEngine(
         fusion.results.map((result) => [result.chunk_id, result.score] as const),
       );
 
+      // OPT-IN tie-breaker. Reorders only exact-score ties in the fused list;
+      // a no-op (identical array order) when the flag is off, so the default
+      // path stays byte-for-byte unchanged.
+      const fusedForSignals = lexicalTieBreak
+        ? breakLexicalTies(fusion.results, input.query)
+        : fusion.results;
+
       const signalsStarted = performance.now();
-      let signaled = applyPathBoost(fusion.results, input.query, pathBoostFactor);
+      let signaled = applyPathBoost(fusedForSignals, input.query, pathBoostFactor);
       signaled = applyHeadingBoost(signaled, input.query, headingBoostFactor);
       timings.signals_ms = elapsed(signalsStarted);
 
@@ -321,6 +339,65 @@ export function applyPathBoost(
   });
   boosted.sort((left, right) => right.score - left.score);
   return boosted;
+}
+
+/**
+ * OPT-IN, tie-only. Reorder runs of exactly-equal fused score by lexical
+ * overlap density: primary = fraction of distinct query terms present in the
+ * hit's text, secondary = raw query-term frequency. Candidates with different
+ * scores keep their relative order, so this can only shuffle genuine ties the
+ * fusion had no opinion on. Stable: equal-density ties keep their input order.
+ */
+export function breakLexicalTies(hits: SearchResult[], query: string): SearchResult[] {
+  const terms = tokenizeQuery(query);
+  if (terms.length === 0 || hits.length < 2) return hits;
+
+  const density = (hit: SearchResult): { overlap: number; frequency: number } => {
+    const haystack = lexicalHaystack(hit);
+    let overlap = 0;
+    let frequency = 0;
+    for (const term of terms) {
+      let count = 0;
+      let from = haystack.indexOf(term);
+      while (from !== -1) {
+        count++;
+        from = haystack.indexOf(term, from + term.length);
+      }
+      if (count > 0) overlap++;
+      frequency += count;
+    }
+    return { overlap: overlap / terms.length, frequency };
+  };
+
+  const out: SearchResult[] = [];
+  let runStart = 0;
+  const flushRun = (end: number): void => {
+    const run = hits.slice(runStart, end);
+    if (run.length > 1) {
+      const scored = run.map((hit, index) => ({ hit, index, ...density(hit) }));
+      scored.sort(
+        (a, b) => b.overlap - a.overlap || b.frequency - a.frequency || a.index - b.index,
+      );
+      for (const entry of scored) out.push(entry.hit);
+    } else {
+      out.push(...run);
+    }
+  };
+  for (let i = 1; i < hits.length; i++) {
+    if (hits[i]!.score !== hits[runStart]!.score) {
+      flushRun(i);
+      runStart = i;
+    }
+  }
+  flushRun(hits.length);
+  return out;
+}
+
+function lexicalHaystack(hit: SearchResult): string {
+  const title = typeof hit.frontmatter?.title === 'string' ? hit.frontmatter.title : '';
+  const headings = Array.isArray(hit.heading_path) ? hit.heading_path.join(' ') : '';
+  const pathText = hit.path.replace(/[/_\-.]+/g, ' ');
+  return `${hit.snippet} ${headings} ${title} ${pathText}`.toLowerCase();
 }
 
 function pathMatchFraction(hit: SearchResult, query: string): number {

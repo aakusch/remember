@@ -48,6 +48,9 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   // Optional RRF k override so before/after fusion sweeps are reproducible from
   // the committed CLI. Defaults to the engine's own default when unset.
   const rrfK = args.rrfK === undefined ? undefined : parsePositiveInteger(args.rrfK, '--rrf-k');
+  // OPT-IN lexical-overlap tie-breaker (off by default). Lets us measure the
+  // flag-on delta against the default-off baseline from the committed CLI.
+  const lexicalTieBreak = args.lexicalTieBreak ?? false;
 
   const cases = await loadEvaluationCases(questionsPath);
   const embedder =
@@ -83,6 +86,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       createPassthroughReranker(),
       {
         ...(rrfK === undefined ? {} : { rrfK }),
+        ...(lexicalTieBreak ? { lexicalTieBreak: true } : {}),
         limits: {
           perRetrieverK: candidateK,
           candidateK,
@@ -96,6 +100,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       createPassthroughReranker(),
       {
         ...(rrfK === undefined ? {} : { rrfK }),
+        ...(lexicalTieBreak ? { lexicalTieBreak: true } : {}),
         limits: {
           perRetrieverK: candidateK,
           candidateK,
@@ -184,6 +189,7 @@ interface BenchmarkArgs {
   rrfK?: string;
   warmup?: string;
   failOnRegression?: boolean;
+  lexicalTieBreak?: boolean;
   help?: boolean;
 }
 
@@ -194,6 +200,10 @@ function parseArgs(argv: string[]): BenchmarkArgs {
     if (token === '--') continue;
     if (token === '--fail-on-regression') {
       args.failOnRegression = true;
+      continue;
+    }
+    if (token === '--lexical-tiebreak') {
+      args.lexicalTieBreak = true;
       continue;
     }
     if (token === '-h' || token === '--help') {
@@ -309,6 +319,8 @@ OPTIONS:
   --k <number>            Final result limit (default: 10)
   --candidate-k <number>  Candidate recall limit (default: 20)
   --rrf-k <number>        RRF fusion k (default: engine default of 10)
+  --lexical-tiebreak      OPT-IN: break exact fused-score ties by lexical
+                          overlap density (off by default; measurement flag)
   --warmup <number>       Warmup queries excluded from latency (default: 2)
   --output <json>         Write machine-readable results
   --compare <json>        Print metric deltas against a prior result
