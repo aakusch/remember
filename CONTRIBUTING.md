@@ -60,7 +60,7 @@ remember/
   docs/
     getting-started.md
     architecture.md
-    superpowers/specs/  Design docs
+    retrieval-intelligence.md
   .github/workflows/    CI
   Dockerfile + docker-compose.yml
 ```

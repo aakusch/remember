@@ -1,6 +1,6 @@
 # Architecture
 
-A condensed view of how `remember` is built. The full design rationale lives in [`docs/superpowers/specs/2026-05-23-remember-platform-design.md`](./superpowers/specs/2026-05-23-remember-platform-design.md).
+A condensed view of how `remember` is built. For the retrieval pipeline in depth, see [`retrieval-intelligence.md`](./retrieval-intelligence.md).
 
 ## One package, one monorepo
 

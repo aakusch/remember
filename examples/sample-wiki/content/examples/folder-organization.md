@@ -26,7 +26,7 @@ content/
 
 ## Conventions
 
-- **`README.md` in a folder** acts as the index for that folder (rendered when the viewer hits the folder URL)
+- **`README.md` in a folder** acts as the index for that folder (the conventional entry point when browsing or fetching a folder)
 - **kebab-case filenames** — for clean URLs and consistent search
 - **frontmatter tags** — let AI agents filter (`GET /v1/pages?filter[tag]=runbook`)
 - **prefix with `_`** for private/system folders that should never be indexed (e.g. `_templates/`, `_archive/`)
@@ -34,20 +34,16 @@ content/
 
 ## Restructuring later
 
-Folders are not load-bearing. Use the admin panel to:
+Folders are not load-bearing. With `remember dev` running, just move the files:
 
-- **Move a page** between folders (drag-drop) → URL updates, search index updates, no manual sync
-- **Rename a folder** → every nested page's URL updates automatically
-- **Delete a folder** → recursive removal with confirmation; chunks deleted from the index
+- **Move a page** between folders → the watcher reindexes; no manual sync
+- **Rename a folder** → every nested page is reindexed under its new path
+- **Delete a folder** → the removed files' chunks drop out of the index
 
 `remember` doesn't commit the changes to git for you — review with `git diff`, commit when satisfied.
 
-## Naming the landing page
+## The landing page
 
-The viewer's `/` route renders whatever file you set in `remember.config.ts`:
-
-```ts
-viewer: {
-  landing: 'README.md',     // any markdown file relative to the content root
-}
-```
+`README.md` at the content root is the conventional entry point — the first
+page a human reads. It's an ordinary markdown file, indexed and searchable like
+any other; rename or relink it however suits your wiki.

@@ -7,7 +7,7 @@ tags: [welcome, getting-started]
 
 This is the landing page of your `remember` wiki — a local-first, AI-ready knowledge base.
 
-You're seeing this because the `viewer.landing` setting in `remember.config.ts` points here. Change that setting to any other markdown file to set a different landing page.
+This is the `README.md` at your wiki root — the conventional landing page. It's just another markdown file, indexed and searchable like the rest.
 
 ## What goes here
 
@@ -35,9 +35,9 @@ curl 'http://localhost:4320/v1/tools'
 
 ## Editing
 
-Edit any markdown file in your editor of choice — Obsidian, VS Code, Cursor, vim. Save the file and `remember` reindexes it within a second. Your changes show up immediately in the viewer and in search results.
+Edit any markdown file in your editor of choice — Obsidian, VS Code, Cursor, vim. With `remember dev` running, save the file and `remember` reindexes it within a second, so your changes show up immediately in search results.
 
-For folder operations (move, rename, delete), use the [admin panel](http://localhost:4321/admin/index) — it keeps the search index in sync automatically.
+For folder operations (move, rename, delete), just move the files — the watcher keeps the search index in sync. Or drive the write/admin routes on the HTTP API when you need to script it.
 
 ## Next
 

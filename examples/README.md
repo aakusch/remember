@@ -4,7 +4,7 @@ This directory ships two reference workspaces used by tests and demos.
 
 ## `sample-wiki/`
 
-A 25-page knowledge base across `engineering/`, `ops/`, `product/`, and `people/`. Comprehensive frontmatter — `tags`, `owner`, `severity`, `status`, etc. — so the table view (`/admin/views`) has interesting data to work with.
+A 25-page knowledge base across `engineering/`, `ops/`, `product/`, and `people/`. Comprehensive frontmatter — `tags`, `owner`, `severity`, `status`, etc. — so filtered queries (`GET /v1/pages?filter[tag]=runbook`) have interesting data to work with.
 
 It's also wired as a pnpm workspace package, so `@useremember/core` is symlinked. Run it directly:
 
