@@ -71,15 +71,60 @@ ${c.dim('Options')}
 ${c.dim('Examples')}
   remember search "deploy runbook"
   remember search "auth flow" -k 5
-  remember search "vector store" --json | jq '.results[0].path'`,
+  remember search "vector store" --json | jq -r '.results[0].path'`,
+  },
+  {
+    name: 'list',
+    summary: 'List indexed documents (table or --json)',
+    help: `${c.bold('remember list')} ${c.dim('[--limit <n>] [--sort <key>] [--json]')}
+
+List every indexed document as an aligned table — title, path, size, and when
+it was last indexed. Reads the local index directly (no server needed).
+
+${c.dim('Options')}
+  --limit <n>   Max rows to show (default 50, max 500)   ${c.dim('alias: -n')}
+  --sort <key>  path | title | size | modified | last_indexed ${c.dim('(prefix - for desc)')}
+  --json        Machine-readable output (no color) for scripts and agents
+
+${c.dim('Examples')}
+  remember list
+  remember list --sort -modified --limit 20
+  remember list --json | jq -r '.pages[].path'`,
+  },
+  {
+    name: 'get',
+    args: '<path>',
+    summary: "Print one document's frontmatter + content (or --json)",
+    help: `${c.bold('remember get')} ${c.dim('<path> [--json]')}
+
+Fetch a single document by its content-relative path (as returned by
+${c.cyan('search')} / ${c.cyan('list')}). Human view shows frontmatter then the markdown body;
+${c.cyan('--json')} returns { path, title, frontmatter, body, size, last_modified }.
+
+${c.dim('Examples')}
+  remember get ops/deploy.md
+  remember get "$(remember search 'deploys' --json | jq -r '.results[0].path')" --json`,
   },
   {
     name: 'status',
-    summary: 'Print a dashboard of the local index',
-    help: `${c.bold('remember status')}
+    summary: 'Print a dashboard of the local index (or --json)',
+    help: `${c.bold('remember status')} ${c.dim('[--json]')}
 
 Show page + chunk counts, the embedding model, index freshness, and where
-the config and content live.`,
+the config and content live. ${c.cyan('--json')} emits the same as a machine shape.`,
+  },
+  {
+    name: 'tools',
+    summary: 'Print agent tool definitions (same as GET /v1/tools)',
+    help: `${c.bold('remember tools')} ${c.dim('[--json]')}
+
+Print the Anthropic/OpenAI-shaped tool definitions (search_wiki, get_page,
+list_pages) — the same defs the API serves at ${c.cyan('/v1/tools')}, so you can wire an
+LLM to remember without a running server. ${c.cyan('--json')} emits the raw defs.
+
+${c.dim('Examples')}
+  remember tools
+  remember tools --json | jq '.tools[].name'`,
   },
   {
     name: 'benchmark',
@@ -125,11 +170,48 @@ ${header('Examples')}
   ${c.dim('$')} remember dev
   ${c.dim('$')} remember search "how do deploys work" -k 5
 
+${header('For agents')}
+  Every read command takes ${c.cyan('--json')} (stable shapes). See ${c.cyan('remember help agents')}.
+
 ${c.dim('Docs: https://github.com/aakusch/remember')}
 `;
 }
 
+/** `remember help agents` — the search → get loop, all offline, no server. */
+function agentsHelp(): string {
+  return `
+${c.bold('Using remember from an agent')}
+
+remember is a first-class agent tool: every read command speaks ${c.cyan('--json')} with
+stable, documented shapes, exits ${c.bold('0')} on success and non-zero on error, and emits
+${c.cyan('{ "error": { "code", "message" } }')} on stderr when a ${c.cyan('--json')} command fails. No
+server required — these read the local index directly.
+
+${header('The core loop: search → pick a path → get')}
+  ${c.dim('$')} remember search "how do deploys work" --json ${c.dim('| jq -r .results[0].path')}
+  ${c.dim('# → ops/deploy.md')}
+  ${c.dim('$')} remember get ops/deploy.md --json ${c.dim('| jq -r .body')}
+
+${header('One-liner')}
+  ${c.dim('$')} remember get "$(remember search 'deploys' --json | jq -r '.results[0].path')" --json
+
+${header('Read commands (all support --json)')}
+${bullet(`${c.cyan('search "<q>"')}  ranked hits: { query, count, query_ms, results[] }`)}
+${bullet(`${c.cyan('get <path>')}    one page: { path, title, frontmatter, body, size, last_modified }`)}
+${bullet(`${c.cyan('list')}          the corpus: { count, total, limit, sort, pages[] }`)}
+${bullet(`${c.cyan('status')}        index state: { version, index, project }`)}
+
+${header('Wiring an LLM')}
+  ${c.dim('$')} remember tools --json   ${c.dim('# Anthropic/OpenAI tool defs — same as GET /v1/tools')}
+
+  Or run the HTTP API (${c.cyan('remember dev')}) and hit ${c.cyan('/v1/search')}, ${c.cyan('/v1/pages/<path>')}, ${c.cyan('/v1/tools')}.
+
+${c.dim('A result means the corpus ranked text for the query — not that an answer exists.')}
+`;
+}
+
 function commandHelp(name: string): string | null {
+  if (name === 'agents') return agentsHelp();
   const cmd = COMMANDS.find((x) => x.name === name);
   return cmd ? `\n${cmd.help}\n` : null;
 }
@@ -201,9 +283,24 @@ export async function run(argv: string[]): Promise<void> {
         await searchCommand(rest);
         return;
       }
+      case 'list': {
+        const { listCommand } = await import('./commands/list-cmd.js');
+        await listCommand(rest);
+        return;
+      }
+      case 'get': {
+        const { getCommand } = await import('./commands/get-cmd.js');
+        await getCommand(rest);
+        return;
+      }
       case 'status': {
         const { statusCommand } = await import('./commands/status-cmd.js');
-        await statusCommand();
+        await statusCommand(rest);
+        return;
+      }
+      case 'tools': {
+        const { toolsCommand } = await import('./commands/tools-cmd.js');
+        await toolsCommand(rest);
         return;
       }
       case 'benchmark': {
@@ -218,7 +315,19 @@ export async function run(argv: string[]): Promise<void> {
         process.exit(1);
     }
   } catch (err) {
-    process.stderr.write(`${c.red(`remember ${command}:`)} ${(err as Error).message}\n`);
+    const error = err as Error & { code?: string };
+    // When the caller asked for --json, fail with a structured JSON error on
+    // stderr (exit non-zero) so an agent can script against it. Otherwise, a
+    // human-friendly red line.
+    if (rest.includes('--json')) {
+      process.stderr.write(
+        JSON.stringify({
+          error: { code: error.code ?? 'COMMAND_ERROR', message: error.message },
+        }) + '\n',
+      );
+    } else {
+      process.stderr.write(`${c.red(`remember ${command}:`)} ${error.message}\n`);
+    }
     process.exit(1);
   }
 }

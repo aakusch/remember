@@ -9,6 +9,7 @@ import type { Embedder, SearchEngine, Store } from '../types.js';
 import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 import { VERSION } from '../version.js';
+import { AGENT_TOOL_DEFS } from './tool-defs.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -664,55 +665,8 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     return c.json({ ok: true, results: r });
   });
 
-  // AI tools surface
-  app.get('/v1/tools', (c) =>
-    c.json({
-      tools: [
-        {
-          name: 'search_wiki',
-          description:
-            'Search this local wiki using hybrid BM25 + vector search. Returns ranked chunks with paths, snippets, and frontmatter.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'The natural-language query' },
-              intent: {
-                type: 'string',
-                description: 'Optional purpose used for planning and reranking, not corpus content',
-              },
-              k: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
-            },
-            required: ['query'],
-          },
-        },
-        {
-          name: 'get_page',
-          description: 'Fetch the full markdown of one wiki page by path.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              path: {
-                type: 'string',
-                description: 'Path of the page relative to the content root (e.g. "ops/runbooks/deploys.md")',
-              },
-            },
-            required: ['path'],
-          },
-        },
-        {
-          name: 'list_pages',
-          description: 'List wiki pages, paginated.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              cursor: { type: 'string', description: 'Opaque cursor from a previous list call' },
-              limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
-            },
-          },
-        },
-      ],
-    }),
-  );
+  // AI tools surface — same defs the `remember tools` CLI command prints.
+  app.get('/v1/tools', (c) => c.json({ tools: AGENT_TOOL_DEFS }));
 }
 
 async function listMarkdown(root: string): Promise<Array<{ path: string; size: number; modified: string }>> {
