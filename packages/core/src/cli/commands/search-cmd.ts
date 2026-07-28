@@ -198,7 +198,7 @@ export async function searchCommand(argv: string[]): Promise<void> {
     out.write(`   ${snippet}\n`);
   }
 
-  out.write(`\n${c.dim(`Fetch a full page: curl '${'http://localhost:4320'}/v1/pages/<path>'  ·  --json for machine output`)}\n`);
+  out.write(`\n${c.dim('Read a full page: remember get <path>  ·  --json for machine output')}\n`);
 
   // ─── --open the top result ───────────────────────────────────────────────
   if (opts.open && res.results[0]) {
