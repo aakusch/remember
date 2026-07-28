@@ -2,20 +2,20 @@
 
 A condensed view of how `remember` is built. The full design rationale lives in [`docs/superpowers/specs/2026-05-23-remember-platform-design.md`](./superpowers/specs/2026-05-23-remember-platform-design.md).
 
-## Two packages, one monorepo
+## One package, one monorepo
 
 ```
 remember/
 ├─ packages/
-│  ├─ core/      @useremember/core    — headless engine
-│  └─ viewer/    @useremember/viewer  — Astro browser UI
+│  └─ core/      @useremember/core    — headless engine (CLI + HTTP API)
 └─ examples/
    ├─ sample-wiki/   reference wiki used in tests + by remember init
    └─ sample-vault/  mock Obsidian vault for the connector demo
 ```
 
-- **`@useremember/core`** is the engine. CLI + HTTP API + indexer + search + adapters. Node-only. Can be used standalone with any UI.
-- **`@useremember/viewer`** is the default browser UI. Astro 5 SSR + tiny inline scripts. Talks to core over HTTP/JSON + SSE. Optional — bring your own UI if you want.
+- **`@useremember/core`** is the whole open-source engine. CLI + HTTP API + indexer + search + adapters. Node-only. Standalone-usable — drive it from the terminal, from `curl`, or from any agent that speaks HTTP.
+
+> The browser viewer/editor is a **Pro** feature (a self-hosted engine that adds a browser UI and quality levers on top of this same core) and lives outside this repository. The open-source engine is CLI + API only.
 
 ## Data flow
 
@@ -60,16 +60,12 @@ remember/
         │  └──────────────────────────────────────┘  │
         └────────────────┬──────────────────────────┘
                          │ HTTP/JSON + SSE
-                         ▼
-              ┌───────────────────────┐
-              │   @useremember/viewer    │
-              │   (Astro on :4321)    │
-              └───────────────────────┘
-                         ▲
-                         │
-                    ┌────┴────┐
-                    │ Browser │
-                    └─────────┘
+          ┌──────────────┼───────────────┐
+          ▼              ▼               ▼
+   ┌─────────────┐ ┌───────────┐ ┌───────────────┐
+   │ remember    │ │ curl /    │ │ AI agent via  │
+   │ CLI (search)│ │ any HTTP  │ │ /v1/tools     │
+   └─────────────┘ └───────────┘ └───────────────┘
 ```
 
 ## Pipeline adapters
@@ -210,21 +206,23 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
   - All reads from non-loopback origins (introduced in v0.0.1+ wave 5)
 - **Non-loopback bind requires the token** — server refuses to start on `0.0.0.0` without it.
 
-Localhost reads stay open by default to preserve the zero-config viewer.
+Localhost reads stay open by default to keep the zero-config local CLI and
+agent experience friction-free.
 
 ## Performance characteristics
 
-Measured on a 25-page sample wiki:
+Everything runs locally and in-process — there is no network hop on the search
+path. Practical characteristics:
 
-| Operation | Time |
-|---|---|
-| Initial index (cold, downloads model) | ~10-15s (~80MB model download) |
-| Initial index (warm, model cached) | ~2-3s |
-| Incremental index (no changes) | ~5ms |
-| Single-file edit + reindex | ~100ms |
-| Hybrid search query | ~2-5ms |
-| Vector retrieve (top-K from sqlite-vec) | <1ms |
-| BM25 retrieve (top-K from FTS5) | <1ms |
+- **First index** downloads the embedding model once (`BAAI/bge-small-en-v1.5`, ~100 MB), then caches it; every index after that is offline.
+- **Indexing is incremental** — a sha256 manifest means only changed files are re-parsed, re-embedded, and re-stored.
+- **Search is local** — BM25 (SQLite FTS5) and vector (sqlite-vec) retrieval run against the on-disk index with no external service.
+
+Formal, reproducible benchmark numbers for the shipped 0.2.0 engine are not yet
+published; run the versioned harness (`remember benchmark`, see
+[`benchmarks/retrieval/README.md`](../benchmarks/retrieval/README.md)) against
+your own corpus to measure recall, latency, and rank quality on hardware you
+control.
 
 ## Storage layout
 
@@ -233,7 +231,7 @@ Measured on a 25-page sample wiki:
 ```
 .remember/
   index.db                       SQLite — chunks, embeddings, FTS, manifest, pages
-  models/                        Cached ONNX model files (~80-440MB depending on model)
+  models/                        Cached ONNX model files (~100MB+ depending on model)
   connectors/                    Per-connector state (last sync time, etc.)
 ```
 
