@@ -3,6 +3,41 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [0.2.2] - 2026-07-28
+
+A first-run and onboarding polish pass. No behavior or ranking changes — only
+CLI/DX surface and docs.
+
+### Fixed
+
+- **No more phantom "downloading ~100 MB" banner on cached runs.** transformers.js
+  v3 fires progress events even when the embedding model is read from the local
+  cache, so every `remember search` / `status` / `list` printed a scary
+  `downloading embedding model … (first run only, ~100 MB)…` banner plus
+  per-file progress — even offline, on a ~0.3s no-op. The announcement is now
+  deferred behind a short timer: a warm-cache load resolves first and stays
+  silent, while a genuine first-run download still shows the banner and streams
+  progress. (`embedders/local-onnx.ts`)
+
+### Changed
+
+- **`remember search` footer** now points to `remember get <path>` (server-free,
+  matches the agent `search → get` loop) instead of a hardcoded
+  `curl http://localhost:4320/v1/pages/<path>` that assumed a running server.
+
+### Docs
+
+- **`@useremember/core` README (npm-facing)** refreshed: the CLI list now
+  includes `search`, `list`, `get`, and `tools`; the Status section reads
+  v0.2.x / CLI + API only (was a stale "v0.1.0 … and the viewer are
+  implemented", which contradicted the CLI-only reality); the design-spec link
+  now points to the public architecture overview.
+- **Root README** — the CLI reference and the "What it does" table now list the
+  `list`, `get`, and `tools` commands (previously omitted despite being the
+  agent-facing surface).
+- Removed 1.6 MB of orphaned browser-viewer screenshots from `docs/images/`
+  (unreferenced by any doc; the viewer is a Pro feature outside this repo).
+
 ## [0.2.1] - 2026-07-27
 
 Makes the CLI a first-class tool for **both humans and AI agents**, plus three
