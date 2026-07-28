@@ -1,6 +1,6 @@
 {
   "name": "@useremember/core",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [

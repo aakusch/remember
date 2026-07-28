@@ -68,6 +68,29 @@ describe('HTTP API (wired)', () => {
     expect(await res.json()).toEqual({ ok: true, version: VERSION });
   });
 
+  it('GET /v1/capabilities returns the discovery object', async () => {
+    const res = await app.request('/v1/capabilities');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    // Stable top-level keys — agents wire against these.
+    expect(Object.keys(body)).toEqual([
+      'version',
+      'engine',
+      'embedder',
+      'endpoints',
+      'commands',
+      'json_schema_version',
+    ]);
+    expect(body.version).toBe(VERSION);
+    expect(body.json_schema_version).toBe(1);
+    // The API reports its live embedder (hash embedder in this harness).
+    expect(body.embedder).toEqual({ model: 'hash-embedder-384d', dim: 384 });
+    // /v1/capabilities lists itself among the endpoints.
+    const paths = (body.endpoints as Array<{ path: string }>).map((e) => e.path);
+    expect(paths).toContain('/v1/capabilities');
+    expect(paths).toContain('/v1/search');
+  });
+
   // 0.1.1 security: /v1/config must never return the raw adminToken value.
   it('GET /v1/config redacts the adminToken from the payload', async () => {
     const emb = createHashEmbedder(384);

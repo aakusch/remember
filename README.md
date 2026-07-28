@@ -58,9 +58,9 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
-| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools`, `capabilities` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
-| **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, and `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call). |
+| **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call), and `/v1/capabilities` (one discovery object). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
 | **Live reload** | Filesystem watcher → incremental reindex in <1 s. Edit in your editor of choice; the index keeps up. |
 | **Connectors** | Pull external sources (Obsidian vault, Granola meetings, any folder) into the same searchable index. |
@@ -85,11 +85,12 @@ remember list             List indexed documents as a table (or --json)
 remember get <path>       Print one document's frontmatter + body (or --json)
 remember status           Dashboard: page/chunk counts, model, index freshness
 remember tools            Print agent tool defs (same as GET /v1/tools) (or --json)
+remember capabilities     One discovery object for agents (same as GET /v1/capabilities)
 remember benchmark        Versioned retrieval evaluation
 ```
 
-Every read command (`search`, `list`, `get`, `status`, `tools`) takes `--json`
-with stable, documented shapes — see `remember help agents`.
+Every read command (`search`, `list`, `get`, `status`, `tools`, `capabilities`)
+takes `--json` with stable, documented shapes — see `remember help agents`.
 
 ### `remember search`
 
@@ -116,7 +117,12 @@ Color is enabled on a TTY and disabled automatically when piped or when
 
 ## How AI plugs in
 
-Two patterns, no special integration.
+No special integration. An agent can discover the whole surface in one call —
+`remember capabilities --json` (or `GET /v1/capabilities`) returns a single
+stable object with the version, engine, embedder, every HTTP endpoint, every
+CLI command, and a `json_schema_version` — so there's nothing to stitch
+together from `status`, `tools`, and `health`. Then use one of the patterns
+below.
 
 **Pattern A — the CLI, as a tool** (any agent that can run a shell command):
 

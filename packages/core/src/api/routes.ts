@@ -10,6 +10,7 @@ import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 import { VERSION } from '../version.js';
 import { AGENT_TOOL_DEFS } from './tool-defs.js';
+import { buildCapabilities } from '../capabilities.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -48,14 +49,6 @@ export interface RouteContext {
     syncAll: () => Promise<Record<string, unknown>>;
   };
 }
-
-const notImplemented = (endpoint: string) => ({
-  error: {
-    code: 'NOT_IMPLEMENTED' as const,
-    message: `${endpoint} not yet implemented`,
-    hint: 'Implementation lands progressively — see docs/superpowers/specs/',
-  },
-});
 
 /** True for any loopback hostname form. Used on the BOUND host (trusted), never on the client Host header. */
 function isLoopbackHost(host: string | undefined): boolean {
@@ -160,6 +153,16 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
 
   // Health + meta
   app.get('/v1/health', (c) => c.json({ ok: true, version: VERSION }));
+
+  // Machine-discoverable capabilities — the single object an agent fetches to
+  // learn how to drive remember. Same shape as `remember capabilities --json`.
+  app.get('/v1/capabilities', (c) =>
+    c.json(
+      buildCapabilities({
+        embedder: { model: ctx.embedder.modelId, dim: ctx.embedder.dim },
+      }),
+    ),
+  );
 
   app.get('/v1/openapi.json', (c) =>
     c.json({
@@ -717,6 +720,15 @@ const openApiPaths = {
       summary: 'Liveness check',
       tags: ['system'],
       responses: jsonResponse('ok'),
+    },
+  },
+  '/capabilities': {
+    get: {
+      summary: 'Machine-discoverable capabilities',
+      tags: ['system'],
+      responses: jsonResponse(
+        'discovery object: version, engine, embedder, endpoints, commands, json_schema_version',
+      ),
     },
   },
   '/openapi.json': {

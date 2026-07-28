@@ -9,7 +9,7 @@ interface CommandSpec {
   help: string;
 }
 
-const COMMANDS: CommandSpec[] = [
+export const COMMANDS: CommandSpec[] = [
   {
     name: 'init',
     args: '<dir>',
@@ -127,6 +127,22 @@ ${c.dim('Examples')}
   remember tools --json | jq '.tools[].name'`,
   },
   {
+    name: 'capabilities',
+    summary: 'Print the machine-discoverable capabilities object (or --json)',
+    help: `${c.bold('remember capabilities')} ${c.dim('[--json]')}
+
+Print one stable discovery object describing this engine — ${c.cyan('version')},
+${c.cyan('engine')}, ${c.cyan('embedder')}, HTTP ${c.cyan('endpoints')}, CLI ${c.cyan('commands')}, and
+${c.cyan('json_schema_version')}. One call for an agent to learn how to drive remember,
+instead of stitching together ${c.cyan('status')} + ${c.cyan('tools')} + ${c.cyan('health')}.
+
+Same shape as ${c.cyan('GET /v1/capabilities')}. ${c.cyan('--json')} emits the machine shape.
+
+${c.dim('Examples')}
+  remember capabilities
+  remember capabilities --json | jq '.endpoints[].path'`,
+  },
+  {
     name: 'benchmark',
     summary: 'Run the versioned retrieval evaluation',
     help: `${c.bold('remember benchmark')} ${c.dim('[--profile <name>] [--compare <file>] …')}
@@ -195,7 +211,12 @@ ${header('The core loop: search → pick a path → get')}
 ${header('One-liner')}
   ${c.dim('$')} remember get "$(remember search 'deploys' --json | jq -r '.results[0].path')" --json
 
+${header('Start here: one call to discover the engine')}
+  ${c.dim('$')} remember capabilities --json ${c.dim('# { version, engine, embedder, endpoints, commands, json_schema_version }')}
+  ${c.dim('Same object as')} ${c.cyan('GET /v1/capabilities')}${c.dim('. Read it once, then use the commands/endpoints it lists.')}
+
 ${header('Read commands (all support --json)')}
+${bullet(`${c.cyan('capabilities')}  discovery: { version, engine, embedder, endpoints, commands, json_schema_version }`)}
 ${bullet(`${c.cyan('search "<q>"')}  ranked hits: { query, count, query_ms, results[] }`)}
 ${bullet(`${c.cyan('get <path>')}    one page: { path, title, frontmatter, body, size, last_modified }`)}
 ${bullet(`${c.cyan('list')}          the corpus: { count, total, limit, sort, pages[] }`)}
@@ -301,6 +322,11 @@ export async function run(argv: string[]): Promise<void> {
       case 'tools': {
         const { toolsCommand } = await import('./commands/tools-cmd.js');
         await toolsCommand(rest);
+        return;
+      }
+      case 'capabilities': {
+        const { capabilitiesCommand } = await import('./commands/capabilities-cmd.js');
+        await capabilitiesCommand(rest);
         return;
       }
       case 'benchmark': {

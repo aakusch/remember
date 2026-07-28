@@ -57,6 +57,15 @@ export {
   type EvidencePackageOptions,
 } from './search/evidence.js';
 export { extractSnippet, extractAnswer, tokenizeQuery, splitSentences } from './search/snippet.js';
+export {
+  buildCapabilities,
+  JSON_SCHEMA_VERSION,
+  CAPABILITY_ENDPOINTS,
+  CAPABILITY_COMMANDS,
+  type Capabilities,
+  type CapabilityEndpoint,
+  type CapabilityCommand,
+} from './capabilities.js';
 export { createPassthroughReranker } from './rerankers/none.js';
 export {
   createPassthroughQueryPlanner,

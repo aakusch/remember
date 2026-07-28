@@ -3,6 +3,50 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [0.2.3] - 2026-07-28
+
+Agent-DX and perceived-quality polish. No ranking changes — snippet *selection*
+improves (displayed text only), a discovery surface is added, and Pro-roadmap
+docs are removed from the public repo.
+
+### Added
+
+- **`remember capabilities` + `GET /v1/capabilities`.** One stable discovery
+  object — `{ version, engine, embedder, endpoints, commands, json_schema_version }`
+  — so an agent learns how to drive remember in a single call instead of
+  stitching together `status`, `tools`, and `health`. Both surfaces share one
+  source of truth (`capabilities.ts`); the shape is versioned by
+  `json_schema_version` and locked by tests. Documented in `remember help
+  agents` and the README agent guide. (`capabilities.ts`,
+  `cli/commands/capabilities-cmd.ts`, `api/routes.ts`)
+
+### Improved
+
+- **Snippet selection for over-long, unpunctuated spans (presentation only).**
+  When the best-matching chunk is a single span longer than the snippet cap — a
+  table, a bullet list, or a run-on note with no sentence boundaries to split
+  on — the snippet now slides a character-level window onto the query terms
+  instead of returning the chunk head. Previously such a snippet showed the head
+  (and the card's 240-char clamp then cropped the matched terms out entirely).
+  This changes the **displayed snippet text only**: `score`, ranking, result
+  order, and `chunk_id` are byte-identical before/after (verified on a
+  vector-only query). Ordinary prose snippets are unchanged — the new path is
+  unreachable unless a single selected sentence already exceeds the cap.
+  (`search/snippet.ts`)
+
+### Removed / Docs
+
+- **Removed Pro-roadmap docs from the public repo (opsec).** Deleted
+  `docs/plans/2026-07-23-viewer-productization.md` and `docs/superpowers/`
+  (they described the Pro viewer/Cloud roadmap and a two-package
+  `localhost:4321` model that contradicts the shipped CLI+API engine). Fixed the
+  dangling reference at `docs/architecture.md` (now points to
+  `retrieval-intelligence.md`) and dropped the unused `NOT_IMPLEMENTED` helper
+  that cited the deleted spec dir. Also refreshed the sample-wiki onboarding
+  pages (`getting-started.md`, `README.md`, `folder-organization.md`) and
+  `examples/README.md`, which still described a browser viewer / admin panel at
+  `localhost:4321` — now CLI + API only, matching 0.2.x reality.
+
 ## [0.2.2] - 2026-07-28
 
 A first-run and onboarding polish pass. No behavior or ranking changes — only
