@@ -142,9 +142,9 @@ The managed product may add a separate `remember_answer` surface that:
 5. returns `insufficient_evidence` rather than guessing.
 
 Answer generation, provider routing, commercial metering, and organization
-policy live in `remember-cloud`. Reusable query-planning, reranking, evaluation,
-and citation types should move into the MIT core where they benefit local and
-hosted users.
+policy live in the separate hosted Cloud product. Reusable query-planning,
+reranking, evaluation, and citation types belong in the MIT core where they
+benefit local and hosted users alike.
 
 ## Evaluation
 
@@ -174,22 +174,16 @@ The repository now includes a 30-query sample-wiki fixture and an offline
 questions, engine profile, and embedder by stable hashes, keeping deterministic
 CI regression separate from representative release evaluation.
 
-### v0.1 results
+### Running it
 
-Measured on the public 30-query sample-wiki fixture:
-
-| Profile | Version | Recall@5 | Recall@10 | Candidate recall | MRR | nDCG@5 | Wrong-source | p95 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| deterministic `ci-hash` | 0.0.1 | 0.787 | 0.787 | 0.960 | 0.825 | 0.698 | 0.367 | 2 ms |
-| deterministic `ci-hash` | 0.1.0 | 0.787 | 0.807 | 0.960 | 0.857 | 0.733 | 0.333 | 2 ms |
-| local BGE | 0.0.1 | 0.980 | 0.980 | 0.980 | 0.980 | 0.963 | 0.200 | 9 ms |
-| local BGE | 0.1.0 | 0.980 | 0.980 | 0.980 | 0.980 | 0.962 | 0.200 | 9 ms |
-
-Latency is a warm local run on one machine, not a service SLO. The corrected
-pipeline improves deterministic ranking/backfill checks while the small public
-corpus is effectively saturated by local BGE. No model-backed reranker cleared
-or was evaluated against the promotion gate, so v0.1 keeps passthrough as the
-only shipped reranker.
+The harness reports recall@k, candidate recall, MRR, nDCG, wrong-source and
+empty-result rates, latency percentiles, and per-class breakdowns for whatever
+corpus you point it at. Formal, published benchmark numbers for the shipped
+0.2.0 engine are not yet available — the shipped engine is untuned (the default
+fusion and ranking are deliberately simple), so run the harness against a corpus
+you care about rather than relying on a single headline figure. No model-backed
+reranker has cleared a promotion gate, so 0.2.0 ships passthrough as the only
+reranker.
 
 ## Privacy and safety
 
@@ -203,12 +197,9 @@ only shipped reranker.
 
 ## Rollout
 
-Search quality leads the product, but the human viewer must become a usable
-product surface before broad Answer preview. The dedicated
-[viewer productization plan](./plans/2026-07-23-viewer-productization.md)
-defines the information architecture, component system, responsive behavior,
-progressive disclosure, and nontechnical onboarding work for
-`packages/viewer`.
+Search quality leads the product. The open-source engine delivers that quality
+through the CLI and the agent HTTP API; a human browser surface (viewer/editor)
+is a **Pro** concern and is developed separately, not in this repository.
 
 ### Phase 1 — competitive retrieval foundation
 
@@ -221,25 +212,13 @@ progressive disclosure, and nontechnical onboarding work for
 6. Define the evidence-package contract required by Answer composition.
 7. Publish quality, latency, context, and resource comparisons.
 
-### Phase 2 — viewer productization and human retrieval surface
+### Phase 2 — human retrieval surface (Pro)
 
-1. Replace the dual-rail developer console with one responsive workspace
-   navigation model.
-2. Establish reusable, accessible design tokens and product components before
-   adding more route-specific UI.
-3. Make Home, Search, Library, Sources, and Settings the user-facing
-   information architecture.
-4. Guide first source, indexing readiness, first Search, and agent connection
-   without requiring config-file or terminal work on supported paths.
-5. Rebuild Search around the stable Phase 1 evidence and trace contracts.
-6. Keep scores, traces, index controls, raw config, diagnostics, and API detail
-   available through contextual or Advanced disclosure.
-7. Validate the primary journeys at mobile and desktop widths with
-   accessibility, end-to-end, visual-regression, and observed-usability gates.
-
-Component-foundation work may overlap the end of Phase 1. The consumer Search
-journey must be complete before a broad Answer preview so Answer extends a
-coherent product surface instead of creating another technical demo.
+A browser workspace over this same retrieval core — information architecture,
+guided onboarding, and a Search UI built on the stable Phase 1 evidence and
+trace contracts — is a **Pro** deliverable, developed outside this repository.
+The open-source engine's contract is the CLI and the agent HTTP API; those stay
+first-class regardless of what any UI adds on top.
 
 ### Phase 3 — Answer composition in Cloud
 
@@ -255,5 +234,5 @@ coherent product surface instead of creating another technical demo.
 2. Measure useful, wrong-source, incomplete, stale, and unsupported outcomes.
 3. Use accepted feedback to improve evaluation, ranking, and corpus proposals.
 
-See the Cloud design for the hosted answer, provider, and billing layer:
-`remember-cloud/docs/specs/2026-07-23-retrieval-intelligence-layer.md`.
+The hosted answer, provider-routing, and billing layer belongs to the separate
+Cloud product and is out of scope for this open-source engine.

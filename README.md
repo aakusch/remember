@@ -33,9 +33,16 @@ Then, in another terminal, search it:
 remember search "how do deploys work" -k 5
 ```
 
-That's the entire install. No API keys required. Zero outbound network calls in
-the default configuration. The bundled ONNX embedding model downloads once on
-first index (~80 MB) and is cached locally.
+That's the entire install. No API keys required. Local semantic search is
+powered by the optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
+dependency, which the default scaffold installs for you. On the first index it
+downloads a small embedding model (`BAAI/bge-small-en-v1.5`, ~100 MB) once and
+caches it locally; after that, indexing and search run entirely offline.
+
+If `@huggingface/transformers` is not installed, `remember` prints a loud
+placeholder-embedder warning and search returns meaningless results — install
+it with `npm install @huggingface/transformers`, or set `OPENAI_API_KEY` to use
+OpenAI embeddings instead.
 
 Other install paths: [from source](#from-source) · [Docker](#docker).
 
@@ -54,7 +61,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `status` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, and `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call). |
-| **Local embeddings** | Bundled `BAAI/bge-small-en-v1.5` ONNX model (384-d). OpenAI is opt-in via `OPENAI_API_KEY`. |
+| **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
 | **Live reload** | Filesystem watcher → incremental reindex in <1 s. Edit in your editor of choice; the index keeps up. |
 | **Connectors** | Pull external sources (Obsidian vault, Granola meetings, any folder) into the same searchable index. |
 | **Filesystem-canonical** | Plain markdown in a directory. Plays with Obsidian, Cursor, VS Code, Dropbox, git. No proprietary format. |
@@ -142,6 +149,11 @@ curl http://localhost:4320/v1/tools
 Returns Anthropic/OpenAI-compatible tool definitions for `search_wiki`,
 `get_page`, `list_pages`. Drop them straight into a tool-use call — no wiring
 code needed.
+
+**The honesty contract.** A returned result means the corpus contains text that
+ranked for the query. It is **not** proof that an answer exists. If the right
+document isn't in the corpus, the engine still returns its closest matches —
+treat results as candidates to read, not as guaranteed answers.
 
 <br>
 
