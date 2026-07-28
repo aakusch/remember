@@ -58,7 +58,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
-| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `status` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, and `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
@@ -81,9 +81,15 @@ remember dev              Index, then serve the agent API with a file watcher
 remember start            Serve the production API (assumes the index is built)
 remember index            (Re)index the content directory
 remember search "<q>"     Hybrid search, formatted result cards (or --json)
+remember list             List indexed documents as a table (or --json)
+remember get <path>       Print one document's frontmatter + body (or --json)
 remember status           Dashboard: page/chunk counts, model, index freshness
+remember tools            Print agent tool defs (same as GET /v1/tools) (or --json)
 remember benchmark        Versioned retrieval evaluation
 ```
+
+Every read command (`search`, `list`, `get`, `status`, `tools`) takes `--json`
+with stable, documented shapes — see `remember help agents`.
 
 ### `remember search`
 
