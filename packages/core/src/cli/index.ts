@@ -66,7 +66,7 @@ result cards — rank, score, path, title, and a query-relevant snippet.
 ${c.dim('Options')}
   -k <n>     Number of results to return (default 10, max 50)
   --json     Machine-readable output (no color) for scripts and agents
-  --open     Open the top result in $EDITOR (falls back to $PAGER / less)
+  --open     Open the top result in $EDITOR (falls back to $VISUAL / $PAGER / less)
 
 ${c.dim('Examples')}
   remember search "deploy runbook"
@@ -83,7 +83,7 @@ it was last indexed. Reads the local index directly (no server needed).
 
 ${c.dim('Options')}
   --limit <n>   Max rows to show (default 50, max 500)   ${c.dim('alias: -n')}
-  --sort <key>  path | title | size | modified | last_indexed ${c.dim('(prefix - for desc)')}
+  --sort <key>  path | title | size | modified | last_modified | last_indexed ${c.dim('(alias: -s; prefix - for desc)')}
   --json        Machine-readable output (no color) for scripts and agents
 
 ${c.dim('Examples')}

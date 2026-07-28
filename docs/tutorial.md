@@ -28,8 +28,12 @@ Confirm it's up from another terminal:
 ```bash
 remember status                        # index dashboard: pages, chunks, model
 remember search "getting started" -k 5 # ranked result cards
-curl http://localhost:4320/v1/health   # → {"status":"ok"}
+curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.2.3"}
 ```
+
+> `remember` lives in the project's `node_modules/.bin`. Prefix the commands
+> below with `pnpm exec` (or `npx`) — e.g. `pnpm exec remember status` — unless
+> you installed it globally with `npm i -g @useremember/core`.
 
 The starter wiki ships with three pages (`getting-started`, `agents`, `authoring`).
 

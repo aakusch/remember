@@ -180,7 +180,7 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | `GET /v1/openapi.json` | OpenAPI route enumeration |
 | `GET /v1/search?q&k&debug` | Hybrid search |
 | `GET /v1/pages?filter[k]=v&sort=&q=&limit=&cursor=` | Frontmatter-aware page query |
-| `GET /v1/pages/<path>?format=json\|text\|html` | One page |
+| `GET /v1/pages/<path>?format=json\|text` | One page |
 | `PUT /v1/pages/<path>` | Write markdown + reindex |
 | `DELETE /v1/pages/<path>` | Delete + reconcile index |
 | `POST /v1/pages/move` | Move/rename page |

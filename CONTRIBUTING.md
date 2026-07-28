@@ -49,7 +49,7 @@ remember/
         embedders/  local-onnx + openai + hash
         indexer/   walker → parser → chunker → embedder → store pipeline
         parsers/  remark + gray-matter
-        rerankers/ passthrough (cross-encoder reserved for v0.1)
+        rerankers/ passthrough (pluggable Reranker interface)
         search/   hybrid + RRF
         stores/   sqlite-vec (with pages, page_attrs, fts_chunks, vec_chunks)
         walkers/  chokidar walker with ignore rules
@@ -59,6 +59,7 @@ remember/
     sample-vault/ Mock Obsidian vault used by the obsidian connector demo
   docs/
     getting-started.md
+    tutorial.md
     architecture.md
     retrieval-intelligence.md
   .github/workflows/    CI

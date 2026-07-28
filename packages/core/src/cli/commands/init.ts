@@ -227,6 +227,9 @@ const PACKAGE_TEMPLATE = (name: string) => ({
     start: 'remember start',
     index: 'remember index',
     status: 'remember status',
+    search: 'remember search',
+    list: 'remember list',
+    get: 'remember get',
   },
   dependencies: {
     // Pinned to a real published range; `*` reads as "unmaintained" on a scaffold.
@@ -302,8 +305,8 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     header('Next steps'),
     `  ${c.dim('$')} cd ${targetDir}`,
     `  ${c.dim('$')} npm install`,
-    `  ${c.dim('$')} npm run dev          ${c.dim('# index + serve the agent API')}`,
-    `  ${c.dim('$')} remember search "…"  ${c.dim('# search from the terminal')}`,
+    `  ${c.dim('$')} npm run dev              ${c.dim('# index + serve the agent API')}`,
+    `  ${c.dim('$')} npx remember search "…"  ${c.dim('# search from the terminal')}`,
     ``,
     `  ${c.dim('API')}  ${c.accent('http://localhost:4320')}   ${c.dim('search + agent endpoints')}`,
     ``,

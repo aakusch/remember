@@ -12,7 +12,7 @@ machine by default. Drive it from a rich terminal CLI or a small HTTP API.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node ≥ 20](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](.nvmrc)
 
-[Quickstart](#quickstart) · [The CLI](#the-cli) · [Tutorial](./docs/getting-started.md) · [Architecture](./docs/architecture.md)
+[Quickstart](#quickstart) · [The CLI](#the-cli) · [Tutorial](./docs/tutorial.md) · [Architecture](./docs/architecture.md)
 
 </div>
 
@@ -30,8 +30,11 @@ pnpm dev         # index, then serve the agent API with a live file watcher
 Then, in another terminal, search it:
 
 ```bash
-remember search "how do deploys work" -k 5
+pnpm exec remember search "how do deploys work" -k 5   # or: npx remember search …
 ```
+
+(`remember` lives in the project's `node_modules/.bin`, so run it with
+`pnpm exec` / `npx` — or `npm i -g @useremember/core` for a bare `remember`.)
 
 That's the entire install. No API keys required. Local semantic search is
 powered by the optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
@@ -58,7 +61,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
-| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools`, `capabilities` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call), and `/v1/capabilities` (one discovery object). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
@@ -103,7 +106,7 @@ with the matched terms highlighted. Flags:
 
 - `-k <n>` — number of results (default 10, max 50)
 - `--json` — clean, color-free machine output for scripts and agents
-- `--open` — open the top result in `$EDITOR` (falls back to `$PAGER` / `less`)
+- `--open` — open the top result in `$EDITOR` (falls back to `$VISUAL` / `$PAGER` / `less`)
 
 ```bash
 # Feed an agent or a script:

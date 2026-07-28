@@ -16,8 +16,11 @@ That's it. `pnpm dev` indexes the starter wiki and serves the agent HTTP API on
 `:4320` with a live file watcher. Search it from another terminal:
 
 ```bash
-remember search "getting started" -k 5
+pnpm exec remember search "getting started" -k 5   # or: npx remember search …
 ```
+
+`remember` lives in the project's `node_modules/.bin`, so invoke it with
+`pnpm exec` / `npx` (or `npm i -g @useremember/core` for a bare `remember`).
 
 The open-source engine is **CLI + API only** — there is no browser UI. (The
 browser viewer/editor is a **Pro** feature; see [below](#what-the-pro-engine-adds).)
