@@ -40,28 +40,42 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
         // Without a heads-up the first `remember dev` looks frozen for a minute.
         //
         // progress_callback fires per-file (config.json, tokenizer, model.onnx …)
-        // MANY times per file. Two failure modes to avoid:
+        // MANY times per file. Failure modes to avoid:
         //   1. keying "ready" off the per-file `done` event → prints N times.
         //   2. on a NON-TTY (piped to a file / CI log) `\r` doesn't overwrite,
         //      so a naive progress line spams hundreds of `tokenizer.json: 100%`
         //      rows. Verified bug from piping `remember dev` to a file.
+        //   3. transformers.js v3 fires `status: 'progress'` events even when
+        //      reading a fully-cached model off disk (a ~0.3s no-op). Announcing
+        //      on the first progress event therefore printed a scary
+        //      "downloading ~100 MB (first run only)…" banner on EVERY search /
+        //      status / list, even offline. Verified: a warm-cache search runs in
+        //      ~0.3s yet still emitted the banner + per-file progress spam.
         //
-        // Fix: announce once. On a TTY, stream a single overwriting line via
-        // `\r`. On a non-TTY, emit at most one newline update per file per 10%
-        // step (and exactly one 100% line per file) — readable, never spammy.
-        // Progress goes to stderr; gate TTY behaviour off stderr specifically.
+        // Fix: DEFER the announcement. Only a genuine network download takes
+        // real time, so we arm a timer and announce (once) only if loading is
+        // still in flight after a short beat. A cache read resolves first, the
+        // timer is cleared, and nothing is printed. On a real download the banner
+        // appears after the beat and progress streams from there. On a TTY,
+        // stream a single overwriting `\r` line; on a non-TTY, at most one line
+        // per file per 10% bucket. All progress goes to stderr.
         const isTty = Boolean(process.stderr.isTTY);
+        const ANNOUNCE_AFTER_MS = 1500;
         let announcedDownload = false;
         const lastStep = new Map<string, number>(); // file → last printed 10% bucket
+        let announceTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+          announcedDownload = true;
+          process.stderr.write(
+            `[remember] downloading embedding model ${modelId} (first run only, ~100 MB)…\n`,
+          );
+        }, ANNOUNCE_AFTER_MS);
+        if (typeof announceTimer.unref === 'function') announceTimer.unref();
         const pipe = await transformers.pipeline('feature-extraction', modelId, {
           dtype: 'fp32',
           progress_callback: (p: { status?: string; file?: string; progress?: number }) => {
-            if (p.status === 'progress' && !announcedDownload) {
-              announcedDownload = true;
-              process.stderr.write(
-                `[remember] downloading embedding model ${modelId} (first run only, ~100 MB)…\n`,
-              );
-            }
+            // Stay silent until the deferred timer has decided this is a real
+            // download — a warm-cache read never reaches that point.
+            if (!announcedDownload) return;
             if (p.status === 'progress' && typeof p.progress === 'number' && p.file) {
               const pct = Math.max(0, Math.min(100, Math.round(p.progress)));
               if (isTty) {
@@ -79,6 +93,10 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
             }
           },
         });
+        if (announceTimer) {
+          clearTimeout(announceTimer);
+          announceTimer = null;
+        }
         if (announcedDownload) {
           // On a TTY, close out the overwriting line with a newline. On a
           // non-TTY the updates were already newline-terminated.
