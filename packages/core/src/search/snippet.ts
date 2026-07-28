@@ -10,6 +10,12 @@
  * boundary — same shape as the old truncate-to-280 behaviour, just smarter
  * about where to cut.
  *
+ * When the best-scoring unit is itself longer than the cap — a table, a bullet
+ * list, or a run-on note with no sentence punctuation — sentence windowing has
+ * nothing to slice on, so a char-level window slides onto the query terms
+ * instead of returning the head (which the card clamp would otherwise crop the
+ * terms out of). Presentation only: never changes score, order, or chunk ids.
+ *
  * Not a full BM25-passage scorer — that would need term frequencies and IDF.
  * Distinct-term coverage is the cheapest signal that handles 90% of queries.
  */
@@ -141,9 +147,80 @@ export function extractSnippet(
   }
 
   const window = sentences.slice(startIdx, endIdx + 1).join(' ').trim();
+  if (window.length > maxLen) {
+    // The best-scoring unit is a single span longer than the cap — a table, a
+    // bullet list, or a run-on note with no sentence punctuation to split on.
+    // Sentence windowing can't tighten it, and returning it whole means the
+    // downstream card clamp cuts to the head, hiding the query terms. Slide a
+    // char-level window onto the terms so they stay visible. Presentation only:
+    // this branch is unreachable unless a single selected sentence already
+    // exceeds maxLen, so ordinary prose snippets are byte-for-byte unchanged.
+    return windowAroundTerms(window, terms, maxLen, startIdx > 0);
+  }
   const leadEllipsis = startIdx > 0 ? '… ' : '';
   const trailEllipsis = endIdx < sentences.length - 1 ? ' …' : '';
   return leadEllipsis + window + trailEllipsis;
+}
+
+/**
+ * Char-level windowing for an over-long span with no usable sentence breaks.
+ * Slides a `maxLen`-wide window to the densest cluster of query-term matches,
+ * snaps the edges to word boundaries, and marks truncation with ellipses.
+ * Falls back to the head slice when no term matches — matching the no-signal
+ * fallback used elsewhere.
+ *
+ * `leadFromPriorSentence` is true when the caller already trimmed sentences
+ * before this span, so the lead ellipsis is shown even when the window starts
+ * at char 0 of the span.
+ */
+function windowAroundTerms(
+  text: string,
+  terms: string[],
+  maxLen: number,
+  leadFromPriorSentence: boolean,
+): string {
+  const lower = text.toLowerCase();
+  const positions: number[] = [];
+  for (const t of terms) {
+    const re = new RegExp(`\\b${escapeRegex(t)}`, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(lower)) !== null) {
+      positions.push(m.index);
+      if (m.index === re.lastIndex) re.lastIndex++; // guard against zero-width
+    }
+  }
+  if (positions.length === 0) return fallbackSnippet(text, maxLen);
+  positions.sort((a, b) => a - b);
+
+  // Pick the window start (anchored at a match) that covers the most matches.
+  let bestStart = positions[0]!;
+  let bestCount = 0;
+  for (const p of positions) {
+    const end = p + maxLen;
+    let count = 0;
+    for (const q of positions) if (q >= p && q < end) count++;
+    if (count > bestCount) {
+      bestCount = count;
+      bestStart = p;
+    }
+  }
+
+  // Give the first match a little left margin so it isn't flush to the edge.
+  let start = Math.max(0, bestStart - 30);
+  let end = Math.min(text.length, start + maxLen);
+  // Snap the edges to word boundaries so we never cut mid-word.
+  if (start > 0) {
+    const ws = text.indexOf(' ', start);
+    if (ws !== -1 && ws < start + 40) start = ws + 1;
+  }
+  if (end < text.length) {
+    const ws = text.lastIndexOf(' ', end);
+    if (ws > start) end = ws;
+  }
+  const slice = text.slice(start, end).trim();
+  const lead = start > 0 || leadFromPriorSentence ? '… ' : '';
+  const trail = end < text.length ? ' …' : '';
+  return lead + slice + trail;
 }
 
 /**

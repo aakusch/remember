@@ -115,6 +115,50 @@ describe('extractSnippet', () => {
     expect(out.length).toBeLessThanOrEqual(120); // 100 + ellipsis padding
   });
 
+  // A single over-long span with no sentence breaks (table / list / run-on
+  // note). Sentence windowing can't tighten it, so a char window must slide
+  // onto the buried query term instead of returning the head.
+  const runOnChunk =
+    'the quarterly revenue figures were reviewed by the board and the finance team ' +
+    'noted that gross margin improved while operating expenses grew faster than ' +
+    'expected which pushed the compression ratio metric down but the underlying ' +
+    'churn cohort analysis showed retention holding steady across enterprise ' +
+    'accounts for the trailing twelve month window ending in June';
+
+  it('windows onto a buried term in a single over-long span', () => {
+    const out = extractSnippet(runOnChunk, 'compression ratio', { maxLen: 120 });
+    expect(out).toContain('compression ratio'); // term is visible…
+    expect(out.length).toBeLessThanOrEqual(130); // …and the span was tightened
+    expect(out).not.toMatch(/^the quarterly revenue/); // not the raw head
+    expect(out.startsWith('…')).toBe(true); // marked as a mid-span slice
+  });
+
+  it('over-long single span still clamps to the cap when the term is at the head', () => {
+    const out = extractSnippet(runOnChunk, 'quarterly revenue', { maxLen: 120 });
+    expect(out).toContain('quarterly revenue');
+    expect(out.length).toBeLessThanOrEqual(130);
+    expect(out.startsWith('…')).toBe(false); // starts at the head, no lead ellipsis
+    expect(out.endsWith('…')).toBe(true); // …but is truncated on the right
+  });
+
+  it('over-long span with no matching term falls back to the head slice', () => {
+    const out = extractSnippet(runOnChunk, 'kubernetes deployment', { maxLen: 120 });
+    expect(out).toMatch(/^the quarterly revenue/); // head fallback
+    expect(out.length).toBeLessThanOrEqual(130);
+  });
+
+  it('windows a markdown table onto the matching row', () => {
+    const table =
+      '| region | latency | notes |\n' +
+      '| us-east | 12ms | primary write region |\n' +
+      '| eu-west | 40ms | replica only, read traffic |\n' +
+      '| ap-south | 90ms | cold standby, promoted during failover drills only |\n' +
+      '| sa-east | 110ms | experimental edge node under evaluation for latency workloads |';
+    const out = extractSnippet(table, 'failover standby', { maxLen: 120 });
+    expect(out).toMatch(/failover|standby/);
+    expect(out.length).toBeLessThanOrEqual(130);
+  });
+
   it('handles a single-sentence text gracefully', () => {
     const text = 'A single sentence without internal breaks that still exceeds the typical snippet length cap of two hundred and eighty characters, here is some more padding text to push us well past the cap because we need to verify the fallback path works when there is just one sentence and it is too long to fit.';
     const out = extractSnippet(text, 'sentence');
