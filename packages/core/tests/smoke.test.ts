@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { defineConfig, createApp } from '../src/index.js';
 import * as defaults from '../src/config/defaults.js';
+import { VERSION } from '../src/version.js';
 
 describe('@useremember/core surface', () => {
   it('defineConfig is identity', () => {
@@ -35,7 +36,7 @@ describe('@useremember/core surface', () => {
     const app = createApp();
     const res = await app.request('/v1/health');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: '0.2.1' });
+    expect(await res.json()).toEqual({ ok: true, version: VERSION });
   });
 
   it('scaffold createApp returns 501 NOT_IMPLEMENTED on /v1/search', async () => {
