@@ -64,7 +64,7 @@ describe('HTTP API (wired)', () => {
   it('GET /v1/health', async () => {
     const res = await app.request('/v1/health');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: '0.2.0' });
+    expect(await res.json()).toEqual({ ok: true, version: '0.2.1' });
   });
 
   // 0.1.1 security: /v1/config must never return the raw adminToken value.

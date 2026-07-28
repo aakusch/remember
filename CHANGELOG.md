@@ -3,6 +3,59 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [0.2.1] - 2026-07-27
+
+Makes the CLI a first-class tool for **both humans and AI agents**, plus three
+targeted fixes. Everything here is CLI/API surface and general engine hygiene.
+
+### Added
+
+- **`remember list`** — list indexed documents from the terminal. Aligned table
+  (title, path, size, last-indexed) for humans; `--json` for agents. Flags:
+  `--limit <n>` (alias `-n`), `--sort <path|title|size|modified|last_indexed>`
+  (prefix `-` for descending). Reads the local index directly — no server.
+- **`remember get <path>`** — fetch one document's frontmatter + markdown body
+  by its content-relative path. `--json` returns
+  `{ path, title, frontmatter, body, size, last_modified }`. This is the second
+  half of the agent loop: `search --json` → pick a path → `get --json`.
+- **`remember tools`** — print the Anthropic/OpenAI-shaped agent tool
+  definitions (`search_wiki`, `get_page`, `list_pages`) — the exact defs the API
+  serves at `GET /v1/tools`, now sourced from one shared module — so you can
+  wire an LLM to remember without a running server. `--json` emits the raw defs.
+- **`remember status --json`** — the status dashboard as a stable machine shape.
+- **`remember help agents`** — a short "Using remember from an agent" guide: the
+  `search → get` loop, the `--json` shapes, exit-code/error contract, and
+  `remember tools`.
+- **First-class agent contract:** every read command (`search`, `get`, `list`,
+  `status`) speaks `--json` with **stable, documented, test-locked shapes**,
+  exits `0` on success / non-zero on error, and emits
+  `{ "error": { "code", "message" } }` on **stderr** when a `--json` command
+  fails — so agents can script against it. Auto-plain (no color) when piped.
+- `remember benchmark --rrf-k <n>` — override RRF fusion `k` for reproducible
+  before/after fusion sweeps from the committed CLI.
+
+### Changed
+
+- **RRF fusion `k` default: 60 → 10.** At these candidate scales the
+  `1/(k+rank)` curve is nearly flat by k=60, so a smaller k keeps more of the
+  rank signal. Measured on the **OSS engine as shipped** (committed `benchmark`,
+  fast/local-BGE profile, bundled sample-wiki): recall@1 0.640 → 0.660,
+  MRR 0.980 → 1.000, nDCG@5/10 0.961 → 0.980, wrong-source 0.200 → 0.167;
+  recall@5/10 already saturated at 0.980; latency unchanged. Better or equal on
+  every metric, worse on none. Artifacts + note in `benchmarks/results/`.
+- Single-sourced version bumped to `0.2.1` (CLI, HTTP API `/v1/health`, OpenAPI).
+
+### Fixed
+
+- **Global install (`npm i -g @useremember/core`) now "just works" in a
+  scaffolded wiki.** The generated `remember.config.ts` imports
+  `@useremember/core`; when the project never ran a local `npm install`, jiti
+  (config loader) couldn't resolve that bare specifier from the project dir and
+  `dev`/`index`/`search`/`list`/`status` failed. Config loading now resolves
+  `@useremember/core` from the installed CLI's own location, and a genuine
+  resolution failure produces a crystal-clear, actionable error
+  (`npm install`, or `npm install -g @useremember/core`).
+
 ## [0.2.0] - 2026-07-27
 
 The open-source engine becomes **CLI + API only**. The browser UI is now a
