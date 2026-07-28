@@ -68,7 +68,11 @@ export function createHybridSearchEngine(
     ),
     finalK: positiveLimit(opts.limits?.finalK ?? opts.finalK ?? 10, 'finalK'),
   };
-  const rrfK = opts.rrfK ?? 60;
+  // RRF k default: 10 (not the textbook 60). At these candidate scales the
+  // 1/(k+rank) curve is nearly flat by k=60, so a smaller k keeps more of the
+  // rank signal and measurably improves MRR / wrong-source / recall on the OSS
+  // sample-wiki benchmark. See CHANGELOG 0.2.1 + benchmarks/results/*rrfk*.
+  const rrfK = opts.rrfK ?? 10;
   const pathBoostFactor = opts.pathBoostFactor ?? 2;
   const headingBoostFactor = opts.headingBoostFactor ?? 1;
   const dedupByPage = opts.dedupByPage ?? true;

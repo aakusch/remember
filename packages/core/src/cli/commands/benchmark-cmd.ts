@@ -45,6 +45,9 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   const finalK = parsePositiveInteger(args.k ?? '10', '--k');
   const candidateK = parsePositiveInteger(args.candidateK ?? '20', '--candidate-k');
   const warmupQueries = parseNonNegativeInteger(args.warmup ?? '2', '--warmup');
+  // Optional RRF k override so before/after fusion sweeps are reproducible from
+  // the committed CLI. Defaults to the engine's own default when unset.
+  const rrfK = args.rrfK === undefined ? undefined : parsePositiveInteger(args.rrfK, '--rrf-k');
 
   const cases = await loadEvaluationCases(questionsPath);
   const embedder =
@@ -79,6 +82,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       embedder,
       createPassthroughReranker(),
       {
+        ...(rrfK === undefined ? {} : { rrfK }),
         limits: {
           perRetrieverK: candidateK,
           candidateK,
@@ -91,6 +95,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
       embedder,
       createPassthroughReranker(),
       {
+        ...(rrfK === undefined ? {} : { rrfK }),
         limits: {
           perRetrieverK: candidateK,
           candidateK,
@@ -176,6 +181,7 @@ interface BenchmarkArgs {
   compare?: string;
   k?: string;
   candidateK?: string;
+  rrfK?: string;
   warmup?: string;
   failOnRegression?: boolean;
   help?: boolean;
@@ -203,6 +209,7 @@ function parseArgs(argv: string[]): BenchmarkArgs {
       '--compare',
       '--k',
       '--candidate-k',
+      '--rrf-k',
       '--warmup',
     ].includes(flag);
     if (!takesValue) throw new Error(`unknown benchmark option "${token}"`);
@@ -217,6 +224,7 @@ function parseArgs(argv: string[]): BenchmarkArgs {
     if (flag === '--compare') args.compare = value;
     if (flag === '--k') args.k = value;
     if (flag === '--candidate-k') args.candidateK = value;
+    if (flag === '--rrf-k') args.rrfK = value;
     if (flag === '--warmup') args.warmup = value;
   }
   return args;
@@ -300,6 +308,7 @@ OPTIONS:
   --profile <ci|fast>     ci uses deterministic hash embeddings; fast uses local BGE
   --k <number>            Final result limit (default: 10)
   --candidate-k <number>  Candidate recall limit (default: 20)
+  --rrf-k <number>        RRF fusion k (default: engine default of 10)
   --warmup <number>       Warmup queries excluded from latency (default: 2)
   --output <json>         Write machine-readable results
   --compare <json>        Print metric deltas against a prior result

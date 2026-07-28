@@ -36,7 +36,7 @@ export function rrfFuseWithTrace(
   lists: RankedList[] | SearchResult[][],
   options: RrfOptions = {},
 ): RrfFusionResult {
-  const k = options.k ?? 60;
+  const k = options.k ?? 10;
   const candidateK = options.candidateK ?? options.finalK ?? 20;
   if (!Number.isFinite(k) || k < 0) throw new Error('rrf k must be a non-negative number');
   if (!Number.isInteger(candidateK) || candidateK < 1) {

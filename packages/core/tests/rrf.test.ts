@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rrfFuse } from '../src/search/rrf.js';
+import { rrfFuse, rrfFuseWithTrace } from '../src/search/rrf.js';
 import type { RankedList, SearchResult } from '../src/types.js';
 
 const r = (chunk_id: string, retriever: 'bm25' | 'vector'): SearchResult => ({
@@ -62,6 +62,16 @@ describe('rrfFuse', () => {
 
     expect(rrfFuse(lists(4, 1))[0]!.chunk_id).toBe('lexical');
     expect(rrfFuse(lists(1, 4))[0]!.chunk_id).toBe('semantic');
+  });
+
+  it('defaults k to 10 (0.2.1 quality change from 60)', () => {
+    // Contribution for a single rank-1 hit is weight / (k + rank). With the
+    // 0.2.1 default k=10 and rank=1, that is 1 / 11. This pins the default.
+    const { contributions } = rrfFuseWithTrace([
+      { retriever: 'bm25', queryId: 'original', weight: 1, results: [r('a', 'bm25')] },
+    ]);
+    const contribution = contributions.get('a')![0]!.rrf_contribution;
+    expect(contribution).toBeCloseTo(1 / 11, 10);
   });
 
   it('fuses to candidateK without applying the legacy final result limit', () => {
