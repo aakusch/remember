@@ -672,29 +672,6 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   app.get('/v1/tools', (c) => c.json({ tools: AGENT_TOOL_DEFS }));
 }
 
-async function listMarkdown(root: string): Promise<Array<{ path: string; size: number; modified: string }>> {
-  const out: Array<{ path: string; size: number; modified: string }> = [];
-  async function walk(dir: string, prefix: string) {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const e of entries) {
-      const rel = prefix ? `${prefix}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name === '.git' || e.name === '.remember' || e.name.startsWith('_')) continue;
-        await walk(path.join(dir, e.name), rel);
-      } else if (e.isFile() && e.name.endsWith('.md')) {
-        const stat = await fs.stat(path.join(dir, e.name));
-        out.push({ path: rel, size: stat.size, modified: stat.mtime.toISOString() });
-      }
-    }
-  }
-  try {
-    await walk(root, '');
-  } catch {
-    // root missing — return empty
-  }
-  return out.sort((a, b) => a.path.localeCompare(b.path));
-}
-
 const stringParam = (name: string, where: 'query' | 'path', required = false, description?: string) => ({
   name,
   in: where,
