@@ -72,7 +72,6 @@ function highlight(snippet: string, query: string): string {
   const terms = tokenizeQuery(query);
   if (terms.length === 0) return snippet;
   const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const re = new RegExp(`\\b(${escaped.join('|')})`, 'gi');
   // Match the term plus the rest of its word so "deploy" highlights "deployment".
   return snippet.replace(new RegExp(`\\b(${escaped.join('|')})[a-z0-9_]*`, 'gi'), (m) => c.cyan(c.bold(m)));
 }
