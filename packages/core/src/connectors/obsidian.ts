@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Connector, ConnectorContext, ConnectorSyncResult, ConnectorStatus } from './types.js';
+import type { Connector, ConnectorSyncResult, ConnectorStatus } from './types.js';
 
 export interface ObsidianConnectorOptions {
   name?: string;

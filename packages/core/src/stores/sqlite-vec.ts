@@ -3,7 +3,7 @@ import * as sqliteVec from 'sqlite-vec';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
-import type { Chunk, PageQuery, PageRecord, SearchResult, Store } from '../types.js';
+import type { Chunk, PageQuery, PageRecord, Store } from '../types.js';
 import { extractSnippet } from '../search/snippet.js';
 
 export interface SqliteVecStoreOptions {
