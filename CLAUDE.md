@@ -1,0 +1,79 @@
+# CLAUDE.md — remember (open-source engine)
+
+Operating brief for an agent working in this repo. Read this before editing.
+
+## What this is
+
+`@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`,
+published to npm (currently `0.2.3`, public). Local-first, **CLI + HTTP API only — there is
+no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
+
+The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
+doc-health, and multi-format (HTML/DOCX) ingestion — is a **separate PRIVATE package and is
+not in this repo.** Do not reference, import, or assume any of it here.
+
+Engine: hybrid **BM25 (SQLite FTS5) + vector (sqlite-vec, local BGE embeddings)** fused with
+**Reciprocal Rank Fusion**. One index, queried by people and agents over HTTP.
+
+`packages/core` is the whole thing: `cli/`, `api/`, `search/` (the query path — start at
+`search/hybrid.ts`), `indexer/`, `stores/` (sqlite-vec), `parsers/`, `embedders/`, `chunkers/`,
+`connectors/`, `benchmarks/`. CLI commands: `init · index · search · list · get · status ·
+tools · capabilities · dev · start · benchmark`. `remember dev` runs the API with file-watch
+(reindex within ~1s) — **CLI + API only, no browser UI**.
+
+## Hard rules
+
+**The honesty contract is load-bearing — never soften it.** The engine *does not know when it
+does not know*: a returned result is **ranked text for the query, not evidence that an answer
+exists**, and `score` is a **fused rank score, not a probability** (comparable within one
+result set, meaningless across queries). This is stated in the CLI output and the API — keep
+the wording consistent across the CLI, the `/v1/search` response + OpenAPI description, and the
+README. Publishing the engine's limits is deliberate positioning, not a rough edge to polish
+away.
+
+**Evidence over assertion for anything ranking-related.** `rrfK` defaults to **10**
+(`search/hybrid.ts`). Every performance/quality claim needs a committed artifact under
+`benchmarks/results/`; negative results get committed too. Do not change the default ranking,
+`rrfK`, or the fusion weights without a before/after artifact proving it.
+
+**Do not edit the committed benchmark fixture.** `examples/sample-wiki/content/` and
+`benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
+fixture rather than mutating them.
+
+**Markdown only.** The only parser is `parsers/remark.ts`. HTML/DOCX ingestion is a *pro*
+feature and is deliberately not in this engine — don't add a second parser here.
+
+## Things that look inert but are intentional — do NOT "tidy" them
+
+- **`query-planners/passthrough.ts` and `rerankers/none.ts`** are deliberate no-op seams: the
+  query path is built so a real planner / cross-encoder reranker *could* slot in, and the OSS
+  engine ships the passthrough/none versions on purpose. Don't delete the seams or the
+  `@deprecated`/placeholder markers in `search/`.
+- **`lexicalTieBreak`** (`search/hybrid.ts`, default `false`) is an opt-in tie-breaker that only
+  reorders exact fused-score ties. It is off by default **on evidence** (measured net-neutral on
+  the bundled corpus). Don't flip the default without a benchmark on harder fixtures.
+
+## The `/v1/search` contract
+
+Each result carries a fixed field set — `path, title, snippet, score, frontmatter,
+heading_path, retrievers, chunk_id` — enforced by a whitelist projection, not a spread of the
+internal result. Don't widen it casually. `GET /v1/capabilities` (and `remember capabilities`)
+expose a stable, versioned discovery object for agents from one source of truth — keep it in
+step with what the engine actually does.
+
+## Open-core boundary
+
+This repo is the **MIT basic engine** and stays that way. When a sibling repo's copy says
+"`@useremember/core` is MIT," that is a true statement about **this** package — don't "fix" it
+to something else. Keep pro-only concepts out of this codebase and its docs.
+
+## Dev / build / test
+
+```bash
+pnpm install
+pnpm build       # tsc
+pnpm typecheck
+pnpm test        # 166 tests
+# benchmark harness:
+pnpm --filter @useremember/core benchmark -- --help
+```
