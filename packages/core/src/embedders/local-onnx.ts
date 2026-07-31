@@ -70,29 +70,38 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
           );
         }, ANNOUNCE_AFTER_MS);
         if (typeof announceTimer.unref === 'function') announceTimer.unref();
-        const pipe = await transformers.pipeline('feature-extraction', modelId, {
-          dtype: 'fp32',
-          progress_callback: (p: { status?: string; file?: string; progress?: number }) => {
-            // Stay silent until the deferred timer has decided this is a real
-            // download — a warm-cache read never reaches that point.
-            if (!announcedDownload) return;
-            if (p.status === 'progress' && typeof p.progress === 'number' && p.file) {
-              const pct = Math.max(0, Math.min(100, Math.round(p.progress)));
-              if (isTty) {
-                // Single overwriting line — clears with a trailing pad.
-                process.stderr.write(`\r[remember]   ${p.file}: ${pct}%   `);
-              } else {
-                // Throttle to one line per 10% bucket per file. `100 → bucket 10`
-                // is printed once; a stuck 100% never repeats.
-                const bucket = Math.floor(pct / 10);
-                if (lastStep.get(p.file) !== bucket) {
-                  lastStep.set(p.file, bucket);
-                  process.stderr.write(`[remember]   ${p.file}: ${pct}%\n`);
+        let pipe: Awaited<ReturnType<typeof transformers.pipeline>>;
+        try {
+          pipe = await transformers.pipeline('feature-extraction', modelId, {
+            dtype: 'fp32',
+            progress_callback: (p: { status?: string; file?: string; progress?: number }) => {
+              // Stay silent until the deferred timer has decided this is a real
+              // download — a warm-cache read never reaches that point.
+              if (!announcedDownload) return;
+              if (p.status === 'progress' && typeof p.progress === 'number' && p.file) {
+                const pct = Math.max(0, Math.min(100, Math.round(p.progress)));
+                if (isTty) {
+                  // Single overwriting line — clears with a trailing pad.
+                  process.stderr.write(`\r[remember]   ${p.file}: ${pct}%   `);
+                } else {
+                  // Throttle to one line per 10% bucket per file. `100 → bucket 10`
+                  // is printed once; a stuck 100% never repeats.
+                  const bucket = Math.floor(pct / 10);
+                  if (lastStep.get(p.file) !== bucket) {
+                    lastStep.set(p.file, bucket);
+                    process.stderr.write(`[remember]   ${p.file}: ${pct}%\n`);
+                  }
                 }
               }
-            }
-          },
-        });
+            },
+          });
+        } catch (error) {
+          throw new Error(
+            `Failed to load embedding model "${modelId}". It downloads once (~100 MB) and ` +
+              `needs network access to huggingface.co on first use. Check connectivity and retry; ` +
+              `no server restart is needed. Underlying error: ${(error as Error).message}`,
+          );
+        }
         if (announceTimer) {
           clearTimeout(announceTimer);
           announceTimer = null;
@@ -104,7 +113,12 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
           process.stderr.write(`[remember] embedding model ready.\n`);
         }
         return pipe;
-      })();
+      })().catch((error) => {
+        // A transient model-download failure must not poison all later search or
+        // index requests for the lifetime of this process.
+        pipelinePromise = null;
+        throw error;
+      });
     }
     return pipelinePromise;
   }

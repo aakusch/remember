@@ -1,5 +1,13 @@
 # Changelog — @useremember/core
 
+## 0.2.4 — 2026-07-31 (reliability + supply chain)
+
+- **Retryable local-model startup.** A transient first-download failure no
+  longer remains cached for the process lifetime; a later index or search
+  retries without requiring a server restart, with an actionable error message.
+- **Dependency-security gate.** Production dependency audit now runs in CI.
+  Resolved transitive security updates are pinned through the workspace lockfile.
+
 ## 0.2.0 — 2026-07-27 (CLI-first)
 
 **The open-source engine is now CLI + agent API only.** The browser UI has moved

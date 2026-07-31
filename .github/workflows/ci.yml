@@ -34,6 +34,8 @@ jobs:
       - run: pnpm --filter @useremember/core build
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Production dependency audit
+        run: pnpm audit:prod
       - name: Deterministic retrieval benchmark
         run: >-
           pnpm --filter @useremember/core benchmark --
