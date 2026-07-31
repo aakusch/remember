@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "audit:prod": "pnpm audit --prod --audit-level high",
     "lint": "pnpm -r lint",
     "clean": "pnpm -r exec rm -rf dist node_modules .turbo"
   },
@@ -19,5 +20,13 @@
     "node": ">=20"
   },
   "packageManager": "pnpm@9.0.0",
+  "pnpm": {
+    "overrides": {
+      "js-yaml": "3.15.0",
+      "protobufjs": "7.6.5",
+      "sharp": "0.35.3",
+      "tar": "7.5.22"
+    }
+  },
   "license": "MIT"
 }
