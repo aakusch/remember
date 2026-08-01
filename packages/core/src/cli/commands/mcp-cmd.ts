@@ -3,85 +3,44 @@ import { promises as fs } from 'node:fs';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { loadConfig } from '../../config/load.js';
-import { requireWiki } from '../require-wiki.js';
-import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
-import { resolveEmbedder } from '../../api/resolve-embedder.js';
-import { createHybridSearchEngine, type HybridSearchOptions } from '../../search/hybrid.js';
-import { createPassthroughReranker } from '../../rerankers/none.js';
-import { createIndexer } from '../../indexer/index.js';
-import { createChokidarWalker } from '../../walkers/chokidar.js';
-import { createRemarkParser } from '../../parsers/remark.js';
-import { createSmartSplitChunker } from '../../chunkers/smart-split.js';
+import { openWiki } from '../../api/open-wiki.js';
+import { AGENT_TOOL_DEFS } from '../../api/tool-defs.js';
+import { projectSearchResult } from '../../search/project.js';
 import { safeJoinContent, PathOutsideContentError } from '../../api/path-utils.js';
-import { titleFor } from '../../search/title.js';
 import { VERSION } from '../../version.js';
-import type { SearchResult } from '../../types.js';
+import type { SearchResult, SearchEngine, Store, Embedder } from '../../types.js';
+import type { createIndexer } from '../../indexer/index.js';
 
-/** Same descriptor-unwrap the CLI/API use, kept local so this command is standalone. */
-function resolveHybridSearchOptions(descriptor: unknown): HybridSearchOptions {
-  if (
-    descriptor &&
-    typeof descriptor === 'object' &&
-    (descriptor as { _kind?: unknown })._kind === 'search:hybrid'
-  ) {
-    const options = (descriptor as { opts?: unknown }).opts;
-    return options && typeof options === 'object' ? (options as HybridSearchOptions) : {};
-  }
-  return {};
-}
+/** Reuse the exact tool description served over HTTP /v1/tools + `remember tools`. */
+const toolDescription = (name: string): string =>
+  AGENT_TOOL_DEFS.find((d) => d.name === name)?.description ?? name;
 
 const json = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
-const errorResult = (message: string) => ({
-  content: [{ type: 'text' as const, text: message }],
-  isError: true,
-});
+const errorResult = (message: string) => ({ content: [{ type: 'text' as const, text: message }], isError: true });
+
+export interface RememberMcpDeps {
+  engine: SearchEngine;
+  store: Pick<Store, 'queryPages'>;
+  indexer: Pick<ReturnType<typeof createIndexer>, 'indexOne'>;
+  contentRoot: string;
+}
 
 /**
- * `remember mcp` — expose the wiki to any MCP client (Claude Desktop/Code, Cursor,
- * …) as native tools over stdio. It's the *mechanism* half of agent integration;
- * the CLAUDE.md/AGENTS.md trigger snippet is the *when-to-use* half.
- *
- * Runs in-process against the wiki in the current directory — no HTTP server
- * needed. CRITICAL: stdout carries the JSON-RPC protocol, so this command writes
- * NOTHING to stdout itself; all diagnostics go to stderr.
+ * Register remember's tools on an MCP server. Pure wiring over the passed-in engine
+ * — no I/O of its own — so it can be exercised in-process with an in-memory
+ * transport (see tests/mcp.test.ts). The tool set mirrors AGENT_TOOL_DEFS
+ * (search_wiki · get_page · list_pages · write_page) so the MCP, HTTP, and CLI tool
+ * surfaces stay identical.
  */
-export async function mcpCommand(): Promise<void> {
-  const cfg = await loadConfig(process.cwd());
-  await requireWiki(cfg);
-  const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
-  const embedder = await resolveEmbedder(cfg.raw);
-  const store = await createSqliteVecStore({
-    path: path.join(cfg.rootDir, '.remember', 'index.db'),
-    dim: embedder.dim,
-  });
-  store.reconcileEmbedder(embedder.modelId, embedder.dim);
-
-  const engine = createHybridSearchEngine(
-    store,
-    embedder,
-    createPassthroughReranker(),
-    resolveHybridSearchOptions(cfg.raw.search?.engine),
-  );
-  const indexer = createIndexer({
-    walker: createChokidarWalker({ respectGitignore: true }),
-    parser: createRemarkParser(),
-    chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
-    embedder,
-    store,
-  });
-
+export function buildRememberMcpServer(deps: RememberMcpDeps): McpServer {
+  const { engine, store, indexer, contentRoot } = deps;
   const server = new McpServer({ name: 'remember', version: VERSION });
 
   // ── search_wiki (recall) ─────────────────────────────────────────────────
   server.registerTool(
     'search_wiki',
     {
-      description:
-        'Search the local remember wiki (hybrid BM25 + vector). Use when the user asks you to recall ' +
-        'something ("remember when we…", "remember how we…"). Returns ranked pages with path, title, ' +
-        'snippet, and frontmatter. A result is ranked text for the query, NOT proof an answer exists — ' +
-        'read the top pages before relying on them; `score` is a rank, not a probability.',
+      description: toolDescription('search_wiki'),
       inputSchema: {
         query: z.string().max(2048).describe('The natural-language query'),
         k: z.number().int().min(1).max(50).optional().describe('How many results (default 10)'),
@@ -89,14 +48,7 @@ export async function mcpCommand(): Promise<void> {
     },
     async ({ query, k }) => {
       const out = await engine.query({ query }, { k: k ?? 10 });
-      const results = (out.results as SearchResult[]).map((r) => ({
-        path: r.path,
-        title: titleFor(r),
-        snippet: r.snippet,
-        score: r.score,
-        frontmatter: r.frontmatter,
-        heading_path: r.heading_path ?? [],
-      }));
+      const results = (out.results as SearchResult[]).map(projectSearchResult);
       return json({ query, count: results.length, results });
     },
   );
@@ -105,7 +57,7 @@ export async function mcpCommand(): Promise<void> {
   server.registerTool(
     'get_page',
     {
-      description: 'Fetch the full markdown of one wiki page by its content-relative path (as returned by search_wiki).',
+      description: toolDescription('get_page'),
       inputSchema: { path: z.string().describe('Path relative to content/, e.g. "ops/deploy.md"') },
     },
     async ({ path: pagePath }) => {
@@ -125,7 +77,7 @@ export async function mcpCommand(): Promise<void> {
   server.registerTool(
     'list_pages',
     {
-      description: 'List indexed wiki pages, with optional frontmatter filter, free-text match, and sort.',
+      description: toolDescription('list_pages'),
       inputSchema: {
         limit: z.number().int().min(1).max(200).optional(),
         offset: z.number().int().min(0).optional(),
@@ -136,10 +88,7 @@ export async function mcpCommand(): Promise<void> {
     },
     async ({ limit, offset, q, filter, sort }) => {
       const { rows, total } = await store.queryPages({ limit, offset, q, filter, sort });
-      return json({
-        total,
-        pages: rows.map((r) => ({ path: r.path, title: r.title, frontmatter: r.frontmatter })),
-      });
+      return json({ total, pages: rows.map((r) => ({ path: r.path, title: r.title, frontmatter: r.frontmatter })) });
     },
   );
 
@@ -147,14 +96,9 @@ export async function mcpCommand(): Promise<void> {
   server.registerTool(
     'write_page',
     {
-      description:
-        'Save a markdown page into the wiki. Use when the user asks you to STAGE something ("we should ' +
-        'remember this", "add this to the wiki"). Writes the file under content/ and indexes it so it is ' +
-        'immediately findable. Give it a clear title (in the body as an `# H1`) and optional frontmatter.',
+      description: toolDescription('write_page'),
       inputSchema: {
-        path: z
-          .string()
-          .describe('Content-relative path ending in .md, e.g. "decisions/2026-08-pricing.md"'),
+        path: z.string().describe('Content-relative path ending in .md, e.g. "decisions/2026-08-pricing.md"'),
         body: z.string().describe('The full markdown content of the page'),
       },
     },
@@ -173,7 +117,42 @@ export async function mcpCommand(): Promise<void> {
     },
   );
 
-  // Diagnostics to STDERR only — stdout is the protocol channel.
+  return server;
+}
+
+/** Run the embedder's model load with stdout muted, so nothing corrupts the protocol. */
+async function warmupEmbedder(embedder: Embedder): Promise<void> {
+  const original = process.stdout.write.bind(process.stdout);
+  // Redirect ANY stdout write (e.g. a transformers.js internal log) to stderr while
+  // the model loads — stdout is the JSON-RPC channel and must stay pristine.
+  process.stdout.write = ((chunk: unknown, ...args: unknown[]) =>
+    (process.stderr.write as (...a: unknown[]) => boolean)(chunk, ...args)) as typeof process.stdout.write;
+  try {
+    await embedder.embed(['warmup']).catch(() => undefined);
+  } finally {
+    process.stdout.write = original;
+  }
+}
+
+/**
+ * `remember mcp` — expose the wiki to any MCP client (Claude Desktop/Code, Cursor)
+ * as native tools over stdio, in-process against the wiki in the current directory.
+ * The "mechanism" half of agent integration; the CLAUDE.md/AGENTS.md trigger snippet
+ * is the "when-to-use" half.
+ *
+ * stdout carries the JSON-RPC protocol, so this writes NOTHING to stdout itself —
+ * all diagnostics (and the embedder model load) go to stderr.
+ */
+export async function mcpCommand(): Promise<void> {
+  const { contentRoot, store, embedder, engine, indexer } = await openWiki(process.cwd());
+
+  // Load the embedding model BEFORE the protocol starts (it loads lazily on first
+  // embed) so a first-run download never happens mid-tool-call — and mute stdout
+  // while it does, in case a dependency logs there.
+  await warmupEmbedder(embedder);
+
+  const server = buildRememberMcpServer({ engine, store, indexer, contentRoot });
+
   process.stderr.write(
     `remember mcp: serving ${contentRoot} over stdio (search_wiki · get_page · list_pages · write_page)\n`,
   );

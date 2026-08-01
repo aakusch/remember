@@ -12,7 +12,7 @@ import { VERSION } from '../version.js';
 import { AGENT_TOOL_DEFS } from './tool-defs.js';
 import { buildCapabilities } from '../capabilities.js';
 import { gatherDoctorReport } from '../doctor/scan.js';
-import { titleFor } from '../search/title.js';
+import { projectSearchResult } from '../search/project.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -304,21 +304,11 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       { query: q, ...(intent ? { intent } : {}) },
       { k, debug, mode: modeParam },
     );
-    // Whitelist projection — emit exactly the documented field set (CLAUDE.md's
-    // /v1/search contract), add `title` (so it matches the CLI --json and the
-    // seeded remember.md), and drop the internal `chunk_idx`. Never spread the raw
-    // internal result.
+    // Whitelist projection (shared with the CLI --json and the MCP search_wiki tool
+    // via projectSearchResult) — the documented field set, `title` added, internal
+    // `chunk_idx` dropped. Never spread the raw internal result.
     const { results, ...rest } = out as { results: SearchResult[] } & Record<string, unknown>;
-    const projected = (results ?? []).map((r) => ({
-      path: r.path,
-      title: titleFor(r),
-      snippet: r.snippet,
-      score: r.score,
-      frontmatter: r.frontmatter,
-      heading_path: r.heading_path ?? [],
-      retrievers: r.retrievers,
-      chunk_id: r.chunk_id,
-    }));
+    const projected = (results ?? []).map(projectSearchResult);
     return c.json({ query: q, ...rest, results: projected });
   });
 

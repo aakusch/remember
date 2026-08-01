@@ -20,6 +20,12 @@ import { createHashEmbedder } from '../embedders/hash.js';
 export async function resolveEmbedder(raw: RememberConfig): Promise<Embedder> {
   const descriptor = raw.pipeline?.embedder as { _kind?: string; opts?: Record<string, unknown> } | undefined;
 
+  // Explicit override for tests / CI / offline runs. `hash` forces the deterministic
+  // placeholder embedder (no model download, not semantically meaningful).
+  if (process.env.REMEMBER_EMBEDDER === 'hash') {
+    return createHashEmbedder(384);
+  }
+
   if (process.env.OPENAI_API_KEY) {
     // Only carry the configured model when it's actually an OpenAI model; a
     // local-onnx model name (e.g. bge-small) is meaningless to OpenAI.

@@ -1,7 +1,10 @@
+import { HONESTY_CONTRACT } from '../search/honesty.js';
+
 /**
- * Agent tool definitions — the single source of truth served both by the HTTP
- * API at `GET /v1/tools` and by the `remember tools` CLI command. Anthropic /
- * OpenAI-compatible `input_schema` shapes: paste straight into a tool-use call.
+ * Agent tool definitions — the single source of truth served by the HTTP API at
+ * `GET /v1/tools`, the `remember tools` CLI command, AND the `remember mcp` server
+ * (which maps these to native MCP tools). Anthropic / OpenAI-compatible
+ * `input_schema` shapes: paste straight into a tool-use call.
  *
  * Keep names, order, and schemas STABLE — agents wire against them.
  */
@@ -19,10 +22,10 @@ export const AGENT_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'search_wiki',
     description:
-      'Search this local wiki using hybrid BM25 + vector search. Returns ranked chunks with path, title, snippet, and frontmatter. ' +
-      'Honesty contract: a result means the corpus contains text that ranked for the query — NOT proof an answer exists; if the ' +
-      'right document is not in the corpus you still get its closest matches. Treat results as candidates to read, not answers. ' +
-      '`score` is a fused rank score, comparable only within a single result set, never a probability or a cross-query threshold.',
+      'Search this local wiki using hybrid BM25 + vector search. Use when the user asks you to recall ' +
+      'something ("remember when we…", "remember how we…"). Returns ranked pages with path, title, snippet, ' +
+      'and frontmatter. ' +
+      HONESTY_CONTRACT,
     input_schema: {
       type: 'object',
       properties: {
@@ -61,6 +64,21 @@ export const AGENT_TOOL_DEFS: readonly AgentToolDef[] = [
         cursor: { type: 'string', description: 'Opaque cursor from a previous list call' },
         limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
       },
+    },
+  },
+  {
+    name: 'write_page',
+    description:
+      'Save a markdown page into the wiki and index it (immediately findable). Use when the user asks ' +
+      'you to STAGE something ("we should remember this", "add this to the wiki"). Give it a clear title ' +
+      'as an `# H1` and optional frontmatter. Over HTTP this maps to PUT /v1/pages/<path> with { body }.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Content-relative path ending in .md, e.g. "decisions/2026-08-pricing.md"' },
+        body: { type: 'string', description: 'The full markdown content of the page' },
+      },
+      required: ['path', 'body'],
     },
   },
 ] as const;
