@@ -79,7 +79,7 @@ to something else. Keep pro-only concepts out of this codebase and its docs.
 pnpm install
 pnpm build       # tsc
 pnpm typecheck
-pnpm test        # 166 tests
+pnpm test        # full suite
 # benchmark harness:
 pnpm --filter @useremember/core benchmark -- --help
 ```
