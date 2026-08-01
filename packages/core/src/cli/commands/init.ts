@@ -52,25 +52,10 @@ ${tokenLine}  },
     }),
   },
 
-  // ─── Connectors ─────────────────────────────────────────────────────────
-  // Uncomment and configure to pull external content into your wiki.
-  // Synced files land in content/external/<name>/ and flow through the same
-  // indexing pipeline as your hand-written pages.
-  //
-  // connectors: [
-  //   defaults.connector.obsidian({
-  //     name: 'obsidian',
-  //     vaultPath: '/path/to/your/Obsidian Vault',
-  //     transformWikilinks: true,
-  //     tag: 'obsidian',
-  //   }),
-  //   defaults.connector.granola({
-  //     name: 'granola',
-  //     apiUrl: process.env.GRANOLA_API_URL,
-  //     apiKey: process.env.GRANOLA_API_KEY,
-  //     tag: 'meeting',
-  //   }),
-  // ],
+  // ─── Bring content in with your agent ───────────────────────────────────
+  // remember indexes markdown in content/. To pull in external sources
+  // (meeting notes, exports, another vault), have your AI agent fetch them and
+  // write markdown here — or drop files in yourself. See content/remember.md.
 
   schemaVersion: 1,
 });
@@ -163,6 +148,19 @@ GET http://localhost:4320/v1/tools
 Returns Anthropic/OpenAI-shaped tool definitions you can paste straight into a
 tool-use call, so an LLM can search the wiki itself.
 
+## Bring content in — you are the connector
+
+remember indexes markdown in \`content/\` and has **no built-in connectors on
+purpose**. To add an external source — meeting notes (e.g. Granola), an Obsidian
+vault, exports — *you*, the agent, fetch it, shape it into markdown, and write it
+here. The watcher indexes new files within about a second. Two ways:
+
+- **Write files** into \`content/\` (any subfolder). Simplest.
+- **Over HTTP:** \`PUT /v1/pages/<path>\` with a JSON body \`{ "body": "<markdown>" }\`
+  and the admin token — handy when you're already driving the API.
+
+Pull the source, convert to markdown, drop it in. That's the whole integration.
+
 ## What a result means — and doesn't
 
 A returned result means the corpus contains text that ranked for the query. It
@@ -227,7 +225,7 @@ node_modules/
 *.bak.*
 .DS_Store
 
-# Secrets — the admin token and connector API keys live here, never in committed files.
+# Secrets — the admin token (and any API keys) live here, never in committed files.
 .env
 .env.*
 !.env.example
@@ -279,10 +277,6 @@ const ENV_EXAMPLE_TEMPLATE = `# Copy to .env and fill in if you want to override
 
 # Optional: switches the embedder to OpenAI for higher-quality embeddings.
 # OPENAI_API_KEY=sk-...
-
-# Optional: configure a Granola connector (see remember.config.ts).
-# GRANOLA_API_URL=https://your-granola-bridge.example.com/meetings
-# GRANOLA_API_KEY=...
 `;
 
 export interface InitOptions {

@@ -12,6 +12,11 @@ export class PathOutsideContentError extends Error {
  * Returns the absolute path on success; throws PathOutsideContentError otherwise.
  */
 export function safeJoinContent(contentRoot: string, userPath: string): string {
+  // A NUL byte makes fs throw ERR_INVALID_ARG_VALUE (an unmapped 500) rather than
+  // our clean 400; reject it up front as an invalid path.
+  if (userPath.includes('\0')) {
+    throw new PathOutsideContentError(userPath);
+  }
   const normalized = path.normalize(userPath).replace(/^[/\\]+/, '');
   const abs = path.resolve(contentRoot, normalized);
   const rel = path.relative(contentRoot, abs);

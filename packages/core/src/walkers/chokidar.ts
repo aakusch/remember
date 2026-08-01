@@ -32,6 +32,14 @@ export function createChokidarWalker(opts: ChokidarWalkerOptions = {}): Walker {
   return {
     async *walk(root) {
       const absRoot = path.resolve(root);
+      // Friendly message instead of a raw ENOENT scandir stack when content/ is missing.
+      try {
+        await fs.access(absRoot);
+      } catch {
+        throw new Error(
+          `content directory not found: ${absRoot}. Create it (or fix \`content\` in remember.config.ts), then run \`remember index\`.`,
+        );
+      }
       const ig = await loadIgnore(absRoot, opts);
 
       for await (const entry of walkDir(absRoot, absRoot, ig, maxFileBytes)) {

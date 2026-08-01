@@ -17,9 +17,15 @@ Engine: hybrid **BM25 (SQLite FTS5) + vector (sqlite-vec, local BGE embeddings)*
 
 `packages/core` is the whole thing: `cli/`, `api/`, `search/` (the query path — start at
 `search/hybrid.ts`), `indexer/`, `stores/` (sqlite-vec), `parsers/`, `embedders/`, `chunkers/`,
-`connectors/`, `benchmarks/`. CLI commands: `init · index · search · list · get · status ·
+`benchmarks/`. CLI commands: `setup · init · index · search · list · get · status · doctor ·
 tools · capabilities · dev · start · benchmark`. `remember dev` runs the API with file-watch
 (reindex within ~1s) — **CLI + API only, no browser UI**.
+
+**No built-in connectors.** Ingestion is deliberately not the engine's job: the wiki is plain
+markdown, so the user's agent (or the user) writes markdown into `content/` — pulling from Granola,
+Obsidian, exports, etc. Managed/turnkey connectors are a *Pro* concern. Do not add source-specific
+connectors (Granola API, Obsidian sync) back into this repo. See `content/remember.md`'s
+"bring content in" section for the agent-as-connector pattern.
 
 ## Hard rules
 
@@ -73,7 +79,7 @@ to something else. Keep pro-only concepts out of this codebase and its docs.
 pnpm install
 pnpm build       # tsc
 pnpm typecheck
-pnpm test        # 166 tests
+pnpm test        # full suite
 # benchmark harness:
 pnpm --filter @useremember/core benchmark -- --help
 ```

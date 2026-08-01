@@ -99,3 +99,41 @@ describe('indexAll — one bad file must not abort the run', () => {
     expect(result.errors[0]!.path).toContain('bbb-bad.md');
   });
 });
+
+describe('reconcileEmbedder — dimension change rebuilds the vec table (M2 regression)', () => {
+  it('re-index at a NEW dimension succeeds instead of "Dimension mismatch"', async () => {
+    const content = path.join(tmp, 'content');
+    await fs.mkdir(content);
+    await fs.writeFile(path.join(content, 'a.md'), '# A\n\nAlpha body text.');
+    const dbPath = path.join(tmp, 'index.db');
+
+    // Index at 384 dimensions.
+    store = await createSqliteVecStore({ path: dbPath, dim: 384 });
+    store.reconcileEmbedder('hash-embedder-384d', 384);
+    const first = await createIndexer({
+      walker: createChokidarWalker({}),
+      parser: createRemarkParser(),
+      chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
+      embedder: createHashEmbedder(384),
+      store,
+    }).indexAll(content);
+    expect(first.errors).toHaveLength(0);
+    store.close();
+
+    // Reopen with a DIFFERENT dimension (the "switch to OpenAI 1536" scenario).
+    store = await createSqliteVecStore({ path: dbPath, dim: 768 });
+    const rec = store.reconcileEmbedder('hash-embedder-768d', 768);
+    expect(rec.changed).toBe(true);
+    const second = await createIndexer({
+      walker: createChokidarWalker({}),
+      parser: createRemarkParser(),
+      chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
+      embedder: createHashEmbedder(768),
+      store,
+    }).indexAll(content);
+    // Re-embedded at 768 with no dimension error, and search doesn't throw.
+    expect(second.files_indexed).toBe(1);
+    expect(second.errors).toHaveLength(0);
+    await expect(store.searchVector(new Array(768).fill(0.1), 3, 'alpha')).resolves.toBeDefined();
+  });
+});

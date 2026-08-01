@@ -177,6 +177,20 @@ describe('HTTP API (wired)', () => {
     expect(body.pages.find((p) => p.path === 'welcome.md')).toBeTruthy();
   });
 
+  // Regression: `sort=modified` (an alias) crossed with a filter or q used to 500
+  // because the COUNT query mis-sliced its params. Every sort alias × filter/q must 200.
+  it('GET /v1/pages sort aliases crossed with a filter/q do not 500', async () => {
+    for (const url of [
+      '/v1/pages?sort=modified&filter[status]=current',
+      '/v1/pages?sort=-modified&q=welcome',
+      '/v1/pages?sort=size&filter[status]=current',
+      '/v1/pages?sort=last_indexed&q=w',
+    ]) {
+      const res = await app.request(url);
+      expect(res.status, url).toBe(200);
+    }
+  });
+
   it('GET /v1/pages/<path> returns the page', async () => {
     const res = await app.request('/v1/pages/welcome.md');
     expect(res.status).toBe(200);

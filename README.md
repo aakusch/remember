@@ -78,9 +78,9 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call), and `/v1/capabilities` (one discovery object). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
 | **Live reload** | Filesystem watcher → incremental reindex in <1 s. Edit in your editor of choice; the index keeps up. |
-| **Connectors** | Pull external sources (Obsidian vault, Granola meetings, any folder) into the same searchable index. |
+| **Agent-writable** | Your agent is the connector: it pulls external sources, converts them to markdown, and writes them into `content/` — directly or via `PUT /v1/pages`. |
 | **Filesystem-canonical** | Plain markdown in a directory. Plays with Obsidian, Cursor, VS Code, Dropbox, git. No proprietary format. |
-| **Pluggable** | Walker · Parser · Chunker · Embedder · Store · SearchEngine · Reranker · Connector — every adapter has a documented interface. |
+| **Pluggable** | Walker · Parser · Chunker · Embedder · Store · SearchEngine · Reranker — every adapter has a documented interface. |
 | **MIT licensed** | Use it for anything. |
 
 <br>
@@ -259,33 +259,20 @@ embeddings and may download that model when explicitly selected. See
 
 <br>
 
-## Connectors
+## Bringing in external content
 
-Pull external sources into the same indexed corpus:
+`remember` indexes plain markdown in `content/` and ships **no built-in
+connectors** on purpose — your agent is the connector. To pull in an external
+source (meeting notes, another tool's vault, an export), your AI agent (or
+you) fetches it, converts it to markdown, and writes it into `content/`. Two
+ways to land it:
 
-```ts
-// remember.config.ts
-import { defineConfig, defaults } from '@useremember/core';
+- **Write files directly** — the watcher indexes new markdown within a second.
+- **Over HTTP** — `PUT /v1/pages/<path>` with a JSON body
+  `{ "body": "<markdown>" }` and the admin token
+  (`Authorization: Bearer <token>`).
 
-export default defineConfig({
-  connectors: [
-    defaults.connector.obsidian({
-      vaultPath: '~/Documents/Obsidian Vault',
-      transformWikilinks: true,
-      tag: 'obsidian',
-    }),
-    defaults.connector.granola({
-      apiUrl: process.env.GRANOLA_API_URL,
-      apiKey: process.env.GRANOLA_API_KEY,
-      since: '2026-01-01',
-      tag: 'meeting',
-    }),
-  ],
-});
-```
-
-The connector manager runs an initial sync on boot, then exposes per-connector
-and "sync all" triggers through `/v1/connectors`.
+Managed, turnkey connectors are a **Pro** concern, not part of this MIT engine.
 
 <br>
 
@@ -362,7 +349,6 @@ One package, published to npm:
 │  • HTTP API (Hono): /v1/search /v1/tools  │
 │  • Embedder (local ONNX · OpenAI)         │
 │  • SQLite + vec0 store                     │
-│  • Connectors                              │
 └──────────────────────────────────────────┘
 ```
 
@@ -402,7 +388,6 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
 
 PRs welcome on:
 
-- New connector implementations (`packages/core/src/connectors/<name>.ts`)
 - New embedder providers (Voyage, Cohere, etc.)
 - New rerankers (cross-encoder, LLM-based)
 - Query planners and retrieval evaluation fixtures

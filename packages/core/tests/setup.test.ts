@@ -76,9 +76,12 @@ describe('setup — init quiet mode + agent doc', () => {
     const dir = path.join(tmp, 'wiki');
     await init(dir, { quiet: true });
     const doc = await fs.readFile(path.join(dir, 'content', 'remember.md'), 'utf8');
-    // The seeded agent doc carries the exact snippet a user/agent copies out.
-    expect(doc).toContain('remember — recall from the knowledge base');
-    expect(AGENT_TRIGGER_SNIPPET).toContain('retrieval request');
+    // The seeded agent doc carries the exact snippet a user/agent copies out —
+    // both the recall (retrieve) and stage (store) triggers.
+    expect(doc).toContain('remember — the project knowledge base');
+    expect(AGENT_TRIGGER_SNIPPET).toContain('Recall (retrieve)');
+    expect(AGENT_TRIGGER_SNIPPET).toContain('Stage (store)');
+    expect(AGENT_TRIGGER_SNIPPET).toContain('we should remember this');
     // No stale agents.md.
     await expect(fs.access(path.join(dir, 'content', 'agents.md'))).rejects.toThrow();
   });

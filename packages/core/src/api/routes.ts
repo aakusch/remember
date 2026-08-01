@@ -35,8 +35,6 @@ export interface RouteContext {
   configPath: string | null;
   configRoot: string;
   getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
-  saveConfig: (source: string) => Promise<{ ok: true; written_to: string; backup_path: string | null } | { ok: false; error: { code: string; message: string; hint?: string } }>;
-  reloadConfig?: () => Promise<{ ok: true; reloaded_at: string } | { ok: false; error: { code: string; message: string; hint?: string } }>;
   logs?: LogBuffer;
   history?: {
     append: (input: HistoryWriteInput) => number;
@@ -45,11 +43,6 @@ export interface RouteContext {
     prune: (path: string, keep?: number) => number;
   };
   events: EventEmitter;
-  connectors: {
-    list: () => Array<{ name: string; kind: string; target: string; configured: boolean; last_sync_at: string | null; last_result: unknown; last_error: string | null }>;
-    syncOne: (name: string) => Promise<unknown>;
-    syncAll: () => Promise<Record<string, unknown>>;
-  };
 }
 
 /** True for any loopback hostname form. Used on the BOUND host (trusted), never on the client Host header. */
@@ -215,8 +208,10 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       // only carry text/plain|form-encoded bodies, so requiring JSON blocks it while
       // every real client passes. (DELETE/PATCH/PUT already always preflight.)
       if (method === 'POST' || method === 'PUT') {
+        // Require a JSON content-type outright — an EMPTY content-type also skips a
+        // browser preflight, so accepting it would leave the no-preflight POST hole open.
         const ctype = (c.req.header('content-type') ?? '').toLowerCase();
-        if (ctype && !ctype.includes('application/json')) {
+        if (!ctype.includes('application/json')) {
           return c.json(
             { error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Content-Type: application/json required' } },
             415,
@@ -271,7 +266,6 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         { name: 'index', description: 'Reindex trigger + status' },
         { name: 'config', description: 'Live config get/set + hot-reload' },
         { name: 'observability', description: 'Logs + live events' },
-        { name: 'connectors', description: 'External-source sync' },
       ],
     }),
   );
@@ -288,6 +282,9 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     }
     const debug = c.req.query('debug') === '1';
     const intent = c.req.query('intent')?.trim();
+    if (intent && intent.length > 2048) {
+      return c.json({ error: { code: 'INVALID_PARAM', message: 'intent must be <= 2048 characters' } }, 400);
+    }
     const modeParam = c.req.query('mode') ?? 'fast';
     if (modeParam !== 'fast' && modeParam !== 'enhanced') {
       return c.json(
@@ -530,6 +527,9 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       await ctx.store.deleteByPath(body.from);
       await ctx.store.updateManifest(body.from, null);
       await ctx.store.deletePage(body.from);
+      // Index the destination so the moved page is immediately findable (without
+      // this, on `remember start` with no watcher it's invisible until a reindex).
+      await ctx.reindexOne(body.to);
       return c.json({ ok: true });
     } catch (err) {
       if (err instanceof PathOutsideContentError) {
@@ -654,59 +654,6 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       config_root: ctx.configRoot,
     });
   });
-  app.put('/v1/config', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
-    if (denial) return denial;
-
-    const body = (await c.req.json().catch(() => ({}))) as { source?: unknown };
-    if (typeof body.source !== 'string' || !body.source.trim()) {
-      return c.json(
-        {
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'PUT /v1/config requires { source: string } where source is the full remember.config.ts contents',
-          },
-        },
-        400,
-      );
-    }
-
-    const result = await ctx.saveConfig(body.source);
-    if (!result.ok) {
-      return c.json({ error: result.error }, 500);
-    }
-
-    // Try hot-reload. Falls back to restart-required if no reloadConfig handler
-    // is wired or if rebuilding the pipeline from the new config fails.
-    if (ctx.reloadConfig) {
-      const reload = await ctx.reloadConfig();
-      if (reload.ok) {
-        return c.json({
-          ok: true,
-          written_to: result.written_to,
-          backup_path: result.backup_path,
-          restart_required: false,
-          reloaded_at: reload.reloaded_at,
-        });
-      }
-      return c.json({
-        ok: true,
-        written_to: result.written_to,
-        backup_path: result.backup_path,
-        restart_required: true,
-        reload_failed: reload.error,
-        hint: `Config saved but hot-reload failed: ${reload.error.message}. Restart with: Ctrl+C → remember start`,
-      });
-    }
-
-    return c.json({
-      ok: true,
-      written_to: result.written_to,
-      backup_path: result.backup_path,
-      restart_required: true,
-      hint: 'Restart the core API (Ctrl+C → remember start) to pick up the new config',
-    });
-  });
 
   // Recent operational events — errors, warnings, lifecycle. Powers the
   // Diagnostics page. Capped at ~50 entries in-memory; not durable.
@@ -759,22 +706,6 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         });
       });
     });
-  });
-
-  // Connectors
-  app.get('/v1/connectors', (c) => c.json({ connectors: ctx.connectors.list() }));
-  app.post('/v1/connectors/:name/sync', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
-    if (denial) return denial;
-    const name = c.req.param('name');
-    const r = await ctx.connectors.syncOne(name);
-    return c.json(r);
-  });
-  app.post('/v1/connectors/sync', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
-    if (denial) return denial;
-    const r = await ctx.connectors.syncAll();
-    return c.json({ ok: true, results: r });
   });
 
   // AI tools surface — same defs the `remember tools` CLI command prints.
@@ -977,19 +908,9 @@ const openApiPaths = {
   // ─── Config ────────────────────────────────────────────────────────────
   '/config': {
     get: {
-      summary: 'Get the active config (read-only view)',
+      summary: 'Get the active config (read-only view, token redacted)',
       tags: ['config'],
       responses: jsonResponse('config object'),
-    },
-    put: {
-      summary: 'Save new remember.config.ts source + hot-reload',
-      tags: ['config'],
-      security: [{ adminToken: [] }],
-      requestBody: {
-        required: true,
-        content: { 'application/json': { schema: { type: 'object', properties: { source: { type: 'string' } }, required: ['source'] } } },
-      },
-      responses: jsonResponse('ok with written_to, backup_path, restart_required, reloaded_at'),
     },
   },
 
@@ -1014,32 +935,6 @@ const openApiPaths = {
       responses: {
         [200]: { description: 'SSE stream', content: { 'text/event-stream': {} } },
       },
-    },
-  },
-
-  // ─── Connectors ────────────────────────────────────────────────────────
-  '/connectors': {
-    get: {
-      summary: 'List configured connectors + their last sync state',
-      tags: ['connectors'],
-      responses: jsonResponse('connectors[]'),
-    },
-  },
-  '/connectors/{name}/sync': {
-    post: {
-      summary: 'Run a single connector now',
-      tags: ['connectors'],
-      security: [{ adminToken: [] }],
-      parameters: [stringParam('name', 'path', true)],
-      responses: jsonResponse('sync result'),
-    },
-  },
-  '/connectors/sync': {
-    post: {
-      summary: 'Run every configured connector',
-      tags: ['connectors'],
-      security: [{ adminToken: [] }],
-      responses: jsonResponse('per-connector result map'),
     },
   },
 } as const;
