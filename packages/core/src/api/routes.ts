@@ -5,12 +5,14 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { safeJoinContent, PathOutsideContentError } from './path-utils.js';
-import type { Embedder, SearchEngine, Store } from '../types.js';
+import type { Embedder, SearchEngine, SearchResult, Store } from '../types.js';
 import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 import { VERSION } from '../version.js';
 import { AGENT_TOOL_DEFS } from './tool-defs.js';
 import { buildCapabilities } from '../capabilities.js';
+import { gatherDoctorReport } from '../doctor/scan.js';
+import { titleFor } from '../search/title.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -63,6 +65,27 @@ function isLoopbackHost(host: string | undefined): boolean {
     h = h.split(':')[0]!;
   }
   return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h.startsWith('127.');
+}
+
+/**
+ * Parse a bounded integer query param. Absent/empty → default; a syntactically
+ * bad value (e.g. `k=abc`) → a 400 Response the caller returns, instead of the
+ * old `Math.min(50, NaN) === NaN` that crashed the handler into a 500.
+ */
+function clampIntParam(
+  c: Context,
+  name: string,
+  raw: string | undefined,
+  def: number,
+  min: number,
+  max: number,
+): number | Response {
+  if (raw === undefined || raw === '') return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    return c.json({ error: { code: 'INVALID_PARAM', message: `${name} must be an integer` } }, 400);
+  }
+  return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
 /** True if an IP literal (from the real socket) is a loopback address. */
@@ -151,6 +174,59 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     return next();
   });
 
+  // CSRF / DNS-rebinding defense. The local API ships no CORS headers, but a
+  // browser can still (a) reach a loopback server via a rebound DNS name and
+  // (b) fire a no-preflight "simple" POST cross-origin. Without this, any site
+  // the user visited while `remember dev` ran could read the wiki or drive the
+  // write API. Non-browser clients (curl, agents) send none of these headers and
+  // pass untouched.
+  app.use('/v1/*', async (c, next) => {
+    if (c.req.path === '/v1/health') return next();
+
+    // DNS-rebinding: on a loopback bind, only genuine loopback traffic reaches us,
+    // so a request whose Host header isn't loopback is a rebound attacker name.
+    // (Non-loopback binds intentionally serve other hosts and are token-gated.)
+    if (isLoopbackHost(ctx.boundHost)) {
+      const host = c.req.header('host');
+      if (host && !isLoopbackHost(host)) {
+        return c.json({ error: { code: 'FORBIDDEN', message: 'Host not allowed (DNS-rebinding guard)' } }, 403);
+      }
+    }
+
+    const method = c.req.method;
+    if (method !== 'GET' && method !== 'HEAD') {
+      // A modern browser tags cross-site requests; reject them outright.
+      const secFetchSite = c.req.header('sec-fetch-site');
+      if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'none') {
+        return c.json({ error: { code: 'FORBIDDEN', message: 'cross-site request blocked' } }, 403);
+      }
+      // A cross-origin request carries an Origin; require it to be loopback.
+      const origin = c.req.header('origin');
+      if (origin) {
+        let ok = false;
+        try {
+          ok = isLoopbackHost(new URL(origin).host);
+        } catch {
+          ok = false;
+        }
+        if (!ok) return c.json({ error: { code: 'FORBIDDEN', message: 'cross-origin request blocked' } }, 403);
+      }
+      // Force a preflight for cross-origin writes: a no-preflight "simple" POST can
+      // only carry text/plain|form-encoded bodies, so requiring JSON blocks it while
+      // every real client passes. (DELETE/PATCH/PUT already always preflight.)
+      if (method === 'POST' || method === 'PUT') {
+        const ctype = (c.req.header('content-type') ?? '').toLowerCase();
+        if (ctype && !ctype.includes('application/json')) {
+          return c.json(
+            { error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Content-Type: application/json required' } },
+            415,
+          );
+        }
+      }
+    }
+    return next();
+  });
+
   // Health + meta
   app.get('/v1/health', (c) => c.json({ ok: true, version: VERSION }));
 
@@ -203,7 +279,13 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   // Search
   app.get('/v1/search', async (c) => {
     const q = c.req.query('q') ?? '';
-    const k = Math.max(1, Math.min(50, Number(c.req.query('k') ?? '10')));
+    const k = clampIntParam(c, 'k', c.req.query('k'), 10, 1, 50);
+    if (k instanceof Response) return k;
+    // Bound query length — a multi-KB query stalls the single-threaded server
+    // while it embeds + scans (a cheap DoS on the public read surface).
+    if (q.length > 2048) {
+      return c.json({ error: { code: 'INVALID_PARAM', message: 'q must be <= 2048 characters' } }, 400);
+    }
     const debug = c.req.query('debug') === '1';
     const intent = c.req.query('intent')?.trim();
     const modeParam = c.req.query('mode') ?? 'fast';
@@ -225,7 +307,22 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       { query: q, ...(intent ? { intent } : {}) },
       { k, debug, mode: modeParam },
     );
-    return c.json({ query: q, ...out });
+    // Whitelist projection — emit exactly the documented field set (CLAUDE.md's
+    // /v1/search contract), add `title` (so it matches the CLI --json and the
+    // seeded agents.md), and drop the internal `chunk_idx`. Never spread the raw
+    // internal result.
+    const { results, ...rest } = out as { results: SearchResult[] } & Record<string, unknown>;
+    const projected = (results ?? []).map((r) => ({
+      path: r.path,
+      title: titleFor(r),
+      snippet: r.snippet,
+      score: r.score,
+      frontmatter: r.frontmatter,
+      heading_path: r.heading_path ?? [],
+      retrievers: r.retrievers,
+      chunk_id: r.chunk_id,
+    }));
+    return c.json({ query: q, ...rest, results: projected });
   });
 
   // List pages — backed by the frontmatter-aware `pages` table.
@@ -241,11 +338,12 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       const m = /^filter\[(.+)\]$/.exec(k);
       if (m && m[1] && typeof v === 'string') filter[m[1]] = v;
     }
-    const limit = Math.max(1, Math.min(500, Number(query.limit ?? '50')));
+    const limit = clampIntParam(c, 'limit', query.limit, 50, 1, 500);
+    if (limit instanceof Response) return limit;
     const cursor = query.cursor;
-    const offset = cursor
-      ? Math.max(0, Number(Buffer.from(cursor, 'base64').toString('utf8')))
-      : Math.max(0, Number(query.offset ?? '0'));
+    const offsetRaw = cursor ? Buffer.from(cursor, 'base64').toString('utf8') : query.offset;
+    const offset = clampIntParam(c, 'offset', offsetRaw, 0, 0, Number.MAX_SAFE_INTEGER);
+    if (offset instanceof Response) return offset;
     const sort = query.sort;
     const q = query.q;
 
@@ -402,6 +500,9 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       await fs.unlink(abs);
       const removed = await ctx.store.deleteByPath(userPath);
       await ctx.store.updateManifest(userPath, null);
+      // Why: deleteByPath only clears chunks/fts/vec; without deletePage the row lingers
+      // in `pages` forever, so `remember list` / list_pages hand agents dead paths.
+      await ctx.store.deletePage(userPath);
       return c.json({ ok: true, removed_chunks: removed });
     } catch (err) {
       if (err instanceof PathOutsideContentError) {
@@ -428,6 +529,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       await fs.rename(absFrom, absTo);
       await ctx.store.deleteByPath(body.from);
       await ctx.store.updateManifest(body.from, null);
+      await ctx.store.deletePage(body.from);
       return c.json({ ok: true });
     } catch (err) {
       if (err instanceof PathOutsideContentError) {
@@ -469,6 +571,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         if (p === userPath || p.startsWith(`${userPath}/`)) {
           await ctx.store.deleteByPath(p);
           await ctx.store.updateManifest(p, null);
+          await ctx.store.deletePage(p);
         }
       }
       return c.json({ ok: true });
@@ -525,6 +628,12 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       },
       version: VERSION,
     });
+  });
+
+  // Corpus-health sweep — deterministic, no-LLM. Same report as `remember doctor`.
+  app.get('/v1/doctor', async (c) => {
+    const report = await gatherDoctorReport(ctx.store, ctx.contentRoot, new Date().toISOString());
+    return c.json(report);
   });
 
   // Config

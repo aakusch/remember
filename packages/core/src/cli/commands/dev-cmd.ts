@@ -28,7 +28,12 @@ export async function devCommand(): Promise<void> {
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
     dim: embedder.dim,
   });
-  store.setDimension(embedder.dim);
+  const reconcile = store.reconcileEmbedder(embedder.modelId, embedder.dim);
+  if (reconcile.changed) {
+    process.stderr.write(
+      `remember: index was built with a different embedder (${reconcile.previousModelId}) and was cleared — it will re-embed on the next index pass with ${embedder.modelId}.\n`,
+    );
+  }
 
   const indexer = createIndexer({
     walker: createChokidarWalker({ respectGitignore: true }),
@@ -46,6 +51,14 @@ export async function devCommand(): Promise<void> {
         `${c.bold(plural(initial.chunks_added, 'chunk'))} ${c.dim(`in ${fmtMs(initial.duration_ms)}`)}`,
     )}\n`,
   );
+  if (initial.errors.length > 0) {
+    process.stderr.write(
+      `${c.yellow(`! ${plural(initial.errors.length, 'file')} skipped due to errors:`)}\n`,
+    );
+    for (const e of initial.errors) {
+      process.stderr.write(`  ${c.dim('•')} ${e.path}: ${e.error}\n`);
+    }
+  }
 
   // ─── Serve ──────────────────────────────────────────────────────────────
   const { url: apiUrl, close: stopApi } = await startServer({ rootDir: process.cwd() });

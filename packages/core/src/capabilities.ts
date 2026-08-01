@@ -46,6 +46,25 @@ export interface Capabilities {
     api_base: string;
     /** Default API port when unset (REMEMBER_API_PORT overrides). */
     default_port: number;
+    /** Query planner in effect. `passthrough` = no query rewriting (Pro adds planning). */
+    planner: 'passthrough';
+    /** Reranker in effect. `none` = fused order is final (Pro adds a cross-encoder). */
+    reranker: 'none';
+    /**
+     * What this edition can and can't do, so an agent written against a Pro
+     * deployment can detect missing features instead of discovering them via 404s.
+     */
+    features: {
+      /** Deterministic corpus-health sweep (`remember doctor` / GET /v1/doctor). */
+      doctor: boolean;
+      /** Browser viewer UI — Pro only. */
+      viewer: boolean;
+      /** Declared subwikis + scoped API keys — Pro only. */
+      subwikis: boolean;
+      scoped_keys: boolean;
+      /** Ingestable formats. The OSS engine is markdown-only. */
+      formats: string[];
+    };
   };
   /** Configured embedding model + dimensions, or null if not resolvable. */
   embedder: { model: string; dim: number } | null;
@@ -63,6 +82,7 @@ export const CAPABILITY_ENDPOINTS: readonly CapabilityEndpoint[] = [
   { method: 'GET', path: '/v1/pages', summary: 'List indexed pages' },
   { method: 'GET', path: '/v1/pages/{path}', summary: 'Fetch one page by path' },
   { method: 'GET', path: '/v1/status', summary: 'Index + embedding-model status' },
+  { method: 'GET', path: '/v1/doctor', summary: 'Corpus-health sweep (deterministic, no-LLM)' },
   { method: 'GET', path: '/v1/tools', summary: 'Anthropic/OpenAI tool definitions' },
 ] as const;
 
@@ -75,6 +95,7 @@ export const CAPABILITY_COMMANDS: readonly CapabilityCommand[] = [
   { name: 'get', args: '<path>', summary: 'Print one page (--json)' },
   { name: 'list', summary: 'List indexed pages (--json)' },
   { name: 'status', summary: 'Index dashboard (--json)' },
+  { name: 'doctor', summary: 'Corpus-health sweep (--json, --strict)' },
   { name: 'tools', summary: 'Agent tool definitions (--json)' },
   { name: 'capabilities', summary: 'This discovery object (--json)' },
 ] as const;
@@ -95,6 +116,15 @@ export function buildCapabilities(
       license: 'MIT',
       api_base: '/v1',
       default_port: 4320,
+      planner: 'passthrough',
+      reranker: 'none',
+      features: {
+        doctor: true,
+        viewer: false,
+        subwikis: false,
+        scoped_keys: false,
+        formats: ['md'],
+      },
     },
     embedder: opts.embedder ?? null,
     endpoints: CAPABILITY_ENDPOINTS.map((e) => ({ ...e })),

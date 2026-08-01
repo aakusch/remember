@@ -268,6 +268,8 @@ export interface Store {
   deletePage(path: string): Promise<void>;
   queryPages(query: PageQuery): Promise<{ rows: PageRecord[]; total: number }>;
   listFrontmatterKeys(): Promise<string[]>;
+  /** Per-page facts for the deterministic `remember doctor` corpus-health sweep. */
+  collectDoctorFacts(): import('./doctor/doctor.js').DoctorPageFact[];
 }
 
 export interface RememberConfig {

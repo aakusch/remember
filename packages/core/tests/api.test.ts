@@ -116,11 +116,23 @@ describe('HTTP API (wired)', () => {
     expect(JSON.stringify(body)).not.toContain('super-secret-token');
   });
 
-  it('GET /v1/search returns results', async () => {
+  it('GET /v1/search returns results with the whitelisted field set', async () => {
     const res = await app.request('/v1/search?q=welcome&k=5');
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { results: unknown[] };
+    const body = (await res.json()) as { results: Array<Record<string, unknown>> };
     expect(body.results.length).toBeGreaterThan(0);
+    // The contract CLAUDE.md promises — exactly these keys, `title` present,
+    // internal `chunk_idx` NOT leaked.
+    expect(Object.keys(body.results[0]!).sort()).toEqual([
+      'chunk_id',
+      'frontmatter',
+      'heading_path',
+      'path',
+      'retrievers',
+      'score',
+      'snippet',
+      'title',
+    ]);
   });
 
   it('GET /v1/search accepts intent/mode and maps debug to a structured trace', async () => {

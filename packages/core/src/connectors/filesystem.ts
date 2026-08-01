@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Connector, ConnectorSyncResult, ConnectorStatus } from './types.js';
+import { resolveConnectorTarget } from './paths.js';
 
 export interface FilesystemConnectorOptions {
   name?: string;
@@ -18,7 +19,9 @@ export interface FilesystemConnectorOptions {
  */
 export function createFilesystemConnector(opts: FilesystemConnectorOptions): Connector {
   const name = opts.name ?? 'filesystem';
-  const target = opts.target ?? `external/${name}`;
+  // Treat an empty/whitespace target as "unset" so it can never resolve to the
+  // content root (see resolveConnectorTarget).
+  const target = opts.target?.trim() || `external/${name}`;
   let lastSync: string | null = null;
   let lastResult: ConnectorSyncResult | null = null;
   let lastError: string | null = null;
@@ -45,7 +48,7 @@ export function createFilesystemConnector(opts: FilesystemConnectorOptions): Con
         throw new Error(lastError ?? 'connector not configured');
       }
       const started = Date.now();
-      const targetAbs = path.join(ctx.contentRoot, target);
+      const targetAbs = resolveConnectorTarget(ctx.contentRoot, target);
       await fs.mkdir(targetAbs, { recursive: true });
 
       const seen = new Set<string>();
@@ -82,7 +85,10 @@ export function createFilesystemConnector(opts: FilesystemConnectorOptions): Con
       };
       await walk(opts.sourcePath);
 
-      // Cleanup orphans
+      // Cleanup orphans — but ONLY when the source actually yielded files. An empty
+      // or unreadable source (0 files seen) must never trigger a prune, or a transient
+      // source-mount failure silently wipes the entire mirror. See connector data-loss
+      // findings in the OSS prod-readiness sweep.
       const cleanup = async (dir: string, baseRel: string): Promise<void> => {
         let entries;
         try {
@@ -103,7 +109,7 @@ export function createFilesystemConnector(opts: FilesystemConnectorOptions): Con
           }
         }
       };
-      await cleanup(targetAbs, '');
+      if (seen.size > 0) await cleanup(targetAbs, '');
 
       lastResult = {
         files_written: written,

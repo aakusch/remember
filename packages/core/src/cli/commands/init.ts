@@ -12,8 +12,11 @@ function generateAdminToken(): string {
 }
 
 const CONFIG_TEMPLATE = (opts: { adminToken: string | null }) => {
+  // The token lives in `.env` (gitignored), NOT inline here — this file is meant to
+  // be committed, and an inlined token would be pushed to the user's git remote on
+  // their first commit. loadConfig reads .env before evaluating this config.
   const tokenLine = opts.adminToken
-    ? `    // Generated at init. Required to bind to non-loopback hosts and to use\n    // any write/admin endpoint from a remote machine. Keep it secret.\n    adminToken: process.env.REMEMBER_ADMIN_TOKEN ?? '${opts.adminToken}',\n`
+    ? `    // Required to bind to non-loopback hosts and to use any write/admin endpoint\n    // from a remote machine. Value lives in .env (gitignored) as REMEMBER_ADMIN_TOKEN.\n    adminToken: process.env.REMEMBER_ADMIN_TOKEN ?? null,\n`
     : `    // adminToken: process.env.REMEMBER_ADMIN_TOKEN, // required for non-loopback binds\n`;
   return `import { defineConfig, defaults } from '@useremember/core';
 
@@ -88,7 +91,11 @@ over an HTTP API your AI agents can call. Nothing leaves your machine.
 Drop any \`.md\` file into \`content/\`:
 
 \`\`\`bash
-echo "# Deploy runbook\\n\\nProduction deploys go out Tuesdays." > content/deploy.md
+cat > content/deploy.md <<'MD'
+# Deploy runbook
+
+Production deploys go out Tuesdays.
+MD
 \`\`\`
 
 The watcher indexes it (parse → chunk → embed → store) within about a second.
@@ -208,6 +215,11 @@ const GITIGNORE_TEMPLATE = `.remember/
 node_modules/
 *.bak.*
 .DS_Store
+
+# Secrets — the admin token and connector API keys live here, never in committed files.
+.env
+.env.*
+!.env.example
 `;
 
 const REMEMBERIGNORE_TEMPLATE = `# Patterns to skip when indexing.
@@ -234,6 +246,13 @@ const PACKAGE_TEMPLATE = (name: string) => ({
   dependencies: {
     // Pinned to a real published range; `*` reads as "unmaintained" on a scaffold.
     '@useremember/core': '^0.2.0',
+  },
+  // pnpm >=10 blocks postinstall build scripts by default, which silently leaves
+  // better-sqlite3's native binding unbuilt — every `remember` command then dies with
+  // a "Could not locate the bindings file" dump. Pre-approving these builds makes
+  // `pnpm install` work out of the box (npm/yarn ignore this key).
+  pnpm: {
+    onlyBuiltDependencies: ['better-sqlite3', 'onnxruntime-node', 'sharp', 'protobufjs'],
   },
 });
 
@@ -268,10 +287,27 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
   const absTarget = path.resolve(process.cwd(), targetDir);
   const basename = path.basename(absTarget);
 
+  // Benign pre-existing entries that shouldn't block `remember init .` — the natural
+  // "git init, then scaffold here" flow leaves a `.git`, macOS leaves `.DS_Store`, etc.
+  const BENIGN_ENTRIES = new Set([
+    '.git',
+    '.gitignore',
+    '.DS_Store',
+    'LICENSE',
+    'LICENSE.md',
+    'README.md',
+    '.idea',
+    '.vscode',
+  ]);
   try {
     const entries = await fs.readdir(absTarget);
-    if (entries.length > 0) {
-      throw new Error(`remember init: ${absTarget} exists and is not empty. Choose an empty directory.`);
+    const blocking = entries.filter((e) => !BENIGN_ENTRIES.has(e));
+    if (blocking.length > 0) {
+      // No `remember init:` prefix — the CLI error handler adds it (avoids the
+      // double "remember init: remember init:" the old message produced).
+      throw new Error(
+        `${absTarget} already has files (${blocking.slice(0, 3).join(', ')}${blocking.length > 3 ? '…' : ''}). Choose an empty directory.`,
+      );
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
@@ -284,6 +320,14 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
   await fs.writeFile(path.join(absTarget, '.gitignore'), GITIGNORE_TEMPLATE);
   await fs.writeFile(path.join(absTarget, '.rememberignore'), REMEMBERIGNORE_TEMPLATE);
   await fs.writeFile(path.join(absTarget, '.env.example'), ENV_EXAMPLE_TEMPLATE);
+  // Write the generated token to a gitignored .env (loadConfig reads it before
+  // evaluating remember.config.ts). Never inline it into the committable config.
+  if (adminToken) {
+    await fs.writeFile(
+      path.join(absTarget, '.env'),
+      `# Secrets for this wiki — gitignored, never commit.\nREMEMBER_ADMIN_TOKEN=${adminToken}\n`,
+    );
+  }
   await fs.writeFile(
     path.join(absTarget, 'package.json'),
     JSON.stringify(PACKAGE_TEMPLATE(basename), null, 2) + '\n',
@@ -305,8 +349,8 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     header('Next steps'),
     `  ${c.dim('$')} cd ${targetDir}`,
     `  ${c.dim('$')} npm install`,
-    `  ${c.dim('$')} npm run dev              ${c.dim('# index + serve the agent API')}`,
-    `  ${c.dim('$')} npx remember search "…"  ${c.dim('# search from the terminal')}`,
+    `  ${c.dim('$')} npm run dev                 ${c.dim('# index + serve the agent API')}`,
+    `  ${c.dim('$')} npm run search -- "…"       ${c.dim('# search from the terminal')}`,
     ``,
     `  ${c.dim('API')}  ${c.accent('http://localhost:4320')}   ${c.dim('search + agent endpoints')}`,
     ``,
@@ -317,7 +361,7 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
     lines.push(
       ``,
       header('Admin token'),
-      c.dim(`(also saved to remember.config.ts)`),
+      c.dim(`(saved to .env as REMEMBER_ADMIN_TOKEN — gitignored)`),
       `  ${c.yellow(adminToken)}`,
       ``,
       c.dim(`You only need it by hand for direct API writes (Authorization: Bearer`),

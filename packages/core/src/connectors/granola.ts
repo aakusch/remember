@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Connector, ConnectorSyncResult, ConnectorStatus } from './types.js';
+import { resolveConnectorTarget } from './paths.js';
 
 export interface GranolaMeeting {
   id: string;
@@ -32,7 +33,7 @@ export interface GranolaConnectorOptions {
 
 export function createGranolaConnector(opts: GranolaConnectorOptions = {}): Connector {
   const name = opts.name ?? 'granola';
-  const target = opts.target ?? `external/${name}`;
+  const target = opts.target?.trim() || `external/${name}`;
   let lastSync: string | null = null;
   let lastResult: ConnectorSyncResult | null = null;
   let lastError: string | null = null;
@@ -68,7 +69,7 @@ export function createGranolaConnector(opts: GranolaConnectorOptions = {}): Conn
         throw new Error(lastError ?? 'connector not configured');
       }
 
-      const targetAbs = path.join(ctx.contentRoot, target);
+      const targetAbs = resolveConnectorTarget(ctx.contentRoot, target);
       await fs.mkdir(targetAbs, { recursive: true });
 
       const meetings = await fetcher(opts.since);
@@ -78,7 +79,9 @@ export function createGranolaConnector(opts: GranolaConnectorOptions = {}): Conn
       const seen = new Set<string>();
       for (const m of meetings) {
         const slug = slugify(m.title || m.id);
-        const dateStr = m.started_at.slice(0, 10);
+        // started_at may be absent/garbage from an upstream shape change — don't let
+        // a `.slice` on undefined throw and abort the whole sync.
+        const dateStr = typeof m.started_at === 'string' ? m.started_at.slice(0, 10) : 'undated';
         const filename = `${dateStr}-${slug}.md`;
         const dst = path.join(targetAbs, filename);
         seen.add(filename);
@@ -98,18 +101,24 @@ export function createGranolaConnector(opts: GranolaConnectorOptions = {}): Conn
         written++;
       }
 
-      // Cleanup orphans
+      // Cleanup orphans — but skip pruning entirely when (a) the fetch returned no
+      // meetings (empty/failed upstream would otherwise wipe the whole mirror) or
+      // (b) this is an incremental fetch (`since` narrows the window, so files
+      // outside it are NOT orphans — reconciling would delete every older note).
       let deleted = 0;
-      try {
-        const existing = await fs.readdir(targetAbs);
-        for (const f of existing) {
-          if (f.endsWith('.md') && !seen.has(f)) {
-            await fs.unlink(path.join(targetAbs, f));
-            deleted++;
+      const incremental = Boolean(opts.since);
+      if (meetings.length > 0 && !incremental) {
+        try {
+          const existing = await fs.readdir(targetAbs);
+          for (const f of existing) {
+            if (f.endsWith('.md') && !seen.has(f)) {
+              await fs.unlink(path.join(targetAbs, f));
+              deleted++;
+            }
           }
+        } catch {
+          /* */
         }
-      } catch {
-        /* */
       }
 
       lastResult = {
@@ -151,19 +160,23 @@ function slugify(s: string): string {
 }
 
 function renderMeeting(m: GranolaMeeting, opts: { tag?: string; includeTranscript?: boolean }): string {
+  // Quote every interpolated value. Upstream fields are remote-controlled; an
+  // unquoted id/timestamp/tag containing a newline or `:` used to inject arbitrary
+  // YAML keys into the user's frontmatter.
+  const q = (v: string): string => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]+/g, ' ')}"`;
   const fm: string[] = [];
-  fm.push(`title: "${(m.title || m.id).replace(/"/g, '\\"')}"`);
+  fm.push(`title: ${q(m.title || m.id)}`);
   fm.push(`source: granola`);
-  fm.push(`granola_id: ${m.id}`);
-  fm.push(`started_at: ${m.started_at}`);
-  if (m.ended_at) fm.push(`ended_at: ${m.ended_at}`);
+  fm.push(`granola_id: ${q(m.id)}`);
+  if (m.started_at) fm.push(`started_at: ${q(m.started_at)}`);
+  if (m.ended_at) fm.push(`ended_at: ${q(m.ended_at)}`);
   if (m.attendees && m.attendees.length > 0) {
-    fm.push(`attendees: [${m.attendees.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(', ')}]`);
+    fm.push(`attendees: [${m.attendees.map((a) => q(a)).join(', ')}]`);
   }
   const tags = new Set<string>(m.tags ?? []);
   tags.add('meeting');
   if (opts.tag) tags.add(opts.tag);
-  fm.push(`tags: [${[...tags].join(', ')}]`);
+  fm.push(`tags: [${[...tags].map((t) => q(t)).join(', ')}]`);
 
   let body = `# ${m.title || m.id}\n\n`;
   if (m.summary) body += `## Summary\n\n${m.summary}\n\n`;

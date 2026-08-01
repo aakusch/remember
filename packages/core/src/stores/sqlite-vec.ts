@@ -4,6 +4,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
 import type { Chunk, PageQuery, PageRecord, Store } from '../types.js';
+import type { DoctorPageFact } from '../doctor/doctor.js';
 import { extractSnippet } from '../search/snippet.js';
 
 export interface SqliteVecStoreOptions {
@@ -28,9 +29,26 @@ export interface HistoryFull extends HistoryEntry {
   frontmatter: Record<string, unknown>;
 }
 
+export interface EmbedderReconcileResult {
+  /** True when the stored embedder identity changed and embedding-derived data was cleared. */
+  changed: boolean;
+  /** The modelId the index was previously built with, or null on a fresh/legacy DB. */
+  previousModelId: string | null;
+}
+
 export interface SqliteVecStore extends Store {
   close(): void;
   setDimension(dim: number): void;
+  /**
+   * Reconcile the index against the embedder that is about to be used. If the model
+   * or dimension differs from what the index was built with, every embedding-derived
+   * row (chunks, fts, vectors, manifest) is cleared so the next `index` re-embeds from
+   * scratch — this is what prevents silently mixing vectors from two different models
+   * (which either degrades ranking or hard-crashes the process on a dim mismatch).
+   */
+  reconcileEmbedder(modelId: string, dim: number): EmbedderReconcileResult;
+  /** Gather per-page facts for `remember doctor` (deterministic, read-only). */
+  collectDoctorFacts(): DoctorPageFact[];
   appendHistory(entry: HistoryWriteInput): number;
   listHistory(path: string, limit?: number): HistoryEntry[];
   getHistoryEntry(id: number): HistoryFull | null;
@@ -53,6 +71,29 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
 
   let dim = opts.dim ?? 384;
   initSchema(db, dim);
+
+  // Clear everything derived from embedding a corpus. Leaves pages/page_attrs/history
+  // (those are content, not embeddings). Used when the embedder identity changes.
+  const clearEmbeddingData = () => {
+    const clear = db.transaction(() => {
+      db.exec('DELETE FROM chunks');
+      db.exec('DELETE FROM fts_chunks');
+      db.exec('DELETE FROM manifest');
+    });
+    clear();
+  };
+
+  // Rebuild the vec0 virtual table at a new dimension. A dim change invalidates every
+  // stored vector AND the manifest ("already embedded") stamps, so clear those first —
+  // otherwise the incremental indexer reports "unchanged" over an empty vector table
+  // and the search path crashes against the dimension mismatch.
+  const applyDimensionChange = (newDim: number) => {
+    if (newDim === dim) return;
+    clearEmbeddingData();
+    db.exec('DROP TABLE IF EXISTS vec_chunks');
+    dim = newDim;
+    db.exec(`CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[${dim}])`);
+  };
 
   return {
     async upsert(chunks) {
@@ -388,14 +429,88 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
       db.close();
     },
 
-    setDimension(newDim: number) {
-      if (newDim === dim) return;
-      // Rebuild vec table with new dimension. Caller is responsible for full reindex.
-      db.exec('DROP TABLE IF EXISTS vec_chunks');
-      dim = newDim;
-      db.exec(
-        `CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[${dim}])`,
+    collectDoctorFacts(): DoctorPageFact[] {
+      const manifestRows = db
+        .prepare('SELECT path, sha256, chunk_count FROM manifest')
+        .all() as Array<{ path: string; sha256: string; chunk_count: number }>;
+      const pageRows = db.prepare('SELECT path, title, frontmatter FROM pages').all() as Array<{
+        path: string;
+        title: string | null;
+        frontmatter: string;
+      }>;
+      const pageMap = new Map(pageRows.map((r) => [r.path, r]));
+      const firstChunkStmt = db.prepare(
+        'SELECT text FROM chunks WHERE source_path = ? AND chunk_idx = 0',
       );
+
+      return manifestRows.map((m) => {
+        const pg = pageMap.get(m.path);
+        const first = firstChunkStmt.get(m.path) as { text: string } | undefined;
+        const fm = (pg?.frontmatter ?? '{}').trim();
+        return {
+          path: m.path,
+          title: pg?.title ?? null,
+          frontmatterEmpty: fm === '' || fm === '{}',
+          chunkCount: m.chunk_count,
+          sha256: m.sha256,
+          firstChunkText: first?.text ?? '',
+        };
+      });
+    },
+
+    setDimension(newDim: number) {
+      applyDimensionChange(newDim);
+    },
+
+    reconcileEmbedder(modelId: string, newDim: number): EmbedderReconcileResult {
+      const readMeta = (key: string): string | null => {
+        const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+          | { value: string }
+          | undefined;
+        return row?.value ?? null;
+      };
+      const writeMeta = db.prepare(
+        'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+      );
+      const stamp = () => {
+        const txn = db.transaction(() => {
+          writeMeta.run('embedder_model', modelId);
+          writeMeta.run('embedder_dim', String(newDim));
+          writeMeta.run('schema_version', '1');
+        });
+        txn();
+      };
+
+      const storedModel = readMeta('embedder_model');
+      const storedDim = readMeta('embedder_dim');
+
+      // Fresh or pre-meta (legacy) index: adopt this embedder as the identity. A dim
+      // change vs the physical vec table is still destructive, so rebuild it, but a
+      // legacy same-dim index is assumed to match (we can't prove otherwise).
+      if (storedModel === null) {
+        if (newDim !== dim) applyDimensionChange(newDim);
+        stamp();
+        return { changed: false, previousModelId: null };
+      }
+
+      // Identity matches — nothing to do (repair the vec table only if it drifted).
+      if (storedModel === modelId && storedDim === String(newDim)) {
+        if (newDim !== dim) applyDimensionChange(newDim);
+        return { changed: false, previousModelId: storedModel };
+      }
+
+      // Identity changed. applyDimensionChange() clears chunks/fts/manifest when the
+      // dim differs; when the dim is the SAME but the model differs (e.g. hash-384 →
+      // bge-384) no drop would happen, so clear explicitly here — this is the case
+      // that used to silently mix garbage vectors.
+      if (newDim !== dim) {
+        applyDimensionChange(newDim);
+      } else {
+        clearEmbeddingData();
+        db.exec('DELETE FROM vec_chunks');
+      }
+      stamp();
+      return { changed: true, previousModelId: storedModel };
     },
   };
 }
@@ -427,6 +542,14 @@ function initSchema(db: Database.Database, dim: number): void {
       sha256 TEXT NOT NULL,
       chunk_count INTEGER NOT NULL,
       last_indexed TEXT NOT NULL
+    );
+
+    -- Records which embedder built the current index (model id + vector dim) plus a
+    -- schema version, so a later open with a different embedder can invalidate cleanly
+    -- instead of mixing incompatible vectors. See reconcileEmbedder().
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS pages (

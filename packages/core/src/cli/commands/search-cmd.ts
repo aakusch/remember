@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../../config/load.js';
+import { requireWiki } from '../require-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
 import { createHybridSearchEngine, type HybridSearchOptions } from '../../search/hybrid.js';
@@ -56,13 +57,8 @@ function clampSnippet(s: string, max = 240): string {
   return (ws > max * 0.6 ? cut.slice(0, ws) : cut).trimEnd() + ' …';
 }
 
-/** Derive a display title from frontmatter, else the file's basename. */
-export function titleFor(r: SearchResult): string {
-  const t = r.frontmatter?.title;
-  if (typeof t === 'string' && t.trim()) return t.trim();
-  const base = path.basename(r.path).replace(/\.md$/i, '');
-  return base;
-}
+import { titleFor } from '../../search/title.js';
+export { titleFor };
 
 /**
  * Highlight query terms inside a snippet for the human card. Word-boundary
@@ -110,13 +106,19 @@ export async function runSearch(
   opts: { k: number; rootDir?: string },
 ): Promise<SearchJsonOutput & { _results: SearchResult[]; contentRoot: string }> {
   const cfg = await loadConfig(opts.rootDir ?? process.cwd());
+  await requireWiki(cfg);
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
   const embedder = await resolveEmbedder(cfg.raw);
   const store = await createSqliteVecStore({
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
     dim: embedder.dim,
   });
-  store.setDimension(embedder.dim);
+  const reconcile = store.reconcileEmbedder(embedder.modelId, embedder.dim);
+  if (reconcile.changed) {
+    process.stderr.write(
+      `remember: index was built with a different embedder (${reconcile.previousModelId}) and was cleared — run \`remember index\` to rebuild with ${embedder.modelId}.\n`,
+    );
+  }
 
   const engine = createHybridSearchEngine(
     store,

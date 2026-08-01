@@ -22,6 +22,8 @@ export interface IndexResult {
   files_deleted: number;
   chunks_added: number;
   duration_ms: number;
+  /** Files that threw during parse/chunk/embed/store — skipped, their prior index kept. */
+  errors: Array<{ path: string; error: string }>;
 }
 
 export interface IndexProgress {
@@ -53,6 +55,7 @@ export function createIndexer(opts: IndexerOptions) {
       let filesIndexed = 0;
       let filesSkipped = 0;
       let chunksAdded = 0;
+      const errors: Array<{ path: string; error: string }> = [];
 
       for await (const entry of opts.walker.walk(root)) {
         seenPaths.add(entry.path);
@@ -63,53 +66,63 @@ export function createIndexer(opts: IndexerOptions) {
           continue;
         }
 
-        onProgress?.({ stage: 'parse', path: entry.path });
-        const parsed = opts.parser.parse(entry.content);
-        const chunks = opts.chunker.chunk({ plain: parsed.plain, ast: parsed.ast });
-        const nowIso = new Date().toISOString();
+        // Why: a single file with malformed YAML frontmatter (or any parse/embed
+        // failure) used to throw straight out of this loop, aborting the whole run,
+        // blocking `remember dev` from booting, and wedging the watcher — with no
+        // mention of which file. Isolate per file: record the error, keep the file's
+        // previous index (it stays in seenPaths so the delete-sweep won't purge it),
+        // and continue.
+        try {
+          onProgress?.({ stage: 'parse', path: entry.path });
+          const parsed = opts.parser.parse(entry.content);
+          const chunks = opts.chunker.chunk({ plain: parsed.plain, ast: parsed.ast });
+          const nowIso = new Date().toISOString();
 
-        // Always upsert the page record — frontmatter is per-page metadata,
-        // independent of whether the page has body chunks.
-        await opts.store.upsertPage({
-          path: entry.path,
-          frontmatter: parsed.frontmatter ?? {},
-          title: pickTitle(parsed.frontmatter ?? {}, entry.path),
-          size: entry.content.length,
-          last_indexed: nowIso,
-          last_modified: entry.mtime.toISOString(),
-        });
+          // Always upsert the page record — frontmatter is per-page metadata,
+          // independent of whether the page has body chunks.
+          await opts.store.upsertPage({
+            path: entry.path,
+            frontmatter: parsed.frontmatter ?? {},
+            title: pickTitle(parsed.frontmatter ?? {}, entry.path),
+            size: entry.content.length,
+            last_indexed: nowIso,
+            last_modified: entry.mtime.toISOString(),
+          });
 
-        if (chunks.length === 0) {
-          // Empty file — remove chunks but keep page record + manifest stamp.
+          if (chunks.length === 0) {
+            // Empty file — remove chunks but keep page record + manifest stamp.
+            await opts.store.deleteByPath(entry.path);
+            await opts.store.updateManifest(entry.path, {
+              sha256: entry.sha256,
+              chunk_count: 0,
+              last_indexed: nowIso,
+            });
+            filesIndexed++;
+            continue;
+          }
+
+          for (const c of chunks) {
+            c.source_path = entry.path;
+            c.id = `${entry.path}#${c.chunk_idx}`;
+          }
+
+          onProgress?.({ stage: 'embed', path: entry.path, total: chunks.length });
+          const vectors = await opts.embedder.embed(chunks.map((c) => c.text));
+          const withVectors = chunks.map((c, i) => ({ ...c, embedding: vectors[i]! }));
+
+          onProgress?.({ stage: 'store', path: entry.path });
           await opts.store.deleteByPath(entry.path);
+          await opts.store.upsert(withVectors);
           await opts.store.updateManifest(entry.path, {
             sha256: entry.sha256,
-            chunk_count: 0,
+            chunk_count: chunks.length,
             last_indexed: nowIso,
           });
           filesIndexed++;
-          continue;
+          chunksAdded += chunks.length;
+        } catch (err) {
+          errors.push({ path: entry.path, error: err instanceof Error ? err.message : String(err) });
         }
-
-        for (const c of chunks) {
-          c.source_path = entry.path;
-          c.id = `${entry.path}#${c.chunk_idx}`;
-        }
-
-        onProgress?.({ stage: 'embed', path: entry.path, total: chunks.length });
-        const vectors = await opts.embedder.embed(chunks.map((c) => c.text));
-        const withVectors = chunks.map((c, i) => ({ ...c, embedding: vectors[i]! }));
-
-        onProgress?.({ stage: 'store', path: entry.path });
-        await opts.store.deleteByPath(entry.path);
-        await opts.store.upsert(withVectors);
-        await opts.store.updateManifest(entry.path, {
-          sha256: entry.sha256,
-          chunk_count: chunks.length,
-          last_indexed: nowIso,
-        });
-        filesIndexed++;
-        chunksAdded += chunks.length;
       }
 
       // Remove records for files no longer present.
@@ -131,6 +144,7 @@ export function createIndexer(opts: IndexerOptions) {
         files_deleted: filesDeleted,
         chunks_added: chunksAdded,
         duration_ms: Date.now() - started,
+        errors,
       };
     },
 

@@ -23,18 +23,21 @@ machine by default. Drive it from a rich terminal CLI or a small HTTP API.
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install     # or: npm install
-pnpm dev         # index, then serve the agent API with a live file watcher
+npm install      # pnpm / yarn work too
+npm run dev      # index, then serve the agent API with a live file watcher
 ```
 
 Then, in another terminal, search it:
 
 ```bash
-pnpm exec remember search "how do deploys work" -k 5   # or: npx remember search …
+npm run search -- "how do deploys work" -k 5   # or: npx --no-install remember search …
 ```
 
-(`remember` lives in the project's `node_modules/.bin`, so run it with
-`pnpm exec` / `npx` — or `npm i -g @useremember/core` for a bare `remember`.)
+(`remember` lives in the project's `node_modules/.bin`. Run it through the
+scaffolded npm scripts (`npm run <cmd> --`) or with `npx --no-install remember` —
+note that a bare `npx remember` outside the project directory fetches an
+unrelated npm package named `remember`. Or install globally:
+`npm i -g @useremember/core` for a bare `remember`.)
 
 That's the entire install. No API keys required. Local semantic search is
 powered by the optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
@@ -45,7 +48,7 @@ caches it locally; after that, indexing and search run entirely offline.
 If `@huggingface/transformers` is not installed, `remember` prints a loud
 placeholder-embedder warning and search returns meaningless results — install
 it with `npm install @huggingface/transformers`, or set `OPENAI_API_KEY` to use
-OpenAI embeddings instead.
+OpenAI embeddings instead. See [Embeddings](#embeddings) for the full picture.
 
 Other install paths: [from source](#from-source) · [Docker](#docker).
 
@@ -61,7 +64,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
-| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `doctor`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call), and `/v1/capabilities` (one discovery object). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
@@ -87,6 +90,7 @@ remember search "<q>"     Hybrid search, formatted result cards (or --json)
 remember list             List indexed documents as a table (or --json)
 remember get <path>       Print one document's frontmatter + body (or --json)
 remember status           Dashboard: page/chunk counts, model, index freshness
+remember doctor           Corpus-health sweep: unfindable/duplicate/thin/no-frontmatter docs
 remember tools            Print agent tool defs (same as GET /v1/tools) (or --json)
 remember capabilities     One discovery object for agents (same as GET /v1/capabilities)
 remember benchmark        Versioned retrieval evaluation
@@ -115,6 +119,22 @@ remember search "auth flow" --json | jq '.results[0].path'
 
 Color is enabled on a TTY and disabled automatically when piped or when
 `NO_COLOR` is set, so redirected output and CI logs stay clean.
+
+### `remember doctor`
+
+```bash
+remember doctor
+```
+
+A deterministic, no-LLM, no-network health check over your indexed corpus.
+It flags documents that quietly wreck retrieval: markdown on disk that isn't
+indexed, pages with zero chunks (unfindable), duplicate bodies/titles, pages
+with no heading structure, walls of prose, thin pages, and missing
+frontmatter. Run it after your first `remember index` — it reads only the
+local index plus one cheap pass over `content/`. Flags:
+
+- `--json` — the machine shape (same as `GET /v1/doctor`)
+- `--strict` — exit non-zero if any error-severity finding exists, so you can gate CI on it
 
 <br>
 
@@ -169,6 +189,35 @@ code needed.
 ranked for the query. It is **not** proof that an answer exists. If the right
 document isn't in the corpus, the engine still returns its closest matches —
 treat results as candidates to read, not as guaranteed answers.
+
+<br>
+
+## Embeddings
+
+Three ways the vector half of hybrid search gets its embeddings, in the order
+the engine resolves them:
+
+1. **OpenAI** — if `OPENAI_API_KEY` is set in the environment, the embedder
+   switches to OpenAI. An explicit key is a deliberate opt-in and overrides
+   the scaffold's local-ONNX pin; you can also pin a model with
+   `defaults.embedder.openai(...)` in `remember.config.ts`.
+2. **Local ONNX (the default)** — `BAAI/bge-small-en-v1.5` (384-d) via the
+   optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
+   dependency, which the default scaffold installs. The model (~100 MB)
+   downloads once on first index and is cached; after that, indexing and
+   search run entirely offline. No API keys, no network.
+3. **Hash placeholder (fallback)** — if `@huggingface/transformers` is not
+   installed and no `OPENAI_API_KEY` is set, the engine falls back to a
+   deterministic hash embedder. **Search still runs, but results are
+   semantically meaningless** — this is an onboarding trap, so the engine
+   prints a loud warning. Fix it with `npm install @huggingface/transformers`
+   or by setting `OPENAI_API_KEY`.
+
+> **A note on `npm audit`:** `@huggingface/transformers` transitively pulls in
+> `sharp`, an image-processing library, and `npm audit` may report CVEs
+> against it. This engine is text-only and never invokes the image path — but
+> if your policy requires a clean audit, the OpenAI embedder path works
+> without `@huggingface/transformers` installed.
 
 <br>
 
@@ -229,8 +278,8 @@ and "sync all" triggers through `/v1/connectors`.
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install
-pnpm dev
+npm install      # pnpm / yarn work too
+npm run dev
 ```
 
 ### From source
@@ -335,7 +384,7 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
 
 PRs welcome on:
 
-- New connector implementations (`@useremember/core/connectors/<name>.ts`)
+- New connector implementations (`packages/core/src/connectors/<name>.ts`)
 - New embedder providers (Voyage, Cohere, etc.)
 - New rerankers (cross-encoder, LLM-based)
 - Query planners and retrieval evaluation fixtures

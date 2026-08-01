@@ -15,7 +15,10 @@ export function safeJoinContent(contentRoot: string, userPath: string): string {
   const normalized = path.normalize(userPath).replace(/^[/\\]+/, '');
   const abs = path.resolve(contentRoot, normalized);
   const rel = path.relative(contentRoot, abs);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+  // Why: an empty/'.'/root-resolving path passes the `..` guard (path.relative → '')
+  // and previously let `DELETE /v1/folders/?recursive=true` fs.rm the entire content
+  // root. A user path must always name something *inside* content/, never the root.
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new PathOutsideContentError(userPath);
   }
   return abs;

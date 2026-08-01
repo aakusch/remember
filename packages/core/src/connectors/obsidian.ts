@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Connector, ConnectorSyncResult, ConnectorStatus } from './types.js';
+import { resolveConnectorTarget } from './paths.js';
 
 export interface ObsidianConnectorOptions {
   name?: string;
@@ -14,7 +15,7 @@ export interface ObsidianConnectorOptions {
 
 export function createObsidianConnector(opts: ObsidianConnectorOptions): Connector {
   const name = opts.name ?? 'obsidian';
-  const target = opts.target ?? `external/${name}`;
+  const target = opts.target?.trim() || `external/${name}`;
   let lastSync: string | null = null;
   let lastResult: ConnectorSyncResult | null = null;
   let lastError: string | null = null;
@@ -54,7 +55,7 @@ export function createObsidianConnector(opts: ObsidianConnectorOptions): Connect
         throw new Error(lastError ?? 'connector not configured');
       }
 
-      const targetAbs = path.join(ctx.contentRoot, target);
+      const targetAbs = resolveConnectorTarget(ctx.contentRoot, target);
       await fs.mkdir(targetAbs, { recursive: true });
 
       // Walk source vault.
@@ -136,7 +137,9 @@ export function createObsidianConnector(opts: ObsidianConnectorOptions): Connect
           }
         }
       };
-      await cleanup(targetAbs, '');
+      // Never prune when the vault yielded nothing (empty/unreadable source) — that
+      // would wipe the whole mirror on a transient failure.
+      if (seen.size > 0) await cleanup(targetAbs, '');
 
       lastResult = {
         files_written: written,
