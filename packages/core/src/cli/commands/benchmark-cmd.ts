@@ -4,10 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
 import { createHashEmbedder } from '../../embedders/hash.js';
 import { createLocalOnnxEmbedder } from '../../embedders/local-onnx.js';
-import { createSmartSplitChunker } from '../../chunkers/smart-split.js';
-import { createRemarkParser } from '../../parsers/remark.js';
-import { createChokidarWalker } from '../../walkers/chokidar.js';
-import { createIndexer } from '../../indexer/index.js';
+import { createDefaultIndexer } from '../../api/open-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { createHybridSearchEngine } from '../../search/hybrid.js';
 import { createPassthroughReranker } from '../../rerankers/none.js';
@@ -82,13 +79,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
   store.reconcileEmbedder(embedder.modelId, embedder.dim);
 
   try {
-    const indexer = createIndexer({
-      walker: createChokidarWalker({ respectGitignore: true }),
-      parser: createRemarkParser(),
-      chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
-      embedder,
-      store,
-    });
+    const indexer = createDefaultIndexer(store, embedder);
     process.stdout.write(
       `remember benchmark: indexing ${path.basename(corpusRoot)} with ${embedder.modelId}\n`,
     );

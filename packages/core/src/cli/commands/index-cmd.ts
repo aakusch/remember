@@ -1,10 +1,7 @@
 import path from 'node:path';
 import { loadConfig } from '../../config/load.js';
-import { createChokidarWalker } from '../../walkers/chokidar.js';
-import { createRemarkParser } from '../../parsers/remark.js';
-import { createSmartSplitChunker } from '../../chunkers/smart-split.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
-import { createIndexer } from '../../indexer/index.js';
+import { createDefaultIndexer } from '../../api/open-wiki.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
 import { VERSION } from '../../version.js';
 import { banner, header, keyValues, success, c, fmtMs, plural, IS_TTY } from '../format.js';
@@ -42,13 +39,7 @@ export async function indexCommand(): Promise<void> {
       '\n\n',
   );
 
-  const indexer = createIndexer({
-    walker: createChokidarWalker({ respectGitignore: true }),
-    parser: createRemarkParser(),
-    chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
-    embedder,
-    store,
-  });
+  const indexer = createDefaultIndexer(store, embedder);
 
   let lastFile = '';
   const result = await indexer.indexAll(contentRoot, (p) => {
