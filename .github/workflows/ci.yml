@@ -40,6 +40,6 @@ jobs:
         run: >-
           pnpm --filter @useremember/core benchmark --
           --profile ci
-          --compare ../../benchmarks/results/remember-v0.0.1-ci-hash.json
+          --compare ../../benchmarks/results/remember-v0.3.0-ci-hash.json
           --fail-on-regression
           --output "$RUNNER_TEMP/remember-retrieval-ci.json"

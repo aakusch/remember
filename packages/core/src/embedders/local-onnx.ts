@@ -11,6 +11,14 @@ const MODEL_DIMS: Record<string, number> = {
   'mixedbread-ai/mxbai-embed-xsmall-v1': 384,
 };
 
+// Max sequence length each model embeds before truncating (tokens). These small
+// sentence-transformers all cap at 512.
+const MODEL_MAX_TOKENS: Record<string, number> = {
+  'BAAI/bge-small-en-v1.5': 512,
+  'sentence-transformers/all-MiniLM-L6-v2': 256,
+  'mixedbread-ai/mxbai-embed-xsmall-v1': 512,
+};
+
 /**
  * Local embedder using @huggingface/transformers (transformers.js v3) under the hood.
  * Loads the ONNX model lazily on first `embed()` call. Falls back gracefully if the
@@ -126,6 +134,7 @@ export function createLocalOnnxEmbedder(opts: LocalOnnxEmbedderOptions = {}): Em
   return {
     dim,
     modelId,
+    maxInputTokens: MODEL_MAX_TOKENS[modelId] ?? 512,
     async embed(texts) {
       if (texts.length === 0) return [];
       const pipe = (await getPipeline()) as (
