@@ -114,6 +114,25 @@ Show page + chunk counts, the embedding model, index freshness, and where
 the config and content live. ${c.cyan('--json')} emits the same as a machine shape.`,
   },
   {
+    name: 'doctor',
+    summary: 'Corpus-health sweep — flag unfindable / unstructured / duplicate docs',
+    help: `${c.bold('remember doctor')} ${c.dim('[--json] [--strict]')}
+
+A deterministic, no-LLM, no-network health check over your indexed corpus.
+Flags documents that quietly wreck retrieval: markdown on disk that isn't
+indexed, pages with zero chunks (unfindable), duplicate bodies/titles, pages
+with no heading structure, walls of prose, thin pages, and missing frontmatter.
+
+Reads only the local index + one cheap pass over ${c.cyan('content/')}. ${c.cyan('--json')} emits the
+machine shape (same as ${c.cyan('GET /v1/doctor')}); ${c.cyan('--strict')} exits non-zero if any
+error-severity problem is found, so you can gate CI on it.
+
+${c.dim('Examples')}
+  remember doctor
+  remember doctor --strict
+  remember doctor --json | jq '.findings[] | select(.severity=="error")'`,
+  },
+  {
     name: 'tools',
     summary: 'Print agent tool definitions (same as GET /v1/tools)',
     help: `${c.bold('remember tools')} ${c.dim('[--json]')}
@@ -317,6 +336,11 @@ export async function run(argv: string[]): Promise<void> {
       case 'status': {
         const { statusCommand } = await import('./commands/status-cmd.js');
         await statusCommand(rest);
+        return;
+      }
+      case 'doctor': {
+        const { doctorCommand } = await import('./commands/doctor-cmd.js');
+        await doctorCommand(rest);
         return;
       }
       case 'tools': {

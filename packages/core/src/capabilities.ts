@@ -63,6 +63,7 @@ export const CAPABILITY_ENDPOINTS: readonly CapabilityEndpoint[] = [
   { method: 'GET', path: '/v1/pages', summary: 'List indexed pages' },
   { method: 'GET', path: '/v1/pages/{path}', summary: 'Fetch one page by path' },
   { method: 'GET', path: '/v1/status', summary: 'Index + embedding-model status' },
+  { method: 'GET', path: '/v1/doctor', summary: 'Corpus-health sweep (deterministic, no-LLM)' },
   { method: 'GET', path: '/v1/tools', summary: 'Anthropic/OpenAI tool definitions' },
 ] as const;
 
@@ -75,6 +76,7 @@ export const CAPABILITY_COMMANDS: readonly CapabilityCommand[] = [
   { name: 'get', args: '<path>', summary: 'Print one page (--json)' },
   { name: 'list', summary: 'List indexed pages (--json)' },
   { name: 'status', summary: 'Index dashboard (--json)' },
+  { name: 'doctor', summary: 'Corpus-health sweep (--json, --strict)' },
   { name: 'tools', summary: 'Agent tool definitions (--json)' },
   { name: 'capabilities', summary: 'This discovery object (--json)' },
 ] as const;

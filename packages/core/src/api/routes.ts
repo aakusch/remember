@@ -11,6 +11,7 @@ import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sql
 import { VERSION } from '../version.js';
 import { AGENT_TOOL_DEFS } from './tool-defs.js';
 import { buildCapabilities } from '../capabilities.js';
+import { gatherDoctorReport } from '../doctor/scan.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -530,6 +531,12 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       },
       version: VERSION,
     });
+  });
+
+  // Corpus-health sweep — deterministic, no-LLM. Same report as `remember doctor`.
+  app.get('/v1/doctor', async (c) => {
+    const report = await gatherDoctorReport(ctx.store, ctx.contentRoot, new Date().toISOString());
+    return c.json(report);
   });
 
   // Config

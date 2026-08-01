@@ -4,6 +4,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
 import type { Chunk, PageQuery, PageRecord, Store } from '../types.js';
+import type { DoctorPageFact } from '../doctor/doctor.js';
 import { extractSnippet } from '../search/snippet.js';
 
 export interface SqliteVecStoreOptions {
@@ -46,6 +47,8 @@ export interface SqliteVecStore extends Store {
    * (which either degrades ranking or hard-crashes the process on a dim mismatch).
    */
   reconcileEmbedder(modelId: string, dim: number): EmbedderReconcileResult;
+  /** Gather per-page facts for `remember doctor` (deterministic, read-only). */
+  collectDoctorFacts(): DoctorPageFact[];
   appendHistory(entry: HistoryWriteInput): number;
   listHistory(path: string, limit?: number): HistoryEntry[];
   getHistoryEntry(id: number): HistoryFull | null;
@@ -424,6 +427,47 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
 
     close() {
       db.close();
+    },
+
+    collectDoctorFacts(): DoctorPageFact[] {
+      const manifestRows = db
+        .prepare('SELECT path, sha256, chunk_count FROM manifest')
+        .all() as Array<{ path: string; sha256: string; chunk_count: number }>;
+      const pageRows = db.prepare('SELECT path, title, frontmatter FROM pages').all() as Array<{
+        path: string;
+        title: string | null;
+        frontmatter: string;
+      }>;
+      const pageMap = new Map(pageRows.map((r) => [r.path, r]));
+      const aggRows = db
+        .prepare(
+          `SELECT source_path,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN heading_path != '[]' THEN 1 ELSE 0 END) AS headed
+             FROM chunks GROUP BY source_path`,
+        )
+        .all() as Array<{ source_path: string; total: number; headed: number }>;
+      const aggMap = new Map(aggRows.map((r) => [r.source_path, r]));
+      const firstChunkStmt = db.prepare(
+        'SELECT text FROM chunks WHERE source_path = ? AND chunk_idx = 0',
+      );
+
+      return manifestRows.map((m) => {
+        const pg = pageMap.get(m.path);
+        const agg = aggMap.get(m.path);
+        const first = firstChunkStmt.get(m.path) as { text: string } | undefined;
+        const fm = (pg?.frontmatter ?? '{}').trim();
+        return {
+          path: m.path,
+          title: pg?.title ?? null,
+          frontmatterEmpty: fm === '' || fm === '{}',
+          chunkCount: m.chunk_count,
+          sha256: m.sha256,
+          headingChunks: agg?.headed ?? 0,
+          totalChunks: agg?.total ?? 0,
+          firstChunkText: first?.text ?? '',
+        };
+      });
     },
 
     setDimension(newDim: number) {
