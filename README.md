@@ -23,18 +23,21 @@ machine by default. Drive it from a rich terminal CLI or a small HTTP API.
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install     # or: npm install
-pnpm dev         # index, then serve the agent API with a live file watcher
+npm install      # pnpm / yarn work too
+npm run dev      # index, then serve the agent API with a live file watcher
 ```
 
 Then, in another terminal, search it:
 
 ```bash
-pnpm exec remember search "how do deploys work" -k 5   # or: npx remember search …
+npm run search -- "how do deploys work" -k 5   # or: npx --no-install remember search …
 ```
 
-(`remember` lives in the project's `node_modules/.bin`, so run it with
-`pnpm exec` / `npx` — or `npm i -g @useremember/core` for a bare `remember`.)
+(`remember` lives in the project's `node_modules/.bin`. Run it through the
+scaffolded npm scripts (`npm run <cmd> --`) or with `npx --no-install remember` —
+note that a bare `npx remember` outside the project directory fetches an
+unrelated npm package named `remember`. Or install globally:
+`npm i -g @useremember/core` for a bare `remember`.)
 
 That's the entire install. No API keys required. Local semantic search is
 powered by the optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
@@ -45,7 +48,7 @@ caches it locally; after that, indexing and search run entirely offline.
 If `@huggingface/transformers` is not installed, `remember` prints a loud
 placeholder-embedder warning and search returns meaningless results — install
 it with `npm install @huggingface/transformers`, or set `OPENAI_API_KEY` to use
-OpenAI embeddings instead.
+OpenAI embeddings instead. See [Embeddings](#embeddings) for the full picture.
 
 Other install paths: [from source](#from-source) · [Docker](#docker).
 
@@ -61,7 +64,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
-| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `doctor`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call), and `/v1/capabilities` (one discovery object). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
@@ -87,6 +90,7 @@ remember search "<q>"     Hybrid search, formatted result cards (or --json)
 remember list             List indexed documents as a table (or --json)
 remember get <path>       Print one document's frontmatter + body (or --json)
 remember status           Dashboard: page/chunk counts, model, index freshness
+remember doctor           Corpus-health sweep: unfindable/duplicate/thin/no-frontmatter docs
 remember tools            Print agent tool defs (same as GET /v1/tools) (or --json)
 remember capabilities     One discovery object for agents (same as GET /v1/capabilities)
 remember benchmark        Versioned retrieval evaluation

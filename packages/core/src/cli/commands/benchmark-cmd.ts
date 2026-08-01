@@ -35,6 +35,8 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     throw new Error(`unsupported benchmark profile "${profile}" (expected ci or fast)`);
   }
 
+  const usingDefaultCorpus = args.corpus === undefined;
+  const usingDefaultQuestions = args.questions === undefined;
   const corpusRoot = path.resolve(
     args.corpus ?? path.join(REPOSITORY_ROOT, 'examples/sample-wiki/content'),
   );
@@ -42,6 +44,21 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     args.questions ??
       path.join(REPOSITORY_ROOT, 'benchmarks/retrieval/sample-wiki.questions.jsonl'),
   );
+  // The default fixtures live at the repo root (examples/, benchmarks/) and are
+  // NOT in the npm tarball (`files` ships only bin/dist), so a bare
+  // `remember benchmark` after an npm install would ENOENT deep in the harness.
+  // Fail early with an actionable message instead.
+  const { existsSync } = await import('node:fs');
+  const missingDefault =
+    (usingDefaultCorpus && !existsSync(corpusRoot)) ||
+    (usingDefaultQuestions && !existsSync(questionsPath));
+  if (missingDefault) {
+    throw new Error(
+      'benchmark fixtures not found. The bundled sample corpus ships only in the git repo, ' +
+        'not the npm package. Run this from a clone of the repo, or pass your own ' +
+        '`--corpus <dir>` and `--questions <file.jsonl>`.',
+    );
+  }
   const finalK = parsePositiveInteger(args.k ?? '10', '--k');
   const candidateK = parsePositiveInteger(args.candidateK ?? '20', '--candidate-k');
   const warmupQueries = parseNonNegativeInteger(args.warmup ?? '2', '--warmup');
