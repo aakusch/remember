@@ -134,79 +134,7 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
 
   logs.push({ level: 'info', source: 'server', message: 'startup complete' });
 
-  const targetConfigPath = () => cfg.configPath ?? path.join(cfg.rootDir, 'remember.config.ts');
-
-  // Hot-reload: rebuild the runtime from disk config, swap atomically.
-  // Returns ok:true on success, ok:false with the error if the new config
-  // fails to load or build — the old runtime stays in place in that case.
-  const reloadConfig = async (): Promise<
-    | { ok: true; reloaded_at: string }
-    | { ok: false; error: { code: string; message: string; hint?: string } }
-  > => {
-    let newCfg: LoadedConfig;
-    try {
-      newCfg = await loadConfig(opts.rootDir);
-    } catch (err) {
-      const msg = (err as Error).message;
-      logs.push({ level: 'error', source: 'config', message: `reload failed (load): ${msg}` });
-      return {
-        ok: false as const,
-        error: {
-          code: 'CONFIG_LOAD_FAILED',
-          message: `Failed to load new config: ${msg}`,
-          hint: 'Check the saved remember.config.ts for syntax or schema errors',
-        },
-      };
-    }
-
-    let newRuntime: Runtime;
-    try {
-      newRuntime = await buildRuntime({ rootDir: opts.rootDir, events, cfg: newCfg, logs });
-    } catch (err) {
-      const msg = (err as Error).message;
-      logs.push({ level: 'error', source: 'config', message: `reload failed (build): ${msg}` });
-      return {
-        ok: false as const,
-        error: {
-          code: 'PIPELINE_BUILD_FAILED',
-          message: `Failed to build pipeline from new config: ${msg}`,
-          hint: 'Embedder or store init failed — check the error message',
-        },
-      };
-    }
-
-    const old = runtime;
-    runtime = newRuntime;
-    cfg = newCfg;
-
-    // Mutate ctx fields so existing route closures see the new pipeline.
-    ctx.contentRoot = newRuntime.contentRoot;
-    ctx.store = newRuntime.store;
-    ctx.embedder = newRuntime.embedder;
-    ctx.search = newRuntime.search;
-    ctx.adminToken = newCfg.validated.server.adminToken;
-    ctx.boundHost = newCfg.validated.server.host;
-    ctx.remoteAllowed = newCfg.validated.server.host !== '127.0.0.1';
-    ctx.configPath = newCfg.configPath;
-    ctx.configRoot = newCfg.rootDir;
-
-    await teardownRuntime(old);
-
-    // Kick off an initial index against the new pipeline so the store is
-    // populated under the new embedder dim.
-    newRuntime.indexer.indexAll(newRuntime.contentRoot).catch((err) => {
-      process.stderr.write(`[remember] post-reload index failed: ${(err as Error).message}\n`);
-    });
-
-    const reloadedAt = new Date().toISOString();
-    events.emit('event', { type: 'config.reloaded', at: reloadedAt });
-    logs.push({ level: 'info', source: 'config', message: 'hot-reload applied' });
-    return { ok: true as const, reloaded_at: reloadedAt };
-  };
-
-  // Build the route context. Fields that point at runtime are reassigned on
-  // reload above — route handlers read ctx fields on every request, so they
-  // pick up the swap automatically.
+  // Build the route context. Route handlers read ctx fields on every request.
   const ctx = {
     contentRoot: runtime.contentRoot,
     store: runtime.store,
@@ -243,43 +171,6 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
       viewer: cfg.validated.viewer,
       schemaVersion: cfg.validated.schemaVersion,
     }),
-    saveConfig: async (source: string) => {
-      if (!/defineConfig\s*\(/.test(source)) {
-        return {
-          ok: false as const,
-          error: {
-            code: 'CONFIG_INVALID',
-            message: 'Source does not contain a `defineConfig(...)` call.',
-            hint: 'Use /admin/setup to generate a valid config, or paste one that calls defineConfig.',
-          },
-        };
-      }
-
-      const target = targetConfigPath();
-      let backupPath: string | null = null;
-      try {
-        await fs.access(target);
-        backupPath = `${target}.bak.${Date.now()}`;
-        await fs.copyFile(target, backupPath);
-      } catch {
-        /* file doesn't exist — skip backup */
-      }
-
-      try {
-        await fs.writeFile(target, source, 'utf8');
-      } catch (err) {
-        return {
-          ok: false as const,
-          error: {
-            code: 'WRITE_FAILED',
-            message: `Failed to write ${target}: ${(err as Error).message}`,
-          },
-        };
-      }
-
-      return { ok: true as const, written_to: target, backup_path: backupPath };
-    },
-    reloadConfig,
     logs,
     history: {
       append: (e: HistoryWriteInput) => runtime.store.appendHistory(e),

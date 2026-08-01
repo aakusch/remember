@@ -102,4 +102,27 @@ describe('API CSRF + input validation (loopback, no token)', () => {
     const res = await app.request('/v1/pages', { headers: { host: 'evil.example.com' } });
     expect(res.status).toBe(403);
   });
+
+  it('has NO PUT /v1/config (the config-write RCE endpoint is removed)', async () => {
+    const res = await app.request('/v1/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: 'export default {}' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects an empty Content-Type on POST/PUT (no-preflight hole) with 415', async () => {
+    const res = await app.request('/v1/index', { method: 'POST', headers: { 'content-type': '' }, body: '{}' });
+    expect(res.status).toBe(415);
+  });
+
+  it('rejects a NUL-byte page path with 400, not a 500', async () => {
+    const res = await app.request('/v1/pages/ok%00.md', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ body: 'x' }),
+    });
+    expect(res.status).toBe(400);
+  });
 });

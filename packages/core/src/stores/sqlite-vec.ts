@@ -59,6 +59,15 @@ function sha256(s: string): string {
   return crypto.createHash('sha256').update(s).digest('hex');
 }
 
+/** The physical dimension of the vec_chunks table, read from its DDL, or null if absent. */
+function readVecDim(db: Database.Database): number | null {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_chunks'")
+    .get() as { sql: string } | undefined;
+  const m = row?.sql?.match(/float\s*\[\s*(\d+)\s*\]/i);
+  return m ? Number(m[1]) : null;
+}
+
 export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Promise<SqliteVecStore> {
   const dbPath = opts.path ?? '.remember/index.db';
   await fs.mkdir(path.dirname(dbPath), { recursive: true });
@@ -71,6 +80,15 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
 
   let dim = opts.dim ?? 384;
   initSchema(db, dim);
+
+  // initSchema's `CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks … float[N]` will NOT
+  // resize a pre-existing table — so on a store opened with a NEW embedder dim, the
+  // in-memory `dim` (from opts) can disagree with the physical table. Trust the
+  // physical dimension, otherwise applyDimensionChange's `newDim === dim` guard never
+  // fires on a real dimension change and the vec table is never rebuilt (→ every
+  // insert/query throws "Dimension mismatch"). See reconcileEmbedder.
+  const physicalDim = readVecDim(db);
+  if (physicalDim !== null) dim = physicalDim;
 
   // Clear everything derived from embedding a corpus. Leaves pages/page_attrs/history
   // (those are content, not embeddings). Used when the embedder identity changes.
@@ -265,20 +283,25 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
 
     async queryPages(q: PageQuery) {
       const filters: string[] = [];
-      const params: unknown[] = [];
+      // WHERE params and ORDER BY params are tracked separately: the COUNT query has
+      // no ORDER BY, so it must bind only WHERE params. (Sharing one array forced a
+      // fragile index-slice that 500'd on `sort=modified` + a filter/q — the alias
+      // wasn't in the hardcoded slice list, so it stripped a real WHERE param.)
+      const whereParams: unknown[] = [];
+      const orderParams: unknown[] = [];
 
       if (q.filter) {
         for (const [k, v] of Object.entries(q.filter)) {
           filters.push(
             `path IN (SELECT path FROM page_attrs WHERE key = ? AND value = ?)`,
           );
-          params.push(k, String(v));
+          whereParams.push(k, String(v));
         }
       }
       if (q.q && q.q.trim()) {
         filters.push(`(LOWER(title) LIKE ? OR LOWER(path) LIKE ?)`);
         const like = `%${q.q.trim().toLowerCase()}%`;
-        params.push(like, like);
+        whereParams.push(like, like);
       }
 
       const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
@@ -304,14 +327,16 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
         } else {
           // Sort by a frontmatter attribute via correlated subquery.
           orderBy = `ORDER BY (SELECT value FROM page_attrs WHERE page_attrs.path = pages.path AND key = ? LIMIT 1) ${dir}`;
-          params.push(rawKey);
+          orderParams.push(rawKey);
         }
       }
 
       const limit = Math.max(1, Math.min(500, q.limit ?? 200));
       const offset = Math.max(0, q.offset ?? 0);
 
-      const totalRow = db.prepare(`SELECT COUNT(*) AS n FROM pages ${where}`).get(...params.slice(0, filters.length === 0 ? 0 : params.length - (q.sort && !['path','last_modified','title','size','last_indexed'].includes((q.sort.startsWith('-') ? q.sort.slice(1) : q.sort)) ? 1 : 0))) as { n: number };
+      const totalRow = db
+        .prepare(`SELECT COUNT(*) AS n FROM pages ${where}`)
+        .get(...whereParams) as { n: number };
 
       const rows = db
         .prepare(
@@ -321,7 +346,7 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
            ${orderBy}
            LIMIT ? OFFSET ?`,
         )
-        .all(...params, limit, offset) as Array<{
+        .all(...whereParams, ...orderParams, limit, offset) as Array<{
         path: string;
         frontmatter: string;
         title: string | null;
