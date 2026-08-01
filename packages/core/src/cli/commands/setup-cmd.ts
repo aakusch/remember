@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import * as p from '@clack/prompts';
 import { init } from './init.js';
 import { AGENT_TRIGGER_SNIPPET } from '../agent-snippet.js';
+import { expandHome } from '../expand-home.js';
 import { c } from '../format.js';
 
 type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
@@ -91,6 +92,9 @@ export async function setupCommand(argv: string[] = []): Promise<void> {
       folder = './my-wiki';
     }
   }
+  // A ~ typed into the prompt (or a quoted arg) is NOT shell-expanded — expand it
+  // here so we never scaffold into a literal "~" directory.
+  folder = expandHome(folder);
 
   let embed: 'local' | 'openai' = 'local';
   let openaiKey: string | undefined;

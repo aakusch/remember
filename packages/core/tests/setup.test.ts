@@ -5,6 +5,8 @@ import path from 'node:path';
 import { parseFlags, detectPackageManager } from '../src/cli/commands/setup-cmd.js';
 import { init } from '../src/cli/commands/init.js';
 import { AGENT_TRIGGER_SNIPPET } from '../src/cli/agent-snippet.js';
+import { expandHome } from '../src/cli/expand-home.js';
+import os from 'node:os';
 
 describe('setup — flag parsing', () => {
   it('parses flags and a positional folder', () => {
@@ -21,6 +23,18 @@ describe('setup — flag parsing', () => {
 
   it('rejects unknown flags', () => {
     expect(() => parseFlags(['--wat'])).toThrow(/unknown flag/);
+  });
+});
+
+describe('setup — tilde expansion (regression: literal "~" dir)', () => {
+  it('expands a leading ~ that a prompt/quoted arg never shell-expanded', () => {
+    expect(expandHome('~')).toBe(os.homedir());
+    expect(expandHome('~/desktop/bhg')).toBe(path.join(os.homedir(), 'desktop/bhg'));
+  });
+  it('leaves non-tilde and mid-string ~ paths untouched', () => {
+    expect(expandHome('./my-wiki')).toBe('./my-wiki');
+    expect(expandHome('/abs/path')).toBe('/abs/path');
+    expect(expandHome('foo/~bar')).toBe('foo/~bar');
   });
 });
 

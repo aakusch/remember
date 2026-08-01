@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
 import { c, header, success } from '../format.js';
 import { AGENT_TRIGGER_SNIPPET } from '../agent-snippet.js';
+import { expandHome } from '../expand-home.js';
 
 /**
  * Generate a cryptographically-strong admin token, encoded as URL-safe base64
@@ -301,7 +302,9 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<I
     throw new Error('remember init: target directory is required.\nUsage: remember init <dir>');
   }
   const template = opts.template ?? 'starter';
-  const absTarget = path.resolve(process.cwd(), targetDir);
+  // Expand a leading ~ (a prompt/quoted arg won't have been shell-expanded) so we
+  // never scaffold into a literal "~" directory.
+  const absTarget = path.resolve(process.cwd(), expandHome(targetDir));
   const basename = path.basename(absTarget);
 
   // Benign pre-existing entries that shouldn't block `remember init .` — the natural
