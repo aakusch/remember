@@ -185,7 +185,7 @@ export async function setupCommand(argv: string[] = []): Promise<void> {
       ``,
       `  ${c.cyan('content/')}            your markdown (edit in any editor; edits reindex live)`,
       `  ${c.cyan('content/remember.md')} agent guide + the trigger snippet`,
-      `  ${c.cyan('remember.config.ts')}  config: embedder, connectors, ports`,
+      `  ${c.cyan('remember.config.ts')}  config: embedder, search, ports`,
       `  ${c.cyan('.env')}                secrets (token / API keys) — gitignored`,
     ].join('\n'),
     'What was created',

@@ -25,7 +25,6 @@ describe('API CSRF + input validation (loopback, no token)', () => {
     await fs.writeFile(path.join(contentRoot, 'a.md'), '# A\n\nAlpha body text here.');
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
-    store.setDimension(embedder.dim);
     const indexer = createIndexer({
       walker: createChokidarWalker({}),
       parser: createRemarkParser(),
@@ -42,7 +41,6 @@ describe('API CSRF + input validation (loopback, no token)', () => {
       reindex: async () => ({ files_indexed: 0, chunks_added: 0, duration_ms: 0 }),
       adminToken: null,
       boundHost: '127.0.0.1',
-      remoteAllowed: false,
     });
   });
 

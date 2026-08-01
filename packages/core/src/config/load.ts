@@ -142,7 +142,6 @@ function applyEnvOverrides(raw: RememberConfig): RememberConfig {
   next.server = { ...(raw.server ?? {}) };
 
   if (env.REMEMBER_CONTENT) next.content = env.REMEMBER_CONTENT;
-  if (env.REMEMBER_PORT) next.server.port = Number(env.REMEMBER_PORT);
   if (env.REMEMBER_API_PORT) next.server.apiPort = Number(env.REMEMBER_API_PORT);
   if (env.REMEMBER_HOST) next.server.host = env.REMEMBER_HOST;
   if (env.REMEMBER_ADMIN_TOKEN) next.server.adminToken = env.REMEMBER_ADMIN_TOKEN;

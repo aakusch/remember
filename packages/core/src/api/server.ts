@@ -60,15 +60,13 @@ export function createApp(ctx?: Partial<RouteContext>): Hono {
       // Authoritative bind host for local-trust decisions. Defaults to loopback
       // so unconfigured test apps keep the zero-config open-reads behavior.
       boundHost: ctx.boundHost ?? '127.0.0.1',
-      remoteAllowed: ctx.remoteAllowed ?? false,
       configPath: ctx.configPath ?? null,
       configRoot: ctx.configRoot ?? ctx.contentRoot,
       getConfig:
         ctx.getConfig ??
         (() => ({
           content: ctx.contentRoot!,
-          server: { host: '127.0.0.1', port: 4321, apiPort: 4320, adminToken: null },
-          viewer: { landing: 'README.md', showAdmin: true, breadcrumbs: true },
+          server: { host: '127.0.0.1', apiPort: 4320, adminToken: null },
           schemaVersion: 1,
         })),
       logs: ctx.logs,

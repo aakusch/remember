@@ -160,7 +160,6 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     // Authoritative bind host — local-trust derives from this + the real peer
     // socket, never the client Host header.
     boundHost: cfg.validated.server.host,
-    remoteAllowed: cfg.validated.server.host !== '127.0.0.1',
     configPath: cfg.configPath,
     configRoot: cfg.rootDir,
     getConfig: () => ({
@@ -168,7 +167,6 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
       description: cfg.raw.description,
       content: cfg.validated.content,
       server: cfg.validated.server,
-      viewer: cfg.validated.viewer,
       schemaVersion: cfg.validated.schemaVersion,
     }),
     logs,

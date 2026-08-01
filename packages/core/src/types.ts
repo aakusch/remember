@@ -278,7 +278,6 @@ export interface RememberConfig {
   content?: string;
   server?: {
     host?: string;
-    port?: number;
     apiPort?: number;
     adminToken?: string | null;
   };
@@ -291,16 +290,6 @@ export interface RememberConfig {
   };
   search?: {
     engine?: unknown;
-  };
-  index?: {
-    watchMode?: 'on' | 'off' | 'on-dev-only';
-    debounceMs?: number;
-    onStaleModel?: 'prompt' | 'auto-reembed' | 'ignore';
-  };
-  viewer?: {
-    landing?: string;
-    showAdmin?: boolean;
-    breadcrumbs?: boolean;
   };
   schemaVersion?: number;
 }

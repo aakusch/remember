@@ -85,7 +85,6 @@ describe('lexicalTieBreak flag (engine)', () => {
 
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
-    store.setDimension(embedder.dim);
     const indexer = createIndexer({
       walker: createChokidarWalker({}),
       parser: createRemarkParser(),

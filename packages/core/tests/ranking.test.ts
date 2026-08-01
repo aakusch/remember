@@ -87,7 +87,6 @@ describe('hybrid engine ranking pipeline (engine-level)', () => {
     tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'remember-ranking-'));
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
-    store.setDimension(embedder.dim);
   });
 
   afterEach(async () => {

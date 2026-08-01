@@ -38,7 +38,6 @@ describe('CLI read commands over a real index', () => {
       path: path.join(root, '.remember', 'index.db'),
       dim: embedder.dim,
     });
-    store.setDimension(embedder.dim);
     const indexer = createIndexer({
       walker: createChokidarWalker({}),
       parser: createRemarkParser(),

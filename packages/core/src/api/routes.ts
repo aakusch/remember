@@ -31,10 +31,9 @@ export interface RouteContext {
    * client-supplied Host / X-Forwarded-Host header. See isTrustedLocal().
    */
   boundHost: string;
-  remoteAllowed: boolean;
   configPath: string | null;
   configRoot: string;
-  getConfig: () => { name?: string; description?: string; content: string; server: { host: string; port: number; apiPort: number; adminToken: string | null }; viewer: { landing: string; showAdmin: boolean; breadcrumbs: boolean }; schemaVersion: number };
+  getConfig: () => { name?: string; description?: string; content: string; server: { host: string; apiPort: number; adminToken: string | null }; schemaVersion: number };
   logs?: LogBuffer;
   history?: {
     append: (input: HistoryWriteInput) => number;
@@ -629,10 +628,10 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
   // Config
   app.get('/v1/config', (c) => {
     // Security: this endpoint is read-gated by the global /v1/* checkRead
-    // middleware, but it dumped the raw adminToken (which gates writes / RCE via
-    // PUT /v1/config) to every read-authorized caller — including any local
-    // process on a loopback bind. Redact the token from the payload so its value
-    // never crosses the wire. Read access to the non-secret config is unchanged.
+    // middleware, but it dumped the raw adminToken (which gates every write) to
+    // every read-authorized caller — including any local process on a loopback
+    // bind. Redact the token so its value never crosses the wire. Read access to
+    // the non-secret config is unchanged.
     const config = ctx.getConfig();
     const redacted = {
       ...config,
@@ -720,7 +719,7 @@ const jsonResponse = (description: string) => ({
   [200]: { description, content: { 'application/json': {} } },
 });
 
-const openApiPaths = {
+export const openApiPaths = {
   // ─── Liveness ──────────────────────────────────────────────────────────
   '/health': {
     get: {
@@ -754,7 +753,7 @@ const openApiPaths = {
       parameters: [
         stringParam('q', 'query', true, 'Search query'),
         stringParam('intent', 'query', false, 'Optional search intent'),
-        stringParam('mode', 'query', false, 'fast (default) or enhanced'),
+        stringParam('mode', 'query', false, 'fast (default). "enhanced" is accepted but INERT in the open-source engine (the reranker is none) — reserved for the Pro reranker.'),
         intParam('k', 'query', 'Max results (default 10)'),
         intParam('debug', 'query', '1 to include per-stage timings'),
       ],
@@ -892,6 +891,13 @@ const openApiPaths = {
       summary: 'Index state, page/chunk counts, model info',
       tags: ['index'],
       responses: jsonResponse('index status object'),
+    },
+  },
+  '/doctor': {
+    get: {
+      summary: 'Corpus-health sweep (deterministic, no-LLM): findings + summary',
+      tags: ['index'],
+      responses: jsonResponse('{ version, checked_at, pages, findings[], summary }'),
     },
   },
 
