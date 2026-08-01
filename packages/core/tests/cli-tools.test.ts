@@ -9,6 +9,7 @@ describe('agent tool defs (remember tools / GET /v1/tools)', () => {
       'search_wiki',
       'get_page',
       'list_pages',
+      'write_page',
     ]);
   });
 

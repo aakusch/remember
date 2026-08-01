@@ -1,11 +1,6 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadConfig } from '../../config/load.js';
-import { requireWiki } from '../require-wiki.js';
-import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
-import { resolveEmbedder } from '../../api/resolve-embedder.js';
-import { createHybridSearchEngine, type HybridSearchOptions } from '../../search/hybrid.js';
-import { createPassthroughReranker } from '../../rerankers/none.js';
+import { openWiki } from '../../api/open-wiki.js';
 import { tokenizeQuery } from '../../search/snippet.js';
 import type { SearchResult } from '../../types.js';
 import { c, header, plural, fmtMs, warn } from '../format.js';
@@ -34,19 +29,6 @@ export interface SearchJsonOutput {
   count: number;
   query_ms: number;
   results: SearchJsonResult[];
-}
-
-/** Same descriptor-unwrap the server uses, kept local so the CLI is standalone. */
-function resolveHybridSearchOptions(descriptor: unknown): HybridSearchOptions {
-  if (
-    descriptor &&
-    typeof descriptor === 'object' &&
-    (descriptor as { _kind?: unknown })._kind === 'search:hybrid'
-  ) {
-    const options = (descriptor as { opts?: unknown }).opts;
-    return options && typeof options === 'object' ? (options as HybridSearchOptions) : {};
-  }
-  return {};
 }
 
 /** Clamp a snippet to a tidy length for the human card, on a word boundary. */
@@ -105,28 +87,7 @@ export async function runSearch(
   query: string,
   opts: { k: number; rootDir?: string },
 ): Promise<SearchJsonOutput & { _results: SearchResult[]; contentRoot: string }> {
-  const cfg = await loadConfig(opts.rootDir ?? process.cwd());
-  await requireWiki(cfg);
-  const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
-  const embedder = await resolveEmbedder(cfg.raw);
-  const store = await createSqliteVecStore({
-    path: path.join(cfg.rootDir, '.remember', 'index.db'),
-    dim: embedder.dim,
-  });
-  const reconcile = store.reconcileEmbedder(embedder.modelId, embedder.dim);
-  if (reconcile.changed) {
-    process.stderr.write(
-      `remember: index was built with a different embedder (${reconcile.previousModelId}) and was cleared — run \`remember index\` to rebuild with ${embedder.modelId}.\n`,
-    );
-  }
-
-  const engine = createHybridSearchEngine(
-    store,
-    embedder,
-    createPassthroughReranker(),
-    resolveHybridSearchOptions(cfg.raw.search?.engine),
-  );
-
+  const { contentRoot, store, engine } = await openWiki(opts.rootDir ?? process.cwd());
   const out = await engine.query({ query }, { k: opts.k });
   store.close();
 
