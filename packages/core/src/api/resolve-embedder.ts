@@ -7,7 +7,12 @@ import { createHashEmbedder } from '../embedders/hash.js';
  * Resolves an Embedder from config + environment.
  *
  * Priority:
- *   1. OPENAI_API_KEY env var present + embedder config not pinned to local-onnx → OpenAI
+ *   1. OPENAI_API_KEY env var present → OpenAI. An explicit key is a deliberate
+ *      opt-in and overrides the scaffold's DEFAULT local-onnx pin — this is exactly
+ *      what the docs and the placeholder-embedder warning promise. (Previously the
+ *      key was ignored whenever the config named local-onnx, which every
+ *      `remember init` project does, so the advice printed on the worst onboarding
+ *      failure could never work.)
  *   2. Configured local-onnx descriptor (or default) → @huggingface/transformers
  *   3. Fallback: hash embedder (deterministic, not semantically meaningful) — only if
  *      transformers.js is unavailable. Emits a warning.
@@ -15,10 +20,11 @@ import { createHashEmbedder } from '../embedders/hash.js';
 export async function resolveEmbedder(raw: RememberConfig): Promise<Embedder> {
   const descriptor = raw.pipeline?.embedder as { _kind?: string; opts?: Record<string, unknown> } | undefined;
 
-  const wantsOpenAI = descriptor?._kind === 'embedder:openai' || (process.env.OPENAI_API_KEY && descriptor?._kind !== 'embedder:localOnnx');
-
-  if (wantsOpenAI && process.env.OPENAI_API_KEY) {
-    const model = (descriptor?.opts?.model as string | undefined) ?? undefined;
+  if (process.env.OPENAI_API_KEY) {
+    // Only carry the configured model when it's actually an OpenAI model; a
+    // local-onnx model name (e.g. bge-small) is meaningless to OpenAI.
+    const model =
+      descriptor?._kind === 'embedder:openai' ? (descriptor?.opts?.model as string | undefined) : undefined;
     return createOpenAIEmbedder({ model });
   }
 

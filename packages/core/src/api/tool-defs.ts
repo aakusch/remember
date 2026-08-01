@@ -19,14 +19,19 @@ export const AGENT_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'search_wiki',
     description:
-      'Search this local wiki using hybrid BM25 + vector search. Returns ranked chunks with paths, snippets, and frontmatter.',
+      'Search this local wiki using hybrid BM25 + vector search. Returns ranked chunks with path, title, snippet, and frontmatter. ' +
+      'Honesty contract: a result means the corpus contains text that ranked for the query — NOT proof an answer exists; if the ' +
+      'right document is not in the corpus you still get its closest matches. Treat results as candidates to read, not answers. ' +
+      '`score` is a fused rank score, comparable only within a single result set, never a probability or a cross-query threshold.',
     input_schema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'The natural-language query' },
         intent: {
           type: 'string',
-          description: 'Optional purpose used for planning and reranking, not corpus content',
+          description:
+            'Accepted but INERT in the open-source engine (the planner is passthrough and the reranker is none, so intent does ' +
+            'not affect results). Reserved for the Pro engine. Safe to omit.',
         },
         k: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
       },

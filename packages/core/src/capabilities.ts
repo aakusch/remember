@@ -46,6 +46,25 @@ export interface Capabilities {
     api_base: string;
     /** Default API port when unset (REMEMBER_API_PORT overrides). */
     default_port: number;
+    /** Query planner in effect. `passthrough` = no query rewriting (Pro adds planning). */
+    planner: 'passthrough';
+    /** Reranker in effect. `none` = fused order is final (Pro adds a cross-encoder). */
+    reranker: 'none';
+    /**
+     * What this edition can and can't do, so an agent written against a Pro
+     * deployment can detect missing features instead of discovering them via 404s.
+     */
+    features: {
+      /** Deterministic corpus-health sweep (`remember doctor` / GET /v1/doctor). */
+      doctor: boolean;
+      /** Browser viewer UI — Pro only. */
+      viewer: boolean;
+      /** Declared subwikis + scoped API keys — Pro only. */
+      subwikis: boolean;
+      scoped_keys: boolean;
+      /** Ingestable formats. The OSS engine is markdown-only. */
+      formats: string[];
+    };
   };
   /** Configured embedding model + dimensions, or null if not resolvable. */
   embedder: { model: string; dim: number } | null;
@@ -97,6 +116,15 @@ export function buildCapabilities(
       license: 'MIT',
       api_base: '/v1',
       default_port: 4320,
+      planner: 'passthrough',
+      reranker: 'none',
+      features: {
+        doctor: true,
+        viewer: false,
+        subwikis: false,
+        scoped_keys: false,
+        formats: ['md'],
+      },
     },
     embedder: opts.embedder ?? null,
     endpoints: CAPABILITY_ENDPOINTS.map((e) => ({ ...e })),
