@@ -101,6 +101,7 @@ remember list             List indexed documents as a table (or --json)
 remember get <path>       Print one document's frontmatter + body (or --json)
 remember status           Dashboard: page/chunk counts, model, index freshness
 remember doctor           Corpus-health sweep: unfindable/duplicate/thin/no-frontmatter docs
+remember mcp              Serve the wiki to MCP clients (Claude Desktop/Code, Cursor) over stdio
 remember tools            Print agent tool defs (same as GET /v1/tools) (or --json)
 remember capabilities     One discovery object for agents (same as GET /v1/capabilities)
 remember benchmark        Versioned retrieval evaluation
@@ -202,6 +203,22 @@ request and queries the wiki instead of guessing. `remember setup` prints the
 exact snippet, and the seeded `content/remember.md` carries it too — so you can
 point your agent at the wiki and let it wire itself up. remember never edits your
 files; you (or your agent, with your ok) paste it in.
+
+**Pattern E — native MCP tools** (Claude Desktop/Code, Cursor, any MCP client).
+`remember mcp` serves the wiki over stdio as first-class tools — `search_wiki`,
+`get_page`, `list_pages`, and `write_page` (stage a note). No HTTP server needed;
+it runs against the wiki in its working directory. Add it to your client's
+`mcpServers`:
+
+```json
+{
+  "remember": { "command": "remember", "args": ["mcp"], "cwd": "/path/to/your-wiki" }
+}
+```
+
+The snippet (Pattern D) tells the agent *when* to reach for the wiki; MCP is *how*
+it calls it. `write_page` is the "we should remember this" side — the agent stages
+a note and it's instantly findable.
 
 **The honesty contract.** A returned result means the corpus contains text that
 ranked for the query. It is **not** proof that an answer exists. If the right

@@ -96,6 +96,7 @@ export const CAPABILITY_COMMANDS: readonly CapabilityCommand[] = [
   { name: 'list', summary: 'List indexed pages (--json)' },
   { name: 'status', summary: 'Index dashboard (--json)' },
   { name: 'doctor', summary: 'Corpus-health sweep (--json, --strict)' },
+  { name: 'mcp', summary: 'Serve the wiki to MCP clients over stdio' },
   { name: 'tools', summary: 'Agent tool definitions (--json)' },
   { name: 'capabilities', summary: 'This discovery object (--json)' },
 ] as const;
