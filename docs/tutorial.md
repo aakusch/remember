@@ -2,7 +2,7 @@
 
 A hands-on walkthrough that takes about 15 minutes. By the end you'll have a working wiki, indexed content, a connector pulling external data, and an AI agent answering questions against it — all from the terminal and the HTTP API.
 
-> **Prerequisites:** Node 20+, pnpm 9+ (or npm), and a terminal.
+> **Prerequisites:** Node 20+, npm (pnpm 9+ / yarn work too), and a terminal.
 >
 > The open-source engine is **CLI + API only** — there is no browser UI. (The browser viewer/editor is a **Pro** feature.)
 
@@ -11,11 +11,11 @@ A hands-on walkthrough that takes about 15 minutes. By the end you'll have a wor
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install
-pnpm dev
+npm install    # pnpm / yarn work too
+npm run dev
 ```
 
-`pnpm dev` indexes the starter wiki and serves the agent HTTP API on `:4320`
+`npm run dev` indexes the starter wiki and serves the agent HTTP API on `:4320`
 with a live file watcher. The first index downloads the local ONNX embedding
 model (`BAAI/bge-small-en-v1.5`, ~100 MB) via the optional
 `@huggingface/transformers` dependency and caches it — subsequent runs are
@@ -32,8 +32,10 @@ curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.2.3"}
 ```
 
 > `remember` lives in the project's `node_modules/.bin`. Prefix the commands
-> below with `pnpm exec` (or `npx`) — e.g. `pnpm exec remember status` — unless
-> you installed it globally with `npm i -g @useremember/core`.
+> below with `npx --no-install` (or `pnpm exec`) — e.g.
+> `npx --no-install remember status` — unless you installed it globally with
+> `npm i -g @useremember/core`. Avoid a plain `npx remember` outside the
+> project directory: it fetches an unrelated npm package named `remember`.
 
 The starter wiki ships with three pages (`getting-started`, `agents`, `authoring`).
 
@@ -141,18 +143,29 @@ Your wiki is plain markdown in `content/` — edit it in any editor (VS Code,
 Obsidian, `vim`) and the filesystem watcher reindexes changed files within a
 second. Nothing else to learn.
 
-Agents and scripts can also write through the API:
+Agents and scripts can also write through the API. `PUT /v1/pages/<path>` takes
+a JSON body — `{ "body": "<full markdown, including frontmatter>" }`:
 
 ```bash
 # Write (or overwrite) a page and reindex it
 curl -X PUT 'http://localhost:4320/v1/pages/notes/scratch.md' \
-  -H 'Content-Type: text/markdown' \
-  --data-binary $'---\ntitle: Scratch\n---\n\n# Scratch\n\nSome notes.\n'
+  -H 'Content-Type: application/json' \
+  -d '{"body": "---\ntitle: Scratch\n---\n\n# Scratch\n\nSome notes.\n"}'
 
 # Move/rename, or delete
-curl -X POST   'http://localhost:4320/v1/pages/move' -d '{"from":"notes/scratch.md","to":"notes/kept.md"}'
+curl -X POST 'http://localhost:4320/v1/pages/move' \
+  -H 'Content-Type: application/json' \
+  -d '{"from":"notes/scratch.md","to":"notes/kept.md"}'
 curl -X DELETE 'http://localhost:4320/v1/pages/notes/kept.md'
 ```
+
+Two rules to remember:
+
+- **POST and PUT require `Content-Type: application/json`** (a cross-site
+  request guard) — a raw `text/markdown` body is rejected, and so is curl's
+  default form encoding, so always pass the header.
+- **Page paths keep their real slashes** — `GET /v1/pages/ops/deploy.md`, with
+  the `/` separators literal. Percent-encoding them 404s.
 
 Writes from a non-loopback origin require `REMEMBER_ADMIN_TOKEN`
 (`Authorization: Bearer <token>`).
@@ -255,7 +268,9 @@ for (const block of message.content) {
       const r = await fetch(`http://localhost:4320/v1/search?q=${encodeURIComponent(block.input.query)}&k=${block.input.k ?? 5}`);
       result = await r.json();
     } else if (block.name === 'get_page') {
-      const r = await fetch(`http://localhost:4320/v1/pages/${encodeURIComponent(block.input.path)}?format=text`);
+      // Keep the / separators literal — percent-encoding them 404s.
+      const pagePath = block.input.path.split('/').map(encodeURIComponent).join('/');
+      const r = await fetch(`http://localhost:4320/v1/pages/${pagePath}?format=text`);
       result = await r.text();
     } else if (block.name === 'list_pages') {
       const r = await fetch(`http://localhost:4320/v1/pages?limit=${block.input.limit ?? 50}`);

@@ -7,20 +7,29 @@ This walks you from zero to a working local AI-ready wiki in about 60 seconds, t
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install
-pnpm dev
+npm install    # pnpm / yarn work too
+npm run dev
 # → agent API on http://localhost:4320
 ```
 
-That's it. `pnpm dev` indexes the starter wiki and serves the agent HTTP API on
-`:4320` with a live file watcher. Search it from another terminal:
+That's it. `npm run dev` indexes the starter wiki and serves the agent HTTP API
+on `:4320` with a live file watcher. Search it from another terminal:
 
 ```bash
-pnpm exec remember search "getting started" -k 5   # or: npx remember search …
+npm run search -- "getting started" -k 5   # or: npx --no-install remember search …
 ```
 
-`remember` lives in the project's `node_modules/.bin`, so invoke it with
-`pnpm exec` / `npx` (or `npm i -g @useremember/core` for a bare `remember`).
+`remember` lives in the project's `node_modules/.bin`, so invoke it through the
+scaffolded npm scripts (`npm run <cmd> --`) or with `npx --no-install remember`
+(or `npm i -g @useremember/core` for a bare `remember`). Careful with a plain
+`npx remember` outside the project directory — it fetches an unrelated npm
+package that happens to be named `remember`.
+
+Once the first index is built, run a corpus-health check:
+
+```bash
+npx --no-install remember doctor
+```
 
 The open-source engine is **CLI + API only** — there is no browser UI. (The
 browser viewer/editor is a **Pro** feature; see [below](#what-the-pro-engine-adds).)
@@ -35,20 +44,22 @@ or set `OPENAI_API_KEY`.
 ```
 my-wiki/
   content/                       ← markdown — the canonical source
-    README.md                    ← landing page (configurable)
     getting-started.md           ← short orientation page
-    examples/
-      with-frontmatter.md        ← shows how frontmatter drives table view
-      with-wikilinks.md          ← (optional, if you set up an Obsidian connector)
+    agents.md                    ← how AI agents plug in
+    authoring.md                 ← the frontmatter worth setting
   remember.config.ts             ← typed config — connectors, embedder, ports
-  .gitignore                     ← skips .remember/ + node_modules
+  package.json                   ← scripts: dev, start, index, status, search, list, get
+  .gitignore                     ← skips .remember/, node_modules, .env
   .rememberignore                ← extends ignore rules for indexing
-  package.json                   ← scripts: dev, start, index, status
+  .env.example                   ← optional env overrides, documented
+  .env                           ← generated; holds REMEMBER_ADMIN_TOKEN (gitignored)
 ```
 
-`content/` is where you write. Everything else is generated or config.
+`content/` is where you write. Everything else is generated or config. The
+scaffold generates an admin token into `.env` — it's gitignored, and
+`remember` auto-loads `.env` from the project root on every command.
 
-## The five things to know
+## The six things to know
 
 ### 1. Pages are markdown files
 
@@ -114,10 +125,20 @@ Your wiki is plain markdown in a directory. Edit it however you like — VS Code
 Obsidian, `vim` — and the filesystem watcher reindexes changed files within a
 second. No editor UI ships with the open-source engine.
 
-Agents and scripts can also write through the API: `PUT /v1/pages/<path>` writes
-markdown and reindexes, `DELETE /v1/pages/<path>` removes and reconciles, and
-`POST /v1/pages/move` renames. Writes from a non-loopback origin require
-`REMEMBER_ADMIN_TOKEN`.
+Agents and scripts can also write through the API: `PUT /v1/pages/<path>` takes
+a JSON body — `{ "body": "<full markdown, including frontmatter>" }` with
+`Content-Type: application/json` — writes the file and reindexes it.
+`DELETE /v1/pages/<path>` removes and reconciles, and `POST /v1/pages/move`
+renames. Two things to know about writes:
+
+- **`Content-Type: application/json` is required on POST/PUT** (a cross-site
+  request guard) — a raw `text/markdown` body is rejected.
+- **Writes from a non-loopback origin require the admin token**, sent as
+  `Authorization: Bearer <token>` (`REMEMBER_ADMIN_TOKEN`, generated into
+  `.env` by `remember init`).
+
+Page paths in the URL keep their real slashes — `PUT /v1/pages/ops/deploy.md`.
+Percent-encoding the `/` separators in a nested path 404s.
 
 ### 5. Connectors pull external sources
 
@@ -147,6 +168,20 @@ The connector manager runs an initial sync on boot; trigger a resync at any time
 with `POST /v1/connectors/<name>/sync` (or `POST /v1/connectors/sync` for all)
 and check status with `GET /v1/connectors`.
 
+### 6. `remember doctor` keeps the corpus healthy
+
+After your first `remember index`, run `remember doctor` — a deterministic,
+no-LLM, no-network sweep over the indexed corpus. It flags documents that
+quietly wreck retrieval: markdown on disk that isn't indexed, pages with zero
+chunks (unfindable), duplicate bodies/titles, pages with no heading structure,
+walls of prose, thin pages, and missing frontmatter.
+
+```bash
+npx --no-install remember doctor            # human-readable report
+npx --no-install remember doctor --json     # machine shape (same as GET /v1/doctor)
+npx --no-install remember doctor --strict   # exit non-zero on any error-severity finding — CI-gateable
+```
+
 ## Configuration
 
 Configuration lives in `remember.config.ts` — a typed file you edit directly.
@@ -165,6 +200,7 @@ config, `PUT /v1/config` writes it back with a timestamped `.bak` backup.
 | What | How |
 |---|---|
 | Trigger a reindex | `POST /v1/index` (or `remember index`) |
+| Corpus-health sweep | `GET /v1/doctor` (or `remember doctor`) |
 | Query / filter / sort by frontmatter | `GET /v1/pages?filter[k]=v&sort=-date` |
 | Manage connectors | `GET/POST /v1/connectors...` |
 | Read loaded config | `GET /v1/config` |
@@ -195,15 +231,17 @@ See [`docker-compose.yml`](../docker-compose.yml) for the full configuration inc
 
 The full schema is in [`packages/core/src/config/schema.ts`](../packages/core/src/config/schema.ts). Every field has a sensible default — `defineConfig({})` is valid.
 
-ENV overrides (take precedence over config):
+ENV overrides (take precedence over config). A `.env` file in the project root
+is auto-loaded before the config is evaluated — the scaffold puts
+`REMEMBER_ADMIN_TOKEN` there:
 
 | ENV var | Maps to |
 |---|---|
 | `REMEMBER_CONTENT` | `content` directory |
 | `REMEMBER_HOST` | `server.host` |
+| `REMEMBER_PORT` | `server.port` |
 | `REMEMBER_API_PORT` | `server.apiPort` (the agent HTTP API; default 4320) |
 | `REMEMBER_ADMIN_TOKEN` | `server.adminToken` |
-| `REMEMBER_EMBED_MODEL` | embedder model override |
 | `OPENAI_API_KEY` | opts the embedder into OpenAI |
 
 ## What the Pro engine adds

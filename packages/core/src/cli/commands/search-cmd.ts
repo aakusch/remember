@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../../config/load.js';
+import { requireWiki } from '../require-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
 import { createHybridSearchEngine, type HybridSearchOptions } from '../../search/hybrid.js';
@@ -105,6 +106,7 @@ export async function runSearch(
   opts: { k: number; rootDir?: string },
 ): Promise<SearchJsonOutput & { _results: SearchResult[]; contentRoot: string }> {
   const cfg = await loadConfig(opts.rootDir ?? process.cwd());
+  await requireWiki(cfg);
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
   const embedder = await resolveEmbedder(cfg.raw);
   const store = await createSqliteVecStore({

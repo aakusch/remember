@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { loadConfig } from '../../config/load.js';
+import { requireWiki } from '../require-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
 import { VERSION } from '../../version.js';
@@ -22,6 +23,7 @@ export interface StatusJsonOutput {
 
 export async function runStatus(rootDir?: string): Promise<StatusJsonOutput> {
   const cfg = await loadConfig(rootDir ?? process.cwd());
+  await requireWiki(cfg);
   const embedder = await resolveEmbedder(cfg.raw);
   const store = await createSqliteVecStore({
     path: path.join(cfg.rootDir, '.remember', 'index.db'),

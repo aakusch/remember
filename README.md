@@ -120,6 +120,22 @@ remember search "auth flow" --json | jq '.results[0].path'
 Color is enabled on a TTY and disabled automatically when piped or when
 `NO_COLOR` is set, so redirected output and CI logs stay clean.
 
+### `remember doctor`
+
+```bash
+remember doctor
+```
+
+A deterministic, no-LLM, no-network health check over your indexed corpus.
+It flags documents that quietly wreck retrieval: markdown on disk that isn't
+indexed, pages with zero chunks (unfindable), duplicate bodies/titles, pages
+with no heading structure, walls of prose, thin pages, and missing
+frontmatter. Run it after your first `remember index` — it reads only the
+local index plus one cheap pass over `content/`. Flags:
+
+- `--json` — the machine shape (same as `GET /v1/doctor`)
+- `--strict` — exit non-zero if any error-severity finding exists, so you can gate CI on it
+
 <br>
 
 ## How AI plugs in
@@ -173,6 +189,35 @@ code needed.
 ranked for the query. It is **not** proof that an answer exists. If the right
 document isn't in the corpus, the engine still returns its closest matches —
 treat results as candidates to read, not as guaranteed answers.
+
+<br>
+
+## Embeddings
+
+Three ways the vector half of hybrid search gets its embeddings, in the order
+the engine resolves them:
+
+1. **OpenAI** — if `OPENAI_API_KEY` is set in the environment, the embedder
+   switches to OpenAI. An explicit key is a deliberate opt-in and overrides
+   the scaffold's local-ONNX pin; you can also pin a model with
+   `defaults.embedder.openai(...)` in `remember.config.ts`.
+2. **Local ONNX (the default)** — `BAAI/bge-small-en-v1.5` (384-d) via the
+   optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
+   dependency, which the default scaffold installs. The model (~100 MB)
+   downloads once on first index and is cached; after that, indexing and
+   search run entirely offline. No API keys, no network.
+3. **Hash placeholder (fallback)** — if `@huggingface/transformers` is not
+   installed and no `OPENAI_API_KEY` is set, the engine falls back to a
+   deterministic hash embedder. **Search still runs, but results are
+   semantically meaningless** — this is an onboarding trap, so the engine
+   prints a loud warning. Fix it with `npm install @huggingface/transformers`
+   or by setting `OPENAI_API_KEY`.
+
+> **A note on `npm audit`:** `@huggingface/transformers` transitively pulls in
+> `sharp`, an image-processing library, and `npm audit` may report CVEs
+> against it. This engine is text-only and never invokes the image path — but
+> if your policy requires a clean audit, the OpenAI embedder path works
+> without `@huggingface/transformers` installed.
 
 <br>
 
@@ -233,8 +278,8 @@ and "sync all" triggers through `/v1/connectors`.
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install
-pnpm dev
+npm install      # pnpm / yarn work too
+npm run dev
 ```
 
 ### From source
@@ -339,7 +384,7 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
 
 PRs welcome on:
 
-- New connector implementations (`@useremember/core/connectors/<name>.ts`)
+- New connector implementations (`packages/core/src/connectors/<name>.ts`)
 - New embedder providers (Voyage, Cohere, etc.)
 - New rerankers (cross-encoder, LLM-based)
 - Query planners and retrieval evaluation fixtures

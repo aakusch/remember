@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { loadConfig } from '../../config/load.js';
+import { requireWiki } from '../require-wiki.js';
 import { safeJoinContent, PathOutsideContentError } from '../../api/path-utils.js';
 import { c, header, keyValues } from '../format.js';
 
@@ -34,6 +35,7 @@ export async function runGet(
   opts: { rootDir?: string } = {},
 ): Promise<GetJsonOutput> {
   const cfg = await loadConfig(opts.rootDir ?? process.cwd());
+  await requireWiki(cfg);
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
   let abs: string;
   try {
