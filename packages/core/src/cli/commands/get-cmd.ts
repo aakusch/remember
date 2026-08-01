@@ -1,3 +1,4 @@
+import { titleFor } from '../../search/title.js';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { loadConfig } from '../../config/load.js';
@@ -24,9 +25,7 @@ export class GetError extends Error {
 }
 
 function titleFrom(frontmatter: Record<string, unknown>, p: string): string {
-  const t = frontmatter.title;
-  if (typeof t === 'string' && t.trim()) return t.trim();
-  return path.basename(p).replace(/\.md$/i, '');
+  return titleFor({ path: p, frontmatter });
 }
 
 /** Read + parse one page. Returns the machine-stable structure (used by --json + tests). */

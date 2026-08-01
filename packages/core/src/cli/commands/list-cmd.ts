@@ -3,6 +3,7 @@ import { loadConfig } from '../../config/load.js';
 import { requireWiki } from '../require-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
+import { basenameTitle } from '../../search/title.js';
 import { c, header, padEndVisible, visibleLength, fmtWhen, warn, plural } from '../format.js';
 
 export interface ListCmdOptions {
@@ -36,8 +37,7 @@ export interface ListJsonOutput {
 const SORT_KEYS = new Set(['path', 'title', 'size', 'modified', 'last_modified', 'last_indexed']);
 
 function titleFrom(title: string | null, p: string): string {
-  if (title && title.trim()) return title.trim();
-  return path.basename(p).replace(/\.md$/i, '');
+  return title && title.trim() ? title.trim() : basenameTitle(p);
 }
 
 /** Parse argv for `list`. Exported for tests. */

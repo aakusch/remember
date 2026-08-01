@@ -64,20 +64,41 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
     awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 50 },
   });
 
+  // Reindex only the files that actually changed — not the whole corpus. The
+  // previous indexAll() re-walked + re-hashed every .md on every keystroke-save
+  // (O(corpus) per change); indexOne is O(1) per change and keeps `remember dev`
+  // fast on a real wiki. Pending ops are coalesced by the debounce.
+  const pending = new Map<string, 'upsert' | 'delete'>();
   let reindexTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushPending = async () => {
+    const batch = [...pending];
+    pending.clear();
+    for (const [rel, op] of batch) {
+      try {
+        if (op === 'delete') {
+          await store.deleteByPath(rel);
+          await store.deletePage(rel);
+          await store.updateManifest(rel, null);
+        } else {
+          await indexer.indexOne(contentRoot, rel);
+        }
+      } catch (err) {
+        const msg = (err as Error).message;
+        process.stderr.write(`[remember] watcher reindex failed for ${rel}: ${msg}\n`);
+        logs.push({ level: 'error', source: 'indexer', message: `watcher reindex failed for ${rel}: ${msg}` });
+      }
+    }
+  };
   const scheduleReindex = () => {
     if (reindexTimer) clearTimeout(reindexTimer);
     reindexTimer = setTimeout(() => {
       reindexTimer = null;
-      indexer.indexAll(contentRoot).catch((err) => {
-        const msg = (err as Error).message;
-        process.stderr.write(`[remember] watcher reindex failed: ${msg}\n`);
-        logs.push({ level: 'error', source: 'indexer', message: `watcher reindex failed: ${msg}` });
-      });
+      void flushPending();
     }, 500);
   };
   const emitChange = (event: 'add' | 'change' | 'unlink', absPath: string) => {
     const rel = path.relative(contentRoot, absPath).split(path.sep).join('/');
+    pending.set(rel, event === 'unlink' ? 'delete' : 'upsert');
     events.emit('event', { type: 'page.changed', kind: event, path: rel });
     scheduleReindex();
   };
