@@ -309,7 +309,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     );
     // Whitelist projection — emit exactly the documented field set (CLAUDE.md's
     // /v1/search contract), add `title` (so it matches the CLI --json and the
-    // seeded agents.md), and drop the internal `chunk_idx`. Never spread the raw
+    // seeded remember.md), and drop the internal `chunk_idx`. Never spread the raw
     // internal result.
     const { results, ...rest } = out as { results: SearchResult[] } & Record<string, unknown>;
     const projected = (results ?? []).map((r) => ({

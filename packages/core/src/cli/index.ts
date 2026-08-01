@@ -11,13 +11,39 @@ interface CommandSpec {
 
 export const COMMANDS: CommandSpec[] = [
   {
+    name: 'setup',
+    args: '[dir]',
+    summary: 'Guided wizard: scaffold → install → index → serve, in one command',
+    help: `${c.bold('remember setup')} ${c.dim('[dir] [--yes] [--no-start] [--no-token]')}
+
+The one-command onboarding wizard. Prompts for a folder, embeddings (local or
+OpenAI), and whether to seed example pages — then scaffolds the wiki, installs
+dependencies, indexes, and starts the dev server, so you go from nothing to a
+live, searchable, agent-ready wiki without running five separate commands.
+
+It never edits your files: it PRINTS the "remember …" agent trigger snippet for
+you to paste into ${c.cyan('CLAUDE.md')}/${c.cyan('AGENTS.md')} (the seeded ${c.cyan('content/remember.md')} carries
+it too, so an agent pointed at the wiki can wire itself up).
+
+${c.dim('Options')}
+  --yes        Non-interactive: defaults (./my-wiki, local, install + index, no auto-start)
+  --no-start   Scaffold + install + index, but don't start the server
+  --no-token   Skip generating an admin token (loopback-only setups)
+
+${c.dim('Examples')}
+  npx @useremember/core setup
+  remember setup my-wiki
+  remember setup --yes`,
+  },
+  {
     name: 'init',
     args: '<dir>',
-    summary: 'Scaffold a new wiki in <dir>',
+    summary: 'Scaffold a new wiki in <dir> (raw — no install/index/serve)',
     help: `${c.bold('remember init')} ${c.dim('<dir> [--no-token]')}
 
 Scaffold a new, ready-to-run wiki: a ${c.cyan('remember.config.ts')}, a ${c.cyan('content/')} folder
-seeded with three starter docs, and a ${c.cyan('package.json')} wired to the CLI.
+seeded with starter docs, and a ${c.cyan('package.json')} wired to the CLI. Files only —
+for the guided end-to-end flow use ${c.cyan('remember setup')}.
 
 ${c.dim('Options')}
   --no-token   Skip generating an admin token (loopback-only setups)
@@ -289,6 +315,11 @@ export async function run(argv: string[]): Promise<void> {
 
   try {
     switch (command) {
+      case 'setup': {
+        const { setupCommand } = await import('./commands/setup-cmd.js');
+        await setupCommand(rest);
+        return;
+      }
       case 'init': {
         const { init } = await import('./commands/init.js');
         const positional = rest.filter((a) => !a.startsWith('--'));

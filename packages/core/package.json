@@ -66,6 +66,7 @@
     "lint": "echo '(eslint not yet configured)'"
   },
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "@hono/node-server": "^2.0.12",
     "better-sqlite3": "^11.3.0",
     "chokidar": "^4.0.0",

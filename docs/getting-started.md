@@ -45,7 +45,7 @@ or set `OPENAI_API_KEY`.
 my-wiki/
   content/                       ← markdown — the canonical source
     getting-started.md           ← short orientation page
-    agents.md                    ← how AI agents plug in
+    remember.md                  ← how AI agents plug in (+ the trigger snippet)
     authoring.md                 ← the frontmatter worth setting
   remember.config.ts             ← typed config — connectors, embedder, ports
   package.json                   ← scripts: dev, start, index, status, search, list, get

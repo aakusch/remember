@@ -20,6 +20,15 @@ machine by default. Drive it from a rich terminal CLI or a small HTTP API.
 
 ## Quickstart
 
+One command — the guided wizard scaffolds the wiki, installs, indexes, and starts
+the server (it asks about the folder, embeddings, and example pages first):
+
+```bash
+npx @useremember/core setup
+```
+
+Prefer to run the steps yourself? The wizard maps to:
+
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
@@ -82,6 +91,7 @@ Everything the OSS engine does is a `remember` subcommand. Run `remember help`
 for the full list, or `remember help <command>` for per-command help.
 
 ```
+remember setup            Guided wizard: scaffold → install → index → serve
 remember init <dir>       Scaffold a new wiki (config + content + starter docs)
 remember dev              Index, then serve the agent API with a file watcher
 remember start            Serve the production API (assumes the index is built)
@@ -184,6 +194,14 @@ curl http://localhost:4320/v1/tools
 Returns Anthropic/OpenAI-compatible tool definitions for `search_wiki`,
 `get_page`, `list_pages`. Drop them straight into a tool-use call — no wiring
 code needed.
+
+**Pattern D — make "remember …" a reflex.** Add a few lines to your coding
+agent's `CLAUDE.md` / `AGENTS.md` so that when you say "remember when we decided
+X" or "remember how we structure this doc," the agent treats it as a retrieval
+request and queries the wiki instead of guessing. `remember setup` prints the
+exact snippet, and the seeded `content/remember.md` carries it too — so you can
+point your agent at the wiki and let it wire itself up. remember never edits your
+files; you (or your agent, with your ok) paste it in.
 
 **The honesty contract.** A returned result means the corpus contains text that
 ranked for the query. It is **not** proof that an answer exists. If the right

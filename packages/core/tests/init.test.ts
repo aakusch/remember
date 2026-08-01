@@ -30,7 +30,7 @@ describe('remember init scaffold', () => {
       '.rememberignore',
       '.env.example',
       'content/getting-started.md',
-      'content/agents.md',
+      'content/remember.md',
       'content/authoring.md',
     ]) {
       await expect(fs.access(path.join(dir, f))).resolves.toBeUndefined();
