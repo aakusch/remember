@@ -5,13 +5,14 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { safeJoinContent, PathOutsideContentError } from './path-utils.js';
-import type { Embedder, SearchEngine, Store } from '../types.js';
+import type { Embedder, SearchEngine, SearchResult, Store } from '../types.js';
 import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 import { VERSION } from '../version.js';
 import { AGENT_TOOL_DEFS } from './tool-defs.js';
 import { buildCapabilities } from '../capabilities.js';
 import { gatherDoctorReport } from '../doctor/scan.js';
+import { titleFor } from '../search/title.js';
 
 /** Max bytes accepted for a single PUT /v1/pages body (memory-DoS guard). */
 const MAX_PAGE_BODY_BYTES = 5 * 1024 * 1024;
@@ -306,7 +307,22 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       { query: q, ...(intent ? { intent } : {}) },
       { k, debug, mode: modeParam },
     );
-    return c.json({ query: q, ...out });
+    // Whitelist projection — emit exactly the documented field set (CLAUDE.md's
+    // /v1/search contract), add `title` (so it matches the CLI --json and the
+    // seeded agents.md), and drop the internal `chunk_idx`. Never spread the raw
+    // internal result.
+    const { results, ...rest } = out as { results: SearchResult[] } & Record<string, unknown>;
+    const projected = (results ?? []).map((r) => ({
+      path: r.path,
+      title: titleFor(r),
+      snippet: r.snippet,
+      score: r.score,
+      frontmatter: r.frontmatter,
+      heading_path: r.heading_path ?? [],
+      retrievers: r.retrievers,
+      chunk_id: r.chunk_id,
+    }));
+    return c.json({ query: q, ...rest, results: projected });
   });
 
   // List pages — backed by the frontmatter-aware `pages` table.

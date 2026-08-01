@@ -56,13 +56,8 @@ function clampSnippet(s: string, max = 240): string {
   return (ws > max * 0.6 ? cut.slice(0, ws) : cut).trimEnd() + ' …';
 }
 
-/** Derive a display title from frontmatter, else the file's basename. */
-export function titleFor(r: SearchResult): string {
-  const t = r.frontmatter?.title;
-  if (typeof t === 'string' && t.trim()) return t.trim();
-  const base = path.basename(r.path).replace(/\.md$/i, '');
-  return base;
-}
+import { titleFor } from '../../search/title.js';
+export { titleFor };
 
 /**
  * Highlight query terms inside a snippet for the human card. Word-boundary

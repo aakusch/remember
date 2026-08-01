@@ -344,7 +344,28 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     );
   }
 
-  const server = serve({ fetch: app.fetch, hostname: host, port });
+  // Await the actual bind before returning, and translate EADDRINUSE. Previously
+  // serve() was fire-and-forget: startServer resolved, the CLI printed its full
+  // "API is up, press Ctrl+C" banner, and THEN the bind failed with a raw
+  // unhandled Node 'error' stack trace — the worst possible first-run failure.
+  const server = await new Promise<ReturnType<typeof serve>>((resolve, reject) => {
+    const s = serve({ fetch: app.fetch, hostname: host, port }, () => {
+      s.off('error', onError);
+      resolve(s);
+    });
+    const onError = (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        reject(
+          new Error(
+            `port ${port} is already in use — stop the other instance or set REMEMBER_API_PORT=<other>`,
+          ),
+        );
+      } else {
+        reject(err);
+      }
+    };
+    s.on('error', onError);
+  });
   return {
     url: `http://${host}:${port}`,
     close: () =>
