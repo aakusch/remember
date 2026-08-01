@@ -102,19 +102,22 @@ ${c.dim('Examples')}
   {
     name: 'list',
     summary: 'List indexed documents (table or --json)',
-    help: `${c.bold('remember list')} ${c.dim('[--limit <n>] [--sort <key>] [--json]')}
+    help: `${c.bold('remember list')} ${c.dim('[--limit <n>] [--offset <n>] [--sort <key>] [--q <text>] [--filter k=v] [--json]')}
 
-List every indexed document as an aligned table — title, path, size, and when
-it was last indexed. Reads the local index directly (no server needed).
+List indexed documents as an aligned table — title, path, size, and when it was
+last indexed. Reads the local index directly (no server needed).
 
 ${c.dim('Options')}
-  --limit <n>   Max rows to show (default 50, max 500)   ${c.dim('alias: -n')}
-  --sort <key>  path | title | size | modified | last_modified | last_indexed ${c.dim('(alias: -s; prefix - for desc)')}
-  --json        Machine-readable output (no color) for scripts and agents
+  --limit <n>    Max rows to show (default 50, max 500)   ${c.dim('alias: -n')}
+  --offset <n>   Skip the first n rows (pagination)
+  --sort <key>   path | title | size | modified | last_modified | last_indexed ${c.dim('(alias: -s; prefix - for desc)')}
+  --q <text>     Free-text contains match on title + path
+  --filter k=v   Exact frontmatter match, e.g. --filter status=current ${c.dim('(repeatable)')}
+  --json         Machine-readable output (no color) for scripts and agents
 
 ${c.dim('Examples')}
-  remember list
   remember list --sort -modified --limit 20
+  remember list --filter status=current --q deploy
   remember list --json | jq -r '.pages[].path'`,
   },
   {

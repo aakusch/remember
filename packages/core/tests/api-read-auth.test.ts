@@ -38,7 +38,6 @@ describe('read-auth trust derives from connection, not Host header', () => {
 
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
-    store.setDimension(embedder.dim);
 
     const indexer = createIndexer({
       walker: createChokidarWalker({}),
@@ -67,11 +66,9 @@ describe('read-auth trust derives from connection, not Host header', () => {
       reindex,
       adminToken: opts.adminToken,
       boundHost: opts.host,
-      remoteAllowed: opts.host !== '127.0.0.1',
       getConfig: () => ({
         content: contentRoot,
-        server: { host: opts.host, port: 4321, apiPort: 4320, adminToken: opts.adminToken },
-        viewer: { landing: 'README.md', showAdmin: true, breadcrumbs: true },
+        server: { host: opts.host, apiPort: 4320, adminToken: opts.adminToken },
         schemaVersion: 1,
       }),
     });

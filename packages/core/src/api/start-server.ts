@@ -5,12 +5,10 @@ import { EventEmitter } from 'node:events';
 import chokidar from 'chokidar';
 import { createApp } from './server.js';
 import { createSqliteVecStore, type SqliteVecStore, type HistoryWriteInput } from '../stores/sqlite-vec.js';
-import { createChokidarWalker } from '../walkers/chokidar.js';
-import { createRemarkParser } from '../parsers/remark.js';
-import { createSmartSplitChunker } from '../chunkers/smart-split.js';
 import { createHybridSearchEngine, type HybridSearchOptions } from '../search/hybrid.js';
 import { createPassthroughReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
+import { createDefaultIndexer } from './open-wiki.js';
 import { loadConfig, type LoadedConfig } from '../config/load.js';
 import { resolveEmbedder } from './resolve-embedder.js';
 import { createLogBuffer, type LogBuffer } from '../observability/log-buffer.js';
@@ -34,9 +32,6 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
   const { cfg, events, logs } = opts;
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
 
-  const walker = createChokidarWalker({ respectGitignore: true });
-  const parser = createRemarkParser();
-  const chunker = createSmartSplitChunker({ size: 900, overlap: 0.15 });
   const embedder = await resolveEmbedder(cfg.raw);
   const store = await createSqliteVecStore({
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
@@ -55,7 +50,7 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
     reranker,
     resolveHybridSearchOptions(cfg.raw.search?.engine),
   );
-  const indexer = createIndexer({ walker, parser, chunker, embedder, store });
+  const indexer = createDefaultIndexer(store, embedder);
 
   // Filesystem watcher — debounced auto-reindex on disk changes.
   const watcher = chokidar.watch(contentRoot, {
@@ -160,7 +155,6 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
     // Authoritative bind host — local-trust derives from this + the real peer
     // socket, never the client Host header.
     boundHost: cfg.validated.server.host,
-    remoteAllowed: cfg.validated.server.host !== '127.0.0.1',
     configPath: cfg.configPath,
     configRoot: cfg.rootDir,
     getConfig: () => ({
@@ -168,7 +162,6 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
       description: cfg.raw.description,
       content: cfg.validated.content,
       server: cfg.validated.server,
-      viewer: cfg.validated.viewer,
       schemaVersion: cfg.validated.schemaVersion,
     }),
     logs,

@@ -38,7 +38,6 @@ export interface EmbedderReconcileResult {
 
 export interface SqliteVecStore extends Store {
   close(): void;
-  setDimension(dim: number): void;
   /**
    * Reconcile the index against the embedder that is about to be used. If the model
    * or dimension differs from what the index was built with, every embedding-derived
@@ -481,10 +480,6 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
           firstChunkText: first?.text ?? '',
         };
       });
-    },
-
-    setDimension(newDim: number) {
-      applyDimensionChange(newDim);
     },
 
     reconcileEmbedder(modelId: string, newDim: number): EmbedderReconcileResult {

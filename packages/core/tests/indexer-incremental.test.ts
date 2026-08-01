@@ -25,7 +25,6 @@ describe('indexer incremental correctness', () => {
 
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
-    store.setDimension(embedder.dim);
 
     indexer = createIndexer({
       walker: createChokidarWalker({}),

@@ -1,3 +1,4 @@
+import { assertKnownFlags } from '../flags.js';
 import { loadConfig } from '../../config/load.js';
 import { resolveEmbedder } from '../../api/resolve-embedder.js';
 import { buildCapabilities, type Capabilities } from '../../capabilities.js';
@@ -25,6 +26,7 @@ async function resolveEmbedderInfo(): Promise<{ model: string; dim: number } | n
  */
 export async function capabilitiesCommand(argv: string[] = []): Promise<void> {
   const json = argv.includes('--json');
+  assertKnownFlags(argv, ['--json']);
   const embedder = await resolveEmbedderInfo();
   const caps = buildCapabilities({ embedder });
 

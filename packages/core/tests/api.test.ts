@@ -29,7 +29,6 @@ describe('HTTP API (wired)', () => {
 
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
-    store.setDimension(embedder.dim);
 
     const indexer = createIndexer({
       walker: createChokidarWalker({}),
@@ -53,7 +52,6 @@ describe('HTTP API (wired)', () => {
       search,
       reindex,
       adminToken: null,
-      remoteAllowed: false,
     });
   });
 
@@ -104,8 +102,7 @@ describe('HTTP API (wired)', () => {
       boundHost: '127.0.0.1', // loopback → trusted-local read, the exposure case
       getConfig: () => ({
         content: tmp,
-        server: { host: '127.0.0.1', port: 4321, apiPort: 4320, adminToken: 'super-secret-token' },
-        viewer: { landing: 'README.md', showAdmin: true, breadcrumbs: true },
+        server: { host: '127.0.0.1', apiPort: 4320, adminToken: 'super-secret-token' },
         schemaVersion: 1,
       }),
     });

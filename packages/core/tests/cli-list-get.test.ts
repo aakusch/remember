@@ -38,7 +38,6 @@ describe('CLI read commands over a real index', () => {
       path: path.join(root, '.remember', 'index.db'),
       dim: embedder.dim,
     });
-    store.setDimension(embedder.dim);
     const indexer = createIndexer({
       walker: createChokidarWalker({}),
       parser: createRemarkParser(),
@@ -96,6 +95,15 @@ describe('CLI read commands over a real index', () => {
       expect(() => parseListArgs(['--limit', 'abc'])).toThrow(/positive integer/);
       expect(() => parseListArgs(['--sort', 'bogus'])).toThrow(/--sort expects/);
       expect(() => parseListArgs(['--nope'])).toThrow(/unknown flag/);
+    });
+
+    it('parses --offset, --q, and repeatable --filter', () => {
+      const o = parseListArgs(['--offset', '10', '--q', 'deploy', '--filter', 'status=current', '--filter', 'type=runbook']);
+      expect(o.offset).toBe(10);
+      expect(o.q).toBe('deploy');
+      expect(o.filter).toEqual({ status: 'current', type: 'runbook' });
+      expect(() => parseListArgs(['--filter', 'noequals'])).toThrow(/key=value/);
+      expect(() => parseListArgs(['--offset', '-1'])).toThrow(/non-negative/);
     });
   });
 

@@ -9,7 +9,23 @@ import { createIndexer } from '../indexer/index.js';
 import { createChokidarWalker } from '../walkers/chokidar.js';
 import { createRemarkParser } from '../parsers/remark.js';
 import { createSmartSplitChunker } from '../chunkers/smart-split.js';
-import type { Embedder } from '../types.js';
+import type { Embedder, Store } from '../types.js';
+
+/** The default chunking parameters. Centralized so the (ranking-sensitive) chunk
+ *  size lives in ONE place instead of being copy-pasted into five call sites. */
+export const DEFAULT_CHUNK = { size: 900, overlap: 0.15 } as const;
+
+/** Build the standard indexer (chokidar walker + remark parser + smart-split
+ *  chunker) for a store+embedder. The single source of the pipeline wiring. */
+export function createDefaultIndexer(store: Store, embedder: Embedder) {
+  return createIndexer({
+    walker: createChokidarWalker({ respectGitignore: true }),
+    parser: createRemarkParser(),
+    chunker: createSmartSplitChunker(DEFAULT_CHUNK),
+    embedder,
+    store,
+  });
+}
 
 /** Unwrap a `defaults.search.hybrid({...})` descriptor to its options. */
 export function resolveHybridSearchOptions(descriptor: unknown): HybridSearchOptions {
@@ -60,12 +76,6 @@ export async function openWiki(rootDir: string): Promise<OpenWiki> {
     createPassthroughReranker(),
     resolveHybridSearchOptions(cfg.raw.search?.engine),
   );
-  const indexer = createIndexer({
-    walker: createChokidarWalker({ respectGitignore: true }),
-    parser: createRemarkParser(),
-    chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
-    embedder,
-    store,
-  });
+  const indexer = createDefaultIndexer(store, embedder);
   return { cfg, contentRoot, store, embedder, engine, indexer };
 }
