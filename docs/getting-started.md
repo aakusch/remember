@@ -132,7 +132,8 @@ a JSON body — `{ "body": "<full markdown, including frontmatter>" }` with
 renames. Two things to know about writes:
 
 - **`Content-Type: application/json` is required on POST/PUT** (a cross-site
-  request guard) — a raw `text/markdown` body is rejected.
+  request guard) — a raw markdown body with a non-JSON content type is
+  rejected.
 - **Writes from a non-loopback origin require the admin token**, sent as
   `Authorization: Bearer <token>` (`REMEMBER_ADMIN_TOKEN`, generated into
   `.env` by `remember init`).

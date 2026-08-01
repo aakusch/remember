@@ -162,8 +162,8 @@ curl -X DELETE 'http://localhost:4320/v1/pages/notes/kept.md'
 Two rules to remember:
 
 - **POST and PUT require `Content-Type: application/json`** (a cross-site
-  request guard) — a raw `text/markdown` body is rejected, and so is curl's
-  default form encoding, so always pass the header.
+  request guard) — a raw markdown body with a non-JSON content type is
+  rejected, and so is curl's default form encoding, so always pass the header.
 - **Page paths keep their real slashes** — `GET /v1/pages/ops/deploy.md`, with
   the `/` separators literal. Percent-encoding them 404s.
 

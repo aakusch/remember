@@ -77,12 +77,12 @@ Every component of the indexing pipeline is an adapter with a documented interfa
 | `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | chokidar + ignore | `@useremember/core/walkers/chokidar` |
 | `Parser` | `parse(raw): {frontmatter, ast, plain}` | remark + gray-matter | `@useremember/core/parsers/remark` |
 | `Chunker` | `chunk(parsed): Chunk[]` | smart-split (900 tokens, 15% overlap) | `@useremember/core/chunkers/smart-split` |
-| `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai`, `/hash` |
+| `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai` |
 | `Store` | `upsert/delete/searchVector/searchBm25/getManifest/upsertPage/queryPages/listFrontmatterKeys` | SQLite + sqlite-vec | `@useremember/core/stores/sqlite-vec` |
 | `SearchEngine` | `query(q, opts): {results, query_ms, trace?}` | hybrid BM25+vector with weighted RRF | `@useremember/core/search/hybrid` |
 | `QueryPlanner` | `plan({query, intent?}): QueryPlan` | deterministic passthrough | `@useremember/core/query-planners/passthrough` |
 | `Reranker` | `rerank(query, candidates, context): scored[]` | deterministic passthrough; model-backed candidates gated | `@useremember/core/rerankers/none` |
-| `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `@useremember/core/connectors` |
+| `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `defaults.connector.*` from the main export |
 
 The default implementations are wired automatically when `loadConfig()` runs. Override any of them in `remember.config.ts`:
 
@@ -181,7 +181,7 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | `GET /v1/search?q&k&debug` | Hybrid search |
 | `GET /v1/pages?filter[k]=v&sort=&q=&limit=&cursor=` | Frontmatter-aware page query |
 | `GET /v1/pages/<path>?format=json\|text` | One page |
-| `PUT /v1/pages/<path>` | Write markdown + reindex |
+| `PUT /v1/pages/<path>` | Write page (JSON body `{ "body": "<markdown>" }`) + reindex |
 | `DELETE /v1/pages/<path>` | Delete + reconcile index |
 | `POST /v1/pages/move` | Move/rename page |
 | `POST /v1/folders` | Create folder |
@@ -189,6 +189,7 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | `POST /v1/folders/rename` | Rename folder |
 | `GET /v1/attrs` | Distinct frontmatter keys |
 | `GET /v1/status` | Index stats |
+| `GET /v1/doctor` | Corpus-health report (same as `remember doctor --json`) |
 | `POST /v1/index` | Trigger reindex |
 | `GET /v1/config` | Read loaded config |
 | `PUT /v1/config` | Write config with `.bak` backup |
@@ -205,6 +206,10 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
   - All mutations (POST/PUT/DELETE)
   - All reads from non-loopback origins (introduced in v0.0.1+ wave 5)
 - **Non-loopback bind requires the token** — server refuses to start on `0.0.0.0` without it.
+- **CSRF / DNS-rebinding guard** — browser-tagged cross-site requests are
+  rejected, and POST/PUT require `Content-Type: application/json` (which
+  forces a preflight on cross-origin writes). Non-browser clients sending
+  JSON pass untouched.
 
 Localhost reads stay open by default to keep the zero-config local CLI and
 agent experience friction-free.
