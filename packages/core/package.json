@@ -38,7 +38,7 @@
     "./embedders/local-onnx": "./dist/embedders/local-onnx.js",
     "./embedders/openai": "./dist/embedders/openai.js",
     "./chunkers/smart-split": "./dist/chunkers/smart-split.js",
-    "./walkers/chokidar": "./dist/walkers/chokidar.js",
+    "./walkers/fs-walker": "./dist/walkers/fs-walker.js",
     "./parsers/remark": "./dist/parsers/remark.js",
     "./stores/sqlite-vec": "./dist/stores/sqlite-vec.js",
     "./search/hybrid": "./dist/search/hybrid.js",
@@ -83,8 +83,13 @@
     "unified": "^11.0.5",
     "zod": "^3.23.0"
   },
-  "optionalDependencies": {
+  "peerDependencies": {
     "@huggingface/transformers": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
