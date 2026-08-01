@@ -33,6 +33,9 @@ export interface Chunker {
 export interface Embedder {
   readonly dim: number;
   readonly modelId: string;
+  /** Max input the model embeds before it truncates (tokens). The chunker sizes to
+   *  this so a chunk's vector isn't silently built from only its first N tokens. */
+  readonly maxInputTokens: number;
   embed(texts: string[]): Promise<number[][]>;
 }
 

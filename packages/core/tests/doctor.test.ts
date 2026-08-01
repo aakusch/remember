@@ -10,6 +10,8 @@ function page(overrides: Partial<DoctorPageFact>): DoctorPageFact {
     frontmatterEmpty: false,
     chunkCount: 2,
     sha256: 'hash-a',
+    headingChunks: 2,
+    totalChunks: 2,
     firstChunkText: 'x'.repeat(400),
     ...overrides,
   };
@@ -51,9 +53,22 @@ describe('runDoctor checks', () => {
     expect(checks(r.findings, 'duplicate-title').sort()).toEqual(['a.md', 'b.md']);
   });
 
+  it('distinguishes wall-of-prose (>=3 chunks) from plain no-structure', () => {
+    const r = runDoctor(
+      [
+        page({ path: 'wall.md', chunkCount: 5, totalChunks: 5, headingChunks: 0 }),
+        page({ path: 'small.md', chunkCount: 1, totalChunks: 1, headingChunks: 0, firstChunkText: 'y'.repeat(400) }),
+      ],
+      [disk('wall.md', true, 'W'), disk('small.md', true, 'S')],
+      AT,
+    );
+    expect(checks(r.findings, 'wall-of-prose')).toEqual(['wall.md']);
+    expect(checks(r.findings, 'no-structure')).toEqual(['small.md']);
+  });
+
   it('flags a thin page and a title↔H1 mismatch', () => {
     const r = runDoctor(
-      [page({ path: 'thin.md', chunkCount: 1, firstChunkText: 'short' })],
+      [page({ path: 'thin.md', chunkCount: 1, totalChunks: 1, firstChunkText: 'short' })],
       [disk('thin.md', true, 'Different H1')],
       AT,
     );

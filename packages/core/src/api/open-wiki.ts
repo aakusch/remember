@@ -11,9 +11,20 @@ import { createRemarkParser } from '../parsers/remark.js';
 import { createSmartSplitChunker } from '../chunkers/smart-split.js';
 import type { Embedder, Store } from '../types.js';
 
-/** The default chunking parameters. Centralized so the (ranking-sensitive) chunk
- *  size lives in ONE place instead of being copy-pasted into five call sites. */
-export const DEFAULT_CHUNK = { size: 900, overlap: 0.15 } as const;
+/**
+ * Default chunking parameters, centralized in ONE place. `maxSize` is an absolute
+ * ceiling in tokens; the effective chunk size is capped further to the embedder's
+ * own input window (see chunkSizeFor) so a chunk's vector is never built from only
+ * the first N tokens of a too-large chunk. The 0.85 factor leaves headroom for the
+ * 15% overlap + the heading prefix so an overlapped chunk still fits.
+ */
+export const DEFAULT_CHUNK = { maxSize: 512, overlap: 0.15 } as const;
+
+/** Effective chunk size (tokens) for an embedder: the smaller of the default
+ *  ceiling and 85% of the model's input window. */
+export function chunkSizeFor(embedder: Embedder): number {
+  return Math.min(DEFAULT_CHUNK.maxSize, Math.floor(embedder.maxInputTokens * 0.85));
+}
 
 /** Build the standard indexer (chokidar walker + remark parser + smart-split
  *  chunker) for a store+embedder. The single source of the pipeline wiring. */
@@ -21,7 +32,7 @@ export function createDefaultIndexer(store: Store, embedder: Embedder) {
   return createIndexer({
     walker: createChokidarWalker({ respectGitignore: true }),
     parser: createRemarkParser(),
-    chunker: createSmartSplitChunker(DEFAULT_CHUNK),
+    chunker: createSmartSplitChunker({ size: chunkSizeFor(embedder), overlap: DEFAULT_CHUNK.overlap }),
     embedder,
     store,
   });

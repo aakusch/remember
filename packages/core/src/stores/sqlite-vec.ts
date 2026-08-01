@@ -463,12 +463,22 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
         frontmatter: string;
       }>;
       const pageMap = new Map(pageRows.map((r) => [r.path, r]));
+      const aggRows = db
+        .prepare(
+          `SELECT source_path,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN heading_path != '[]' THEN 1 ELSE 0 END) AS headed
+             FROM chunks GROUP BY source_path`,
+        )
+        .all() as Array<{ source_path: string; total: number; headed: number }>;
+      const aggMap = new Map(aggRows.map((r) => [r.source_path, r]));
       const firstChunkStmt = db.prepare(
         'SELECT text FROM chunks WHERE source_path = ? AND chunk_idx = 0',
       );
 
       return manifestRows.map((m) => {
         const pg = pageMap.get(m.path);
+        const agg = aggMap.get(m.path);
         const first = firstChunkStmt.get(m.path) as { text: string } | undefined;
         const fm = (pg?.frontmatter ?? '{}').trim();
         return {
@@ -477,6 +487,8 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
           frontmatterEmpty: fm === '' || fm === '{}',
           chunkCount: m.chunk_count,
           sha256: m.sha256,
+          headingChunks: agg?.headed ?? 0,
+          totalChunks: agg?.total ?? 0,
           firstChunkText: first?.text ?? '',
         };
       });

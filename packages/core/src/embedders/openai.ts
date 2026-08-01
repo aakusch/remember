@@ -36,6 +36,8 @@ export function createOpenAIEmbedder(opts: OpenAIEmbedderOptions = {}): Embedder
   return {
     dim,
     modelId,
+    // OpenAI text-embedding models accept up to 8191 tokens.
+    maxInputTokens: 8191,
     async embed(texts) {
       if (texts.length === 0) return [];
 

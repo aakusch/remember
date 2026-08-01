@@ -11,6 +11,8 @@ export function createHashEmbedder(dim = 384): Embedder {
   return {
     dim,
     modelId: `hash-embedder-${dim}d`,
+    // No real model → no truncation; large so it never constrains chunk size.
+    maxInputTokens: 8192,
     async embed(texts) {
       return texts.map((t) => textToVector(t, dim));
     },

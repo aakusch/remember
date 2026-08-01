@@ -44,11 +44,30 @@ function flattenBlocks(node: MdastNode): string {
   if (node.type === 'list') {
     return (node.children ?? []).map(flattenBlocks).filter(Boolean).join('\n');
   }
+  // Re-emit ATX markers for real headings. `mdast-util-to-string` drops them, but
+  // the smart-split chunker detects section boundaries + builds each chunk's
+  // heading_path by matching `^#{1,6}\s` on this flattened text. Without the markers
+  // heading_path is always empty AND the only lines that look like headings are `#`
+  // comments inside code — which the chunker would then hallucinate as headings.
+  if (node.type === 'heading') {
+    const depth = Math.min(Math.max(node.depth ?? 1, 1), 6);
+    return `${'#'.repeat(depth)} ${mdastToString(node).trim()}`;
+  }
+  // Indent fenced-code content so a `# comment` line inside it can never be read as
+  // a section heading (it no longer starts the line). Content stays searchable.
+  if (node.type === 'code') {
+    return mdastToString(node)
+      .split('\n')
+      .map((line) => (line ? `    ${line}` : line))
+      .join('\n')
+      .replace(/\s+$/, '');
+  }
   return mdastToString(node).trim();
 }
 
 interface MdastNode {
   type: string;
+  depth?: number;
   children?: MdastNode[];
 }
 
