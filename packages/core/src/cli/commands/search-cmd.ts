@@ -116,7 +116,12 @@ export async function runSearch(
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
     dim: embedder.dim,
   });
-  store.setDimension(embedder.dim);
+  const reconcile = store.reconcileEmbedder(embedder.modelId, embedder.dim);
+  if (reconcile.changed) {
+    process.stderr.write(
+      `remember: index was built with a different embedder (${reconcile.previousModelId}) and was cleared — run \`remember index\` to rebuild with ${embedder.modelId}.\n`,
+    );
+  }
 
   const engine = createHybridSearchEngine(
     store,

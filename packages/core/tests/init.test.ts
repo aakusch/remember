@@ -57,24 +57,52 @@ describe('remember init scaffold', () => {
     expect(cfg).not.toContain('port: 4321');
   });
 
-  it('generates an admin token by default and writes it to the config', async () => {
+  it('generates an admin token into .env — never inlined into the committable config', async () => {
     const dir = path.join(tmp, 'wiki');
     await init(dir);
     const cfg = await fs.readFile(path.join(dir, 'remember.config.ts'), 'utf8');
-    expect(cfg).toContain("adminToken: process.env.REMEMBER_ADMIN_TOKEN ??");
+    // Config reads the token from the environment and never carries the literal.
+    expect(cfg).toContain('adminToken: process.env.REMEMBER_ADMIN_TOKEN ?? null');
+
+    const env = await read('wiki/.env');
+    const m = env.match(/REMEMBER_ADMIN_TOKEN=([A-Za-z0-9_-]{20,})/);
+    expect(m).not.toBeNull();
+    const token = m![1];
+
+    // The secret must not appear in ANY file that isn't gitignored.
+    expect(cfg).not.toContain(token);
+    const gitignore = await read('wiki/.gitignore');
+    expect(gitignore).toMatch(/^\.env$/m);
+    expect(gitignore).toMatch(/^!\.env\.example$/m);
   });
 
-  it('omits the admin token with { noToken: true }', async () => {
+  it('the scaffold package.json pre-approves native builds for pnpm >=10', async () => {
+    const dir = path.join(tmp, 'wiki');
+    await init(dir);
+    const pkg = JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.pnpm.onlyBuiltDependencies).toContain('better-sqlite3');
+  });
+
+  it('omits the admin token (and .env) with { noToken: true }', async () => {
     const dir = path.join(tmp, 'wiki');
     await init(dir, { noToken: true });
     const cfg = await fs.readFile(path.join(dir, 'remember.config.ts'), 'utf8');
-    expect(cfg).not.toContain("adminToken: process.env.REMEMBER_ADMIN_TOKEN ??");
+    expect(cfg).not.toContain('adminToken: process.env.REMEMBER_ADMIN_TOKEN ?? null');
+    await expect(fs.access(path.join(dir, '.env'))).rejects.toThrow();
   });
 
-  it('refuses to scaffold into a non-empty directory', async () => {
+  it('refuses to scaffold into a directory with real files', async () => {
     const dir = path.join(tmp, 'wiki');
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, 'existing.txt'), 'hi');
-    await expect(init(dir)).rejects.toThrow(/not empty/);
+    await expect(init(dir)).rejects.toThrow(/empty directory/);
+  });
+
+  it('scaffolds into a directory that holds only benign entries (.git, .DS_Store)', async () => {
+    const dir = path.join(tmp, 'wiki');
+    await fs.mkdir(path.join(dir, '.git'), { recursive: true });
+    await fs.writeFile(path.join(dir, '.DS_Store'), '');
+    await init(dir);
+    await expect(fs.access(path.join(dir, 'remember.config.ts'))).resolves.toBeUndefined();
   });
 });

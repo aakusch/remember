@@ -51,8 +51,43 @@ export interface LoadedConfig {
   configPath: string | null;
 }
 
+/**
+ * Load `<rootDir>/.env` into process.env before the config is evaluated, so a
+ * scaffolded `.env` (which is where the admin token and connector secrets now live,
+ * kept out of the committable config) actually takes effect. Existing process.env
+ * values always win — the file only fills in what isn't already set. Best-effort:
+ * a missing or malformed file is silently ignored.
+ */
+async function loadDotEnv(absRoot: string): Promise<void> {
+  const envPath = path.join(absRoot, '.env');
+  let text: string;
+  try {
+    text = await fs.readFile(envPath, 'utf8');
+  } catch {
+    return; // no .env — nothing to do
+  }
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    if (!key || key in process.env) continue;
+    let value = line.slice(eq + 1).trim();
+    // Strip a single layer of matching surrounding quotes.
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
 export async function loadConfig(rootDir: string): Promise<LoadedConfig> {
   const absRoot = path.resolve(rootDir);
+  await loadDotEnv(absRoot);
   let configPath: string | null = null;
 
   for (const name of CONFIG_NAMES) {

@@ -62,7 +62,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     path: path.join(tempRoot, 'index.db'),
     dim: embedder.dim,
   });
-  store.setDimension(embedder.dim);
+  store.reconcileEmbedder(embedder.modelId, embedder.dim);
 
   try {
     const indexer = createIndexer({

@@ -402,6 +402,9 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       await fs.unlink(abs);
       const removed = await ctx.store.deleteByPath(userPath);
       await ctx.store.updateManifest(userPath, null);
+      // Why: deleteByPath only clears chunks/fts/vec; without deletePage the row lingers
+      // in `pages` forever, so `remember list` / list_pages hand agents dead paths.
+      await ctx.store.deletePage(userPath);
       return c.json({ ok: true, removed_chunks: removed });
     } catch (err) {
       if (err instanceof PathOutsideContentError) {
@@ -428,6 +431,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
       await fs.rename(absFrom, absTo);
       await ctx.store.deleteByPath(body.from);
       await ctx.store.updateManifest(body.from, null);
+      await ctx.store.deletePage(body.from);
       return c.json({ ok: true });
     } catch (err) {
       if (err instanceof PathOutsideContentError) {
@@ -469,6 +473,7 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         if (p === userPath || p.startsWith(`${userPath}/`)) {
           await ctx.store.deleteByPath(p);
           await ctx.store.updateManifest(p, null);
+          await ctx.store.deletePage(p);
         }
       }
       return c.json({ ok: true });

@@ -25,7 +25,12 @@ export async function indexCommand(): Promise<void> {
     path: path.join(cfg.rootDir, '.remember', 'index.db'),
     dim: embedder.dim,
   });
-  store.setDimension(embedder.dim);
+  const reconcile = store.reconcileEmbedder(embedder.modelId, embedder.dim);
+  if (reconcile.changed) {
+    process.stderr.write(
+      `remember: index was built with a different embedder (${reconcile.previousModelId}) — cleared and re-embedding from scratch with ${embedder.modelId}.\n`,
+    );
+  }
 
   out.write(
     header('scanning') +
@@ -68,4 +73,15 @@ export async function indexCommand(): Promise<void> {
       ]) +
       '\n',
   );
+
+  // Surface per-file failures (bad frontmatter, unreadable files) with the path,
+  // rather than aborting the whole run or hiding a silently-partial index.
+  if (result.errors.length > 0) {
+    const errOut = process.stderr;
+    errOut.write(`\n${c.yellow(`! ${plural(result.errors.length, 'file')} skipped due to errors:`)}\n`);
+    for (const e of result.errors) {
+      errOut.write(`  ${c.dim('•')} ${e.path}: ${e.error}\n`);
+    }
+    errOut.write('\n');
+  }
 }
