@@ -1,15 +1,17 @@
 import path from 'node:path';
 import { startServer } from '../../api/start-server.js';
 import { loadConfig } from '../../config/load.js';
-import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
-import { createDefaultIndexer } from '../../api/open-wiki.js';
-import { resolveEmbedder } from '../../api/resolve-embedder.js';
 import { VERSION } from '../../version.js';
 import { banner, header, keyValues, success, c, fmtMs, plural } from '../format.js';
 
 /**
  * `remember dev` — index the content folder, then start the agent API with a
  * live file watcher. CLI + API only; there is no browser UI in the OSS engine.
+ *
+ * The initial index runs *inside* startServer (initialIndex: true) so the
+ * embedder/model is loaded exactly once — dev used to build its own
+ * store+embedder+indexer for the first pass and then startServer built a
+ * second set, loading the ONNX model twice on every `remember dev`.
  */
 export async function devCommand(): Promise<void> {
   const cfg = await loadConfig(process.cwd());
@@ -19,40 +21,28 @@ export async function devCommand(): Promise<void> {
 
   out.write(`\n${banner(VERSION)}  ${c.dim('dev')}\n`);
 
-  // ─── Index ────────────────────────────────────────────────────────────────
-  const embedder = await resolveEmbedder(cfg.raw);
-  const store = await createSqliteVecStore({
-    path: path.join(cfg.rootDir, '.remember', 'index.db'),
-    dim: embedder.dim,
+  // ─── Index + serve (single embedder load) ───────────────────────────────
+  const { url: apiUrl, close: stopApi, embedder, index: initial } = await startServer({
+    rootDir: process.cwd(),
+    initialIndex: true,
   });
-  const reconcile = store.reconcileEmbedder(embedder.modelId, embedder.dim);
-  if (reconcile.changed) {
-    process.stderr.write(
-      `remember: index was built with a different embedder (${reconcile.previousModelId}) and was cleared — it will re-embed on the next index pass with ${embedder.modelId}.\n`,
-    );
-  }
 
-  const indexer = createDefaultIndexer(store, embedder);
-
-  const initial = await indexer.indexAll(contentRoot);
-  store.close();
-  out.write(
-    `\n${success(
-      `indexed ${c.bold(plural(initial.files_indexed, 'file'))} · ` +
-        `${c.bold(plural(initial.chunks_added, 'chunk'))} ${c.dim(`in ${fmtMs(initial.duration_ms)}`)}`,
-    )}\n`,
-  );
-  if (initial.errors.length > 0) {
-    process.stderr.write(
-      `${c.yellow(`! ${plural(initial.errors.length, 'file')} skipped due to errors:`)}\n`,
+  if (initial) {
+    out.write(
+      `\n${success(
+        `indexed ${c.bold(plural(initial.files_indexed, 'file'))} · ` +
+          `${c.bold(plural(initial.chunks_added, 'chunk'))} ${c.dim(`in ${fmtMs(initial.duration_ms)}`)}`,
+      )}\n`,
     );
-    for (const e of initial.errors) {
-      process.stderr.write(`  ${c.dim('•')} ${e.path}: ${e.error}\n`);
+    if (initial.errors.length > 0) {
+      process.stderr.write(
+        `${c.yellow(`! ${plural(initial.errors.length, 'file')} skipped due to errors:`)}\n`,
+      );
+      for (const e of initial.errors) {
+        process.stderr.write(`  ${c.dim('•')} ${e.path}: ${e.error}\n`);
+      }
     }
   }
-
-  // ─── Serve ──────────────────────────────────────────────────────────────
-  const { url: apiUrl, close: stopApi } = await startServer({ rootDir: process.cwd() });
 
   out.write(header('API + agent endpoints'));
   out.write(

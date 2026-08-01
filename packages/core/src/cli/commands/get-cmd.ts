@@ -1,3 +1,4 @@
+import { UsageError } from '../flags.js';
 import { titleFor } from '../../search/title.js';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -86,12 +87,12 @@ export function parseGetArgs(argv: string[]): GetCmdOptions {
   for (const a of argv) {
     if (a === '--json') opts.json = true;
     else if (a && a.startsWith('-')) {
-      throw new Error(`unknown flag "${a}"\nUsage: remember get <path> [--json]`);
+      throw new UsageError(`unknown flag "${a}"\nUsage: remember get <path> [--json]`);
     } else if (a !== undefined) positional.push(a);
   }
   opts.path = positional.join(' ').trim();
   if (!opts.path) {
-    throw new Error('get requires a page path\nUsage: remember get <path> [--json]\nFind a path with `remember list` or `remember search`.');
+    throw new UsageError('get requires a page path\nUsage: remember get <path> [--json]\nFind a path with `remember list` or `remember search`.');
   }
   return opts;
 }

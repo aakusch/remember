@@ -181,11 +181,12 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
         distance: number;
       }>;
 
+      const fm = frontmatterByPath(db, rows.map((r) => r.source_path));
       return rows.map((r) => ({
         path: r.source_path,
         chunk_idx: r.chunk_idx,
         snippet: makeSnippet(r.text, query),
-        frontmatter: getFrontmatter(db, r.source_path),
+        frontmatter: fm.get(r.source_path) ?? {},
         score: 1 / (1 + r.distance),
         retrievers: ['vector'] as ('bm25' | 'vector')[],
         chunk_id: r.chunk_id,
@@ -214,11 +215,12 @@ export async function createSqliteVecStore(opts: SqliteVecStoreOptions = {}): Pr
         rank: number;
       }>;
 
+      const fm = frontmatterByPath(db, rows.map((r) => r.source_path));
       return rows.map((r) => ({
         path: r.source_path,
         chunk_idx: r.chunk_idx,
         snippet: makeSnippet(r.text, query),
-        frontmatter: getFrontmatter(db, r.source_path),
+        frontmatter: fm.get(r.source_path) ?? {},
         score: 1 / (1 + Math.abs(r.rank)),
         retrievers: ['bm25'] as ('bm25' | 'vector')[],
         chunk_id: r.chunk_id,
@@ -633,23 +635,42 @@ function makeSnippet(text: string, query?: string): string {
   return extractSnippet(text, query);
 }
 
-function getFrontmatter(
-  db: Database.Database,
-  sourcePath: string,
-): Record<string, unknown> {
-  // Frontmatter lives in `pages.frontmatter` as a JSON string; we already
-  // write it on upsertPage. Returning {} (the v1 behavior) meant agents
-  // couldn't filter search results by tags after the fact, even though
-  // the data was right there in the same DB. One indexed lookup per hit.
+function parseFrontmatter(json: string | undefined): Record<string, unknown> {
+  if (!json) return {};
   try {
-    const row = db
-      .prepare('SELECT frontmatter FROM pages WHERE path = ? LIMIT 1')
-      .get(sourcePath) as { frontmatter?: string } | undefined;
-    if (!row?.frontmatter) return {};
-    return JSON.parse(row.frontmatter) as Record<string, unknown>;
+    return JSON.parse(json) as Record<string, unknown>;
   } catch {
     return {};
   }
+}
+
+/**
+ * Fetch frontmatter for a set of hit paths in ONE query, keyed by path.
+ *
+ * Frontmatter lives in `pages.frontmatter` as a JSON string (written on
+ * upsertPage). The per-hit version (`getFrontmatter` called inside the
+ * result `.map`) was an N+1: a search returning 10 hits ran 10 point
+ * lookups, and because a page contributes several chunks, it re-queried and
+ * re-`JSON.parse`d the same page repeatedly. Distinct paths → one IN-list
+ * query → a Map the caller reads for free.
+ */
+function frontmatterByPath(
+  db: Database.Database,
+  paths: string[],
+): Map<string, Record<string, unknown>> {
+  const out = new Map<string, Record<string, unknown>>();
+  const distinct = [...new Set(paths)];
+  if (distinct.length === 0) return out;
+  const placeholders = distinct.map(() => '?').join(', ');
+  try {
+    const rows = db
+      .prepare(`SELECT path, frontmatter FROM pages WHERE path IN (${placeholders})`)
+      .all(...distinct) as Array<{ path: string; frontmatter?: string }>;
+    for (const r of rows) out.set(r.path, parseFrontmatter(r.frontmatter));
+  } catch {
+    /* fall through — callers default missing paths to {} */
+  }
+  return out;
 }
 
 /**

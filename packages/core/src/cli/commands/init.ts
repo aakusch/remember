@@ -34,9 +34,9 @@ export default defineConfig({
 ${tokenLine}  },
 
   pipeline: {
-    walker: defaults.walker.chokidar({ respectGitignore: true }),
+    walker: defaults.walker.fs({ respectGitignore: true }),
     parser: defaults.parser.remark(),
-    chunker: defaults.chunker.smartSplit({ size: 900, overlap: 0.15 }),
+    chunker: defaults.chunker.smartSplit({ size: 512, overlap: 0.15 }),
     embedder: defaults.embedder.localOnnx({ model: 'BAAI/bge-small-en-v1.5' }),
     store: defaults.store.sqliteVec({ path: '.remember/index.db' }),
   },

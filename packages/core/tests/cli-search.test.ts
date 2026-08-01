@@ -92,4 +92,13 @@ describe('searchCommand argument handling', () => {
   it('rejects a non-numeric -k', async () => {
     await expect(searchCommand(['hi', '-k', 'abc'])).rejects.toThrow(/positive integer/);
   });
+
+  it('tags bad-invocation errors with a stable USAGE code', async () => {
+    // The --json error emitter reports `error.code`; usage errors must not fall
+    // back to the blanket COMMAND_ERROR so agents can distinguish a bad call
+    // from a runtime failure.
+    await expect(searchCommand([])).rejects.toMatchObject({ code: 'USAGE' });
+    await expect(searchCommand(['hi', '--nope'])).rejects.toMatchObject({ code: 'USAGE' });
+    await expect(searchCommand(['hi', '-k', 'abc'])).rejects.toMatchObject({ code: 'USAGE' });
+  });
 });

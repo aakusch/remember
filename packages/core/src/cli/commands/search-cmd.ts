@@ -1,3 +1,4 @@
+import { UsageError } from '../flags.js';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { openWiki } from '../../api/open-wiki.js';
@@ -107,11 +108,11 @@ export async function searchCommand(argv: string[]): Promise<void> {
       const v = argv[++i];
       const n = Number(v);
       if (!Number.isFinite(n) || n < 1) {
-        throw new Error(`--k expects a positive integer, got "${v}"`);
+        throw new UsageError(`--k expects a positive integer, got "${v}"`);
       }
       opts.k = Math.min(50, Math.floor(n));
     } else if (a && a.startsWith('-')) {
-      throw new Error(`unknown flag "${a}"\nUsage: remember search "<query>" [-k <n>] [--json] [--open]`);
+      throw new UsageError(`unknown flag "${a}"\nUsage: remember search "<query>" [-k <n>] [--json] [--open]`);
     } else if (a !== undefined) {
       positional.push(a);
     }
@@ -119,7 +120,7 @@ export async function searchCommand(argv: string[]): Promise<void> {
 
   const query = positional.join(' ').trim();
   if (!query) {
-    throw new Error('search requires a query\nUsage: remember search "<query>" [-k <n>] [--json] [--open]');
+    throw new UsageError('search requires a query\nUsage: remember search "<query>" [-k <n>] [--json] [--open]');
   }
 
   const res = await runSearch(query, { k: opts.k });

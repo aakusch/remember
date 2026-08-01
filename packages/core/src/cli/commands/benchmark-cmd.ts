@@ -7,7 +7,7 @@ import { createLocalOnnxEmbedder } from '../../embedders/local-onnx.js';
 import { createDefaultIndexer } from '../../api/open-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { createHybridSearchEngine } from '../../search/hybrid.js';
-import { createPassthroughReranker } from '../../rerankers/none.js';
+import { createNoneReranker } from '../../rerankers/none.js';
 import {
   compareEvaluationRuns,
   hashCorpus,
@@ -91,7 +91,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     const finalEngine = createHybridSearchEngine(
       store,
       embedder,
-      createPassthroughReranker(),
+      createNoneReranker(),
       {
         ...(rrfK === undefined ? {} : { rrfK }),
         ...(lexicalTieBreak ? { lexicalTieBreak: true } : {}),
@@ -105,7 +105,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     const candidateEngine = createHybridSearchEngine(
       store,
       embedder,
-      createPassthroughReranker(),
+      createNoneReranker(),
       {
         ...(rrfK === undefined ? {} : { rrfK }),
         ...(lexicalTieBreak ? { lexicalTieBreak: true } : {}),

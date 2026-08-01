@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHybridSearchEngine } from '../src/search/hybrid.js';
-import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createNoneReranker } from '../src/rerankers/none.js';
 import type {
   Embedder,
   Reranker,
@@ -48,7 +48,7 @@ describe('corrected retrieval pipeline', () => {
         ],
       }),
       fakeEmbedder(),
-      createPassthroughReranker(),
+      createNoneReranker(),
       {
         bm25: { enabled: true, weight: 1 },
         vector: { enabled: false },
@@ -92,7 +92,7 @@ describe('corrected retrieval pipeline', () => {
     const engine = createHybridSearchEngine(
       store,
       embedder,
-      createPassthroughReranker(),
+      createNoneReranker(),
       {
         limits: { perRetrieverK: 5, candidateK: 5, finalK: 2 },
       },

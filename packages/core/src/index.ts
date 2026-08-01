@@ -39,7 +39,7 @@ export type {
 export { createApp } from './api/server.js';
 export { startServer } from './api/start-server.js';
 
-export { createChokidarWalker } from './walkers/chokidar.js';
+export { createFsWalker } from './walkers/fs-walker.js';
 export { createRemarkParser } from './parsers/remark.js';
 export { createSmartSplitChunker } from './chunkers/smart-split.js';
 export { createSqliteVecStore } from './stores/sqlite-vec.js';
@@ -66,7 +66,7 @@ export {
   type CapabilityEndpoint,
   type CapabilityCommand,
 } from './capabilities.js';
-export { createPassthroughReranker } from './rerankers/none.js';
+export { createNoneReranker } from './rerankers/none.js';
 export {
   createPassthroughQueryPlanner,
   passthroughQueryPlan,

@@ -1,3 +1,4 @@
+import { UsageError } from '../flags.js';
 import path from 'node:path';
 import { loadConfig } from '../../config/load.js';
 import { requireWiki } from '../require-wiki.js';
@@ -50,21 +51,21 @@ export function parseListArgs(argv: string[]): ListCmdOptions {
       const v = argv[++i];
       const n = Number(v);
       if (!Number.isFinite(n) || n < 1) {
-        throw new Error(`--limit expects a positive integer, got "${v}"`);
+        throw new UsageError(`--limit expects a positive integer, got "${v}"`);
       }
       opts.limit = Math.min(500, Math.floor(n));
     } else if (a === '--sort' || a === '-s') {
       const v = argv[++i];
       const bare = v && v.startsWith('-') && v.length > 1 ? v.slice(1) : v;
       if (!v || !SORT_KEYS.has(bare!)) {
-        throw new Error(
+        throw new UsageError(
           `--sort expects one of: ${[...SORT_KEYS].join(', ')} (prefix with - for descending)`,
         );
       }
       opts.sort = v;
     } else if (a === '--offset') {
       const n = Number(argv[++i]);
-      if (!Number.isInteger(n) || n < 0) throw new Error('--offset expects a non-negative integer');
+      if (!Number.isInteger(n) || n < 0) throw new UsageError('--offset expects a non-negative integer');
       opts.offset = n;
     } else if (a === '--q') {
       opts.q = argv[++i];
@@ -72,10 +73,10 @@ export function parseListArgs(argv: string[]): ListCmdOptions {
       // --filter key=value (repeatable) — exact frontmatter match.
       const kv = argv[++i] ?? '';
       const eq = kv.indexOf('=');
-      if (eq <= 0) throw new Error('--filter expects key=value, e.g. --filter status=current');
+      if (eq <= 0) throw new UsageError('--filter expects key=value, e.g. --filter status=current');
       (opts.filter ??= {})[kv.slice(0, eq)] = kv.slice(eq + 1);
     } else if (a && a.startsWith('-')) {
-      throw new Error(
+      throw new UsageError(
         `unknown flag "${a}"\nUsage: remember list [--limit <n>] [--sort <key>] [--offset <n>] [--q <text>] [--filter key=value] [--json]`,
       );
     }

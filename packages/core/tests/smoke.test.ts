@@ -17,7 +17,7 @@ describe('@useremember/core surface', () => {
     });
     expect(defaults.chunker.smartSplit()).toMatchObject({
       _kind: 'chunker:smartSplit',
-      opts: { size: 900, overlap: 0.15 },
+      opts: { size: 512, overlap: 0.15 },
     });
     expect(defaults.store.sqliteVec()).toMatchObject({
       _kind: 'store:sqliteVec',

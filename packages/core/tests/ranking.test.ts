@@ -5,7 +5,7 @@ import path from 'node:path';
 import { collapsePerPage, applyHeadingBoost, createHybridSearchEngine } from '../src/search/hybrid.js';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
-import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createNoneReranker } from '../src/rerankers/none.js';
 import type { SearchResult } from '../src/types.js';
 
 function hit(p: string, score: number, heading_path?: string[], chunk_idx = 0): SearchResult {
@@ -104,7 +104,7 @@ describe('hybrid engine ranking pipeline (engine-level)', () => {
       { id: 'other.md#0', source_path: 'other.md', chunk_idx: 0, text: 'unrelated glossary of terms', heading_path: [], embedding: (await embedder.embed(['glossary']))[0]! },
     ]);
 
-    const engine = createHybridSearchEngine(store, embedder, createPassthroughReranker(), { dedupByPage: true });
+    const engine = createHybridSearchEngine(store, embedder, createNoneReranker(), { dedupByPage: true });
     const res = await engine.query('deployment', { k: 10 });
     const longHits = res.results.filter((r) => r.path === 'long.md');
     expect(longHits.length).toBe(1);
@@ -116,7 +116,7 @@ describe('hybrid engine ranking pipeline (engine-level)', () => {
       { id: 'long.md#0', source_path: 'long.md', chunk_idx: 0, text: 'deployment runbook step one deployment', heading_path: [], embedding: (await embedder.embed(['deployment one']))[0]! },
       { id: 'long.md#1', source_path: 'long.md', chunk_idx: 1, text: 'deployment runbook step two deployment', heading_path: [], embedding: (await embedder.embed(['deployment two']))[0]! },
     ]);
-    const engine = createHybridSearchEngine(store, embedder, createPassthroughReranker(), { dedupByPage: false });
+    const engine = createHybridSearchEngine(store, embedder, createNoneReranker(), { dedupByPage: false });
     const res = await engine.query('deployment', { k: 10 });
     const longHits = res.results.filter((r) => r.path === 'long.md');
     expect(longHits.length).toBeGreaterThan(1);
@@ -129,7 +129,7 @@ describe('hybrid engine ranking pipeline (engine-level)', () => {
       { id: 'history/vietnam-war.md#0', source_path: 'history/vietnam-war.md', chunk_idx: 0, text: 'the vietnam war was a conflict', heading_path: [], embedding: (await embedder.embed(['vietnam war canonical']))[0]! },
       { id: 'notes/misc.md#0', source_path: 'notes/misc.md', chunk_idx: 0, text: 'a passing mention of the vietnam war among many topics', heading_path: [], embedding: (await embedder.embed(['misc notes vietnam']))[0]! },
     ]);
-    const engine = createHybridSearchEngine(store, embedder, createPassthroughReranker(), { pathBoostFactor: 2 });
+    const engine = createHybridSearchEngine(store, embedder, createNoneReranker(), { pathBoostFactor: 2 });
     const res = await engine.query('vietnam war', { k: 10 });
     expect(res.results[0]!.path).toBe('history/vietnam-war.md');
   });
