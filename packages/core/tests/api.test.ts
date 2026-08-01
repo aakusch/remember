@@ -5,9 +5,9 @@ import path from 'node:path';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHybridSearchEngine } from '../src/search/hybrid.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
-import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createNoneReranker } from '../src/rerankers/none.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 import { VERSION } from '../src/version.js';
@@ -31,7 +31,7 @@ describe('HTTP API (wired)', () => {
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
 
     const indexer = createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder,
@@ -39,7 +39,7 @@ describe('HTTP API (wired)', () => {
     });
     await indexer.indexAll(contentRoot);
 
-    const search = createHybridSearchEngine(store, embedder, createPassthroughReranker());
+    const search = createHybridSearchEngine(store, embedder, createNoneReranker());
     const reindex = async () => {
       const r = await indexer.indexAll(contentRoot);
       return { files_indexed: r.files_indexed, chunks_added: r.chunks_added, duration_ms: r.duration_ms };
@@ -96,7 +96,7 @@ describe('HTTP API (wired)', () => {
       contentRoot: tmp,
       store,
       embedder: emb,
-      search: createHybridSearchEngine(store, emb, createPassthroughReranker()),
+      search: createHybridSearchEngine(store, emb, createNoneReranker()),
       reindex: async () => ({ files_indexed: 0, chunks_added: 0, duration_ms: 0 }),
       adminToken: 'super-secret-token',
       boundHost: '127.0.0.1', // loopback → trusted-local read, the exposure case

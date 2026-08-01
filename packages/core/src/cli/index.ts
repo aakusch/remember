@@ -330,8 +330,9 @@ export async function run(argv: string[]): Promise<void> {
     return;
   }
 
-  // `remember <cmd> --help` → per-command help.
-  if (wantsHelp) {
+  // `remember <cmd> --help` → per-command help. benchmark owns a richer flag
+  // reference (BENCHMARK_HELP) — let it handle its own --help instead of the stub.
+  if (wantsHelp && command !== 'benchmark') {
     const h = commandHelp(command);
     if (h) {
       process.stdout.write(h);

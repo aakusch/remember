@@ -8,9 +8,9 @@ import { buildRememberMcpServer } from '../src/cli/commands/mcp-cmd.js';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
 import { createHybridSearchEngine } from '../src/search/hybrid.js';
-import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createNoneReranker } from '../src/rerankers/none.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 import { COMMANDS } from '../src/cli/index.js';
@@ -26,14 +26,14 @@ async function connect(contentRoot: string) {
   const embedder = createHashEmbedder(384);
   store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
   const indexer = createIndexer({
-    walker: createChokidarWalker({}),
+    walker: createFsWalker({}),
     parser: createRemarkParser(),
     chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
     embedder,
     store,
   });
   await indexer.indexAll(contentRoot);
-  const engine = createHybridSearchEngine(store, embedder, createPassthroughReranker());
+  const engine = createHybridSearchEngine(store, embedder, createNoneReranker());
   const server = buildRememberMcpServer({ engine, store, indexer, contentRoot });
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: 'test', version: '1' });

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 
@@ -27,7 +27,7 @@ describe('indexer incremental correctness', () => {
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
 
     indexer = createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder,

@@ -4,9 +4,9 @@ import { requireWiki } from '../cli/require-wiki.js';
 import { createSqliteVecStore, type SqliteVecStore } from '../stores/sqlite-vec.js';
 import { resolveEmbedder } from './resolve-embedder.js';
 import { createHybridSearchEngine, type HybridSearchOptions } from '../search/hybrid.js';
-import { createPassthroughReranker } from '../rerankers/none.js';
+import { createNoneReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
-import { createChokidarWalker } from '../walkers/chokidar.js';
+import { createFsWalker } from '../walkers/fs-walker.js';
 import { createRemarkParser } from '../parsers/remark.js';
 import { createSmartSplitChunker } from '../chunkers/smart-split.js';
 import type { Embedder, Store } from '../types.js';
@@ -26,11 +26,11 @@ export function chunkSizeFor(embedder: Embedder): number {
   return Math.min(DEFAULT_CHUNK.maxSize, Math.floor(embedder.maxInputTokens * 0.85));
 }
 
-/** Build the standard indexer (chokidar walker + remark parser + smart-split
+/** Build the standard indexer (fs walker + remark parser + smart-split
  *  chunker) for a store+embedder. The single source of the pipeline wiring. */
 export function createDefaultIndexer(store: Store, embedder: Embedder) {
   return createIndexer({
-    walker: createChokidarWalker({ respectGitignore: true }),
+    walker: createFsWalker({ respectGitignore: true }),
     parser: createRemarkParser(),
     chunker: createSmartSplitChunker({ size: chunkSizeFor(embedder), overlap: DEFAULT_CHUNK.overlap }),
     embedder,
@@ -84,7 +84,7 @@ export async function openWiki(rootDir: string): Promise<OpenWiki> {
   const engine = createHybridSearchEngine(
     store,
     embedder,
-    createPassthroughReranker(),
+    createNoneReranker(),
     resolveHybridSearchOptions(cfg.raw.search?.engine),
   );
   const indexer = createDefaultIndexer(store, embedder);

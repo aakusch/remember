@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createSqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 import { runList, parseListArgs } from '../src/cli/commands/list-cmd.js';
@@ -39,7 +39,7 @@ describe('CLI read commands over a real index', () => {
       dim: embedder.dim,
     });
     const indexer = createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder,

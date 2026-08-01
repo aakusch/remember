@@ -7,7 +7,7 @@ import { createLocalOnnxEmbedder } from '../../embedders/local-onnx.js';
 import { createDefaultIndexer } from '../../api/open-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { createHybridSearchEngine } from '../../search/hybrid.js';
-import { createPassthroughReranker } from '../../rerankers/none.js';
+import { createNoneReranker } from '../../rerankers/none.js';
 import {
   compareEvaluationRuns,
   hashCorpus,
@@ -91,7 +91,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     const finalEngine = createHybridSearchEngine(
       store,
       embedder,
-      createPassthroughReranker(),
+      createNoneReranker(),
       {
         ...(rrfK === undefined ? {} : { rrfK }),
         ...(lexicalTieBreak ? { lexicalTieBreak: true } : {}),
@@ -105,7 +105,7 @@ export async function benchmarkCommand(argv: string[]): Promise<void> {
     const candidateEngine = createHybridSearchEngine(
       store,
       embedder,
-      createPassthroughReranker(),
+      createNoneReranker(),
       {
         ...(rrfK === undefined ? {} : { rrfK }),
         ...(lexicalTieBreak ? { lexicalTieBreak: true } : {}),
@@ -289,6 +289,19 @@ function portableIdentifier(target: string): string {
 }
 
 function enforceRecallGate(current: EvaluationRun, baseline: EvaluationRun): void {
+  // The gate is only meaningful if both runs saw the SAME fixture. The metadata
+  // carries both hashes — verify them, or a changed corpus/questions file would
+  // silently compare against a stale baseline and "pass".
+  if (current.metadata.corpus_hash !== baseline.metadata.corpus_hash) {
+    throw new Error(
+      `corpus changed since the baseline (hash ${baseline.metadata.corpus_hash} → ${current.metadata.corpus_hash}); re-baseline before gating`,
+    );
+  }
+  if (current.metadata.questions_hash !== baseline.metadata.questions_hash) {
+    throw new Error(
+      `questions changed since the baseline (hash ${baseline.metadata.questions_hash} → ${current.metadata.questions_hash}); re-baseline before gating`,
+    );
+  }
   const tolerance = 0.02;
   const regressions: string[] = [];
   const compare = (label: string, currentValue: number | null, baselineValue: number | null) => {

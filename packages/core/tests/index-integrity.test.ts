@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 
@@ -18,7 +18,7 @@ async function mkStore(): Promise<SqliteVecStore> {
 
 function mkIndexer(s: SqliteVecStore) {
   return createIndexer({
-    walker: createChokidarWalker({}),
+    walker: createFsWalker({}),
     parser: createRemarkParser(),
     chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
     embedder: createHashEmbedder(384),
@@ -111,7 +111,7 @@ describe('reconcileEmbedder — dimension change rebuilds the vec table (M2 regr
     store = await createSqliteVecStore({ path: dbPath, dim: 384 });
     store.reconcileEmbedder('hash-embedder-384d', 384);
     const first = await createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder: createHashEmbedder(384),
@@ -125,7 +125,7 @@ describe('reconcileEmbedder — dimension change rebuilds the vec table (M2 regr
     const rec = store.reconcileEmbedder('hash-embedder-768d', 768);
     expect(rec.changed).toBe(true);
     const second = await createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder: createHashEmbedder(768),

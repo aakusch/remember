@@ -3,8 +3,8 @@
 // during implementation.
 
 export const walker = {
-  chokidar(opts: { respectGitignore?: boolean; ignore?: string[] } = {}) {
-    return { _kind: 'walker:chokidar', opts: { respectGitignore: true, ...opts } } as const;
+  fs(opts: { respectGitignore?: boolean; ignore?: string[] } = {}) {
+    return { _kind: 'walker:fs', opts: { respectGitignore: true, ...opts } } as const;
   },
 };
 
@@ -16,9 +16,12 @@ export const parser = {
 
 export const chunker = {
   smartSplit(opts: { size?: number; overlap?: number } = {}) {
+    // size is a token budget; the runtime caps it to the embedder's real input
+    // limit (bge-small = 512), so 900 here would over-promise. Keep the scaffold
+    // honest about the effective default.
     return {
       _kind: 'chunker:smartSplit',
-      opts: { size: 900, overlap: 0.15, ...opts },
+      opts: { size: 512, overlap: 0.15, ...opts },
     } as const;
   },
 };

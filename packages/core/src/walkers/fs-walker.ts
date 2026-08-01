@@ -4,7 +4,7 @@ import path from 'node:path';
 import ignore, { type Ignore } from 'ignore';
 import type { Walker } from '../types.js';
 
-export interface ChokidarWalkerOptions {
+export interface FsWalkerOptions {
   respectGitignore?: boolean;
   ignore?: string[];
   /**
@@ -27,7 +27,7 @@ const DEFAULT_IGNORES = [
   '*.tmp',
 ];
 
-export function createChokidarWalker(opts: ChokidarWalkerOptions = {}): Walker {
+export function createFsWalker(opts: FsWalkerOptions = {}): Walker {
   const maxFileBytes = opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
   return {
     async *walk(root) {
@@ -49,7 +49,7 @@ export function createChokidarWalker(opts: ChokidarWalkerOptions = {}): Walker {
   };
 }
 
-async function loadIgnore(absRoot: string, opts: ChokidarWalkerOptions): Promise<Ignore> {
+async function loadIgnore(absRoot: string, opts: FsWalkerOptions): Promise<Ignore> {
   const ig = ignore();
   ig.add(DEFAULT_IGNORES);
 

@@ -5,9 +5,9 @@ import path from 'node:path';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHybridSearchEngine } from '../src/search/hybrid.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
-import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createNoneReranker } from '../src/rerankers/none.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 import { createApp } from '../src/api/server.js';
@@ -26,7 +26,7 @@ describe('API CSRF + input validation (loopback, no token)', () => {
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
     const indexer = createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder,
@@ -37,7 +37,7 @@ describe('API CSRF + input validation (loopback, no token)', () => {
       contentRoot,
       store,
       embedder,
-      search: createHybridSearchEngine(store, embedder, createPassthroughReranker()),
+      search: createHybridSearchEngine(store, embedder, createNoneReranker()),
       reindex: async () => ({ files_indexed: 0, chunks_added: 0, duration_ms: 0 }),
       adminToken: null,
       boundHost: '127.0.0.1',

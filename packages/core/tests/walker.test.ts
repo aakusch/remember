@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 
 describe('ChokidarWalker', () => {
   let tmp: string;
@@ -21,7 +21,7 @@ describe('ChokidarWalker', () => {
     await fs.mkdir(path.join(tmp, 'sub'));
     await fs.writeFile(path.join(tmp, 'sub', 'c.md'), '# C');
 
-    const walker = createChokidarWalker({});
+    const walker = createFsWalker({});
     const out: string[] = [];
     for await (const e of walker.walk(tmp)) out.push(e.path);
     out.sort();
@@ -37,7 +37,7 @@ describe('ChokidarWalker', () => {
     await fs.mkdir(path.join(tmp, '_private'));
     await fs.writeFile(path.join(tmp, '_private', 'secret.md'), '# secret');
 
-    const walker = createChokidarWalker({});
+    const walker = createFsWalker({});
     const out: string[] = [];
     for await (const e of walker.walk(tmp)) out.push(e.path);
     expect(out).toEqual(['keep.md']);
@@ -48,7 +48,7 @@ describe('ChokidarWalker', () => {
     await fs.writeFile(path.join(tmp, 'skip.md'), '# skip');
     await fs.writeFile(path.join(tmp, '.rememberignore'), 'skip.md\n');
 
-    const walker = createChokidarWalker({});
+    const walker = createFsWalker({});
     const out: string[] = [];
     for await (const e of walker.walk(tmp)) out.push(e.path);
     expect(out).toEqual(['keep.md']);
@@ -56,7 +56,7 @@ describe('ChokidarWalker', () => {
 
   it('emits stable sha256 per content', async () => {
     await fs.writeFile(path.join(tmp, 'x.md'), 'hello world');
-    const walker = createChokidarWalker({});
+    const walker = createFsWalker({});
     const [first] = await collect(walker, tmp);
     const [second] = await collect(walker, tmp);
     expect(first!.sha256).toBe(second!.sha256);
@@ -64,7 +64,7 @@ describe('ChokidarWalker', () => {
   });
 });
 
-async function collect(walker: ReturnType<typeof createChokidarWalker>, root: string) {
+async function collect(walker: ReturnType<typeof createFsWalker>, root: string) {
   const out = [];
   for await (const e of walker.walk(root)) out.push(e);
   return out;

@@ -6,7 +6,7 @@ import chokidar from 'chokidar';
 import { createApp } from './server.js';
 import { createSqliteVecStore, type SqliteVecStore, type HistoryWriteInput } from '../stores/sqlite-vec.js';
 import { createHybridSearchEngine, type HybridSearchOptions } from '../search/hybrid.js';
-import { createPassthroughReranker } from '../rerankers/none.js';
+import { createNoneReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
 import { createDefaultIndexer } from './open-wiki.js';
 import { loadConfig, type LoadedConfig } from '../config/load.js';
@@ -16,6 +16,30 @@ import type { Embedder, SearchEngine } from '../types.js';
 
 export interface StartServerOptions {
   rootDir: string;
+  /**
+   * Run a full index pass before the server begins serving, and return the
+   * stats. `remember dev` sets this so the model is loaded (and the corpus
+   * indexed) exactly once at startup — previously dev built its own
+   * store+embedder+indexer for the initial pass and then startServer built a
+   * second set, loading the ONNX model twice.
+   */
+  initialIndex?: boolean;
+}
+
+export interface IndexPassResult {
+  files_indexed: number;
+  chunks_added: number;
+  duration_ms: number;
+  errors: { path: string; error: string }[];
+}
+
+export interface StartedServer {
+  url: string;
+  close: () => Promise<void>;
+  /** The embedder the server bound, so callers can report it without re-resolving. */
+  embedder: { modelId: string; dim: number };
+  /** Present when `initialIndex` was requested. */
+  index?: IndexPassResult;
 }
 
 interface Runtime {
@@ -43,7 +67,7 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
       `remember: index was built with a different embedder (${reconcile.previousModelId}) and was cleared — run \`remember index\` to rebuild with ${embedder.modelId}.\n`,
     );
   }
-  const reranker = createPassthroughReranker();
+  const reranker = createNoneReranker();
   const search = createHybridSearchEngine(
     store,
     embedder,
@@ -64,20 +88,41 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
     awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 50 },
   });
 
+  // Reindex only the files that actually changed — not the whole corpus. The
+  // previous indexAll() re-walked + re-hashed every .md on every keystroke-save
+  // (O(corpus) per change); indexOne is O(1) per change and keeps `remember dev`
+  // fast on a real wiki. Pending ops are coalesced by the debounce.
+  const pending = new Map<string, 'upsert' | 'delete'>();
   let reindexTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushPending = async () => {
+    const batch = [...pending];
+    pending.clear();
+    for (const [rel, op] of batch) {
+      try {
+        if (op === 'delete') {
+          await store.deleteByPath(rel);
+          await store.deletePage(rel);
+          await store.updateManifest(rel, null);
+        } else {
+          await indexer.indexOne(contentRoot, rel);
+        }
+      } catch (err) {
+        const msg = (err as Error).message;
+        process.stderr.write(`[remember] watcher reindex failed for ${rel}: ${msg}\n`);
+        logs.push({ level: 'error', source: 'indexer', message: `watcher reindex failed for ${rel}: ${msg}` });
+      }
+    }
+  };
   const scheduleReindex = () => {
     if (reindexTimer) clearTimeout(reindexTimer);
     reindexTimer = setTimeout(() => {
       reindexTimer = null;
-      indexer.indexAll(contentRoot).catch((err) => {
-        const msg = (err as Error).message;
-        process.stderr.write(`[remember] watcher reindex failed: ${msg}\n`);
-        logs.push({ level: 'error', source: 'indexer', message: `watcher reindex failed: ${msg}` });
-      });
+      void flushPending();
     }, 500);
   };
   const emitChange = (event: 'add' | 'change' | 'unlink', absPath: string) => {
     const rel = path.relative(contentRoot, absPath).split(path.sep).join('/');
+    pending.set(rel, event === 'unlink' ? 'delete' : 'upsert');
     events.emit('event', { type: 'page.changed', kind: event, path: rel });
     scheduleReindex();
   };
@@ -119,13 +164,27 @@ async function teardownRuntime(rt: Runtime): Promise<void> {
   }
 }
 
-export async function startServer(opts: StartServerOptions): Promise<{ url: string; close: () => Promise<void> }> {
+export async function startServer(opts: StartServerOptions): Promise<StartedServer> {
   const events = new EventEmitter();
   const logs = createLogBuffer(50);
 
   // Build initial runtime from disk config.
   let cfg = await loadConfig(opts.rootDir);
   let runtime = await buildRuntime({ rootDir: opts.rootDir, events, cfg, logs });
+
+  // Optional startup index pass, using the runtime's already-loaded embedder.
+  let initialIndex: IndexPassResult | undefined;
+  if (opts.initialIndex) {
+    events.emit('event', { type: 'index.started', mode: 'full' });
+    const r = await runtime.indexer.indexAll(runtime.contentRoot);
+    events.emit('event', { type: 'index.completed', mode: 'full', ...r });
+    initialIndex = {
+      files_indexed: r.files_indexed,
+      chunks_added: r.chunks_added,
+      duration_ms: r.duration_ms,
+      errors: r.errors,
+    };
+  }
 
   logs.push({ level: 'info', source: 'server', message: 'startup complete' });
 
@@ -209,6 +268,8 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
   });
   return {
     url: `http://${host}:${port}`,
+    embedder: { modelId: runtime.embedder.modelId, dim: runtime.embedder.dim },
+    index: initialIndex,
     close: () =>
       new Promise<void>(async (resolve) => {
         await teardownRuntime(runtime).catch(() => undefined);

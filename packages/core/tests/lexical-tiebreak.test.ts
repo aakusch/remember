@@ -5,9 +5,9 @@ import path from 'node:path';
 import { breakLexicalTies, createHybridSearchEngine } from '../src/search/hybrid.js';
 import { createSqliteVecStore, type SqliteVecStore } from '../src/stores/sqlite-vec.js';
 import { createHashEmbedder } from '../src/embedders/hash.js';
-import { createPassthroughReranker } from '../src/rerankers/none.js';
+import { createNoneReranker } from '../src/rerankers/none.js';
 import { createIndexer } from '../src/indexer/index.js';
-import { createChokidarWalker } from '../src/walkers/chokidar.js';
+import { createFsWalker } from '../src/walkers/fs-walker.js';
 import { createRemarkParser } from '../src/parsers/remark.js';
 import { createSmartSplitChunker } from '../src/chunkers/smart-split.js';
 import type { SearchResult } from '../src/types.js';
@@ -86,7 +86,7 @@ describe('lexicalTieBreak flag (engine)', () => {
     const embedder = createHashEmbedder(384);
     store = await createSqliteVecStore({ path: path.join(tmp, 'index.db'), dim: embedder.dim });
     const indexer = createIndexer({
-      walker: createChokidarWalker({}),
+      walker: createFsWalker({}),
       parser: createRemarkParser(),
       chunker: createSmartSplitChunker({ size: 900, overlap: 0.15 }),
       embedder,
@@ -103,8 +103,8 @@ describe('lexicalTieBreak flag (engine)', () => {
   it('flag OFF equals the default engine, result-for-result', async () => {
     const embedder = createHashEmbedder(384);
     const queries = ['deploy runbook', 'rollback', 'onboarding checklist', 'glossary terms', 'production'];
-    const baseline = createHybridSearchEngine(store, embedder, createPassthroughReranker());
-    const explicitOff = createHybridSearchEngine(store, embedder, createPassthroughReranker(), {
+    const baseline = createHybridSearchEngine(store, embedder, createNoneReranker());
+    const explicitOff = createHybridSearchEngine(store, embedder, createNoneReranker(), {
       lexicalTieBreak: false,
     });
     for (const q of queries) {
@@ -118,8 +118,8 @@ describe('lexicalTieBreak flag (engine)', () => {
   it('flag ON never drops or duplicates any result versus OFF (tie-only reordering)', async () => {
     const embedder = createHashEmbedder(384);
     const queries = ['deploy runbook', 'rollback', 'onboarding checklist', 'glossary terms', 'production'];
-    const off = createHybridSearchEngine(store, embedder, createPassthroughReranker());
-    const on = createHybridSearchEngine(store, embedder, createPassthroughReranker(), {
+    const off = createHybridSearchEngine(store, embedder, createNoneReranker());
+    const on = createHybridSearchEngine(store, embedder, createNoneReranker(), {
       lexicalTieBreak: true,
     });
     for (const q of queries) {
