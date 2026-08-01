@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { assertKnownFlags } from '../flags.js';
 import { loadConfig } from '../../config/load.js';
+import { requireWiki } from '../require-wiki.js';
 import { createSqliteVecStore } from '../../stores/sqlite-vec.js';
 import { gatherDoctorReport } from '../../doctor/scan.js';
 import type { DoctorReport, DoctorSeverity } from '../../doctor/doctor.js';
@@ -21,14 +23,11 @@ const SEVERITY_COLOR: Record<DoctorSeverity, (s: string) => string> = {
 export async function doctorCommand(args: string[] = []): Promise<void> {
   const asJson = args.includes('--json');
   const strict = args.includes('--strict');
+  assertKnownFlags(args, ['--json', '--strict']);
 
   const cfg = await loadConfig(process.cwd());
-  if (cfg.configPath === null) {
-    const msg = 'not a remember wiki — run `remember init <dir>` or cd into one';
-    if (asJson) process.stderr.write(JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND', message: msg } }) + '\n');
-    else process.stderr.write(`${c.red('remember doctor:')} ${msg}\n`);
-    process.exit(1);
-  }
+  // Same wiki-detection + coded error as every other read command.
+  await requireWiki(cfg);
 
   const contentRoot = path.resolve(cfg.rootDir, cfg.validated.content);
   const dbPath = path.join(cfg.rootDir, '.remember', 'index.db');

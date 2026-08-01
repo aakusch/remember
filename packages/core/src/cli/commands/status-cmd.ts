@@ -1,3 +1,4 @@
+import { assertKnownFlags } from '../flags.js';
 import path from 'node:path';
 import { loadConfig } from '../../config/load.js';
 import { requireWiki } from '../require-wiki.js';
@@ -62,6 +63,7 @@ export async function runStatus(rootDir?: string): Promise<StatusJsonOutput> {
  */
 export async function statusCommand(argv: string[] = []): Promise<void> {
   const json = argv.includes('--json');
+  assertKnownFlags(argv, ['--json']);
   const s = await runStatus();
 
   if (json) {

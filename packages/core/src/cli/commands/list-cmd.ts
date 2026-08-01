@@ -9,6 +9,9 @@ export interface ListCmdOptions {
   limit: number;
   sort: string;
   json: boolean;
+  offset?: number;
+  q?: string;
+  filter?: Record<string, string>;
 }
 
 /** Machine-stable shape emitted by `remember list --json`. Keep field names/order stable. */
@@ -59,8 +62,22 @@ export function parseListArgs(argv: string[]): ListCmdOptions {
         );
       }
       opts.sort = v;
+    } else if (a === '--offset') {
+      const n = Number(argv[++i]);
+      if (!Number.isInteger(n) || n < 0) throw new Error('--offset expects a non-negative integer');
+      opts.offset = n;
+    } else if (a === '--q') {
+      opts.q = argv[++i];
+    } else if (a === '--filter') {
+      // --filter key=value (repeatable) — exact frontmatter match.
+      const kv = argv[++i] ?? '';
+      const eq = kv.indexOf('=');
+      if (eq <= 0) throw new Error('--filter expects key=value, e.g. --filter status=current');
+      (opts.filter ??= {})[kv.slice(0, eq)] = kv.slice(eq + 1);
     } else if (a && a.startsWith('-')) {
-      throw new Error(`unknown flag "${a}"\nUsage: remember list [--limit <n>] [--sort <key>] [--json]`);
+      throw new Error(
+        `unknown flag "${a}"\nUsage: remember list [--limit <n>] [--sort <key>] [--offset <n>] [--q <text>] [--filter key=value] [--json]`,
+      );
     }
   }
   return opts;
@@ -68,7 +85,7 @@ export function parseListArgs(argv: string[]): ListCmdOptions {
 
 /** Run the query and return the machine-stable structure (used by --json + tests). */
 export async function runList(
-  opts: { limit: number; sort: string; rootDir?: string },
+  opts: { limit: number; sort: string; rootDir?: string; offset?: number; q?: string; filter?: Record<string, string> },
 ): Promise<ListJsonOutput> {
   const cfg = await loadConfig(opts.rootDir ?? process.cwd());
   await requireWiki(cfg);
@@ -78,7 +95,13 @@ export async function runList(
     dim: embedder.dim,
   });
   try {
-    const result = await store.queryPages({ sort: opts.sort, limit: opts.limit, offset: 0 });
+    const result = await store.queryPages({
+      sort: opts.sort,
+      limit: opts.limit,
+      offset: opts.offset ?? 0,
+      q: opts.q,
+      filter: opts.filter,
+    });
     return {
       count: result.rows.length,
       total: result.total,
@@ -106,7 +129,7 @@ function fmtSize(bytes: number): string {
 
 export async function listCommand(argv: string[]): Promise<void> {
   const opts = parseListArgs(argv);
-  const res = await runList({ limit: opts.limit, sort: opts.sort });
+  const res = await runList({ limit: opts.limit, sort: opts.sort, offset: opts.offset, q: opts.q, filter: opts.filter });
 
   // ─── Machine output ──────────────────────────────────────────────────────
   if (opts.json) {
