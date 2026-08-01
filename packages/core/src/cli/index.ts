@@ -188,6 +188,29 @@ ${c.dim('Examples')}
   remember capabilities --json | jq '.endpoints[].path'`,
   },
   {
+    name: 'mcp',
+    summary: 'Serve the wiki to MCP clients (Claude Desktop/Code, Cursor) over stdio',
+    help: `${c.bold('remember mcp')}
+
+Expose this wiki to any MCP client as native tools — ${c.cyan('search_wiki')}, ${c.cyan('get_page')},
+${c.cyan('list_pages')}, and ${c.cyan('write_page')} (stage a note) — over stdio. Runs in-process
+against the wiki in the current directory; no HTTP server needed.
+
+This is the *mechanism* half of agent integration; the trigger snippet in
+${c.cyan('content/remember.md')} (paste into CLAUDE.md/AGENTS.md) is the *when-to-use* half.
+
+${c.dim('Add to an MCP client')} ${c.dim('(e.g. Claude Desktop / Claude Code mcpServers):')}
+  {
+    "remember": {
+      "command": "remember",
+      "args": ["mcp"],
+      "cwd": "/absolute/path/to/your-wiki"
+    }
+  }
+
+${c.dim('Run `remember index` once first so the embedding model is cached.')}`,
+  },
+  {
     name: 'benchmark',
     summary: 'Run the versioned retrieval evaluation',
     help: `${c.bold('remember benchmark')} ${c.dim('[--profile <name>] [--compare <file>] …')}
@@ -382,6 +405,11 @@ export async function run(argv: string[]): Promise<void> {
       case 'capabilities': {
         const { capabilitiesCommand } = await import('./commands/capabilities-cmd.js');
         await capabilitiesCommand(rest);
+        return;
+      }
+      case 'mcp': {
+        const { mcpCommand } = await import('./commands/mcp-cmd.js');
+        await mcpCommand();
         return;
       }
       case 'benchmark': {
