@@ -9,8 +9,7 @@ remember/
 ├─ packages/
 │  └─ core/      @useremember/core    — headless engine (CLI + HTTP API)
 └─ examples/
-   ├─ sample-wiki/   reference wiki used in tests + by remember init
-   └─ sample-vault/  mock Obsidian vault for the connector demo
+   └─ sample-wiki/   reference wiki used in tests + by remember init
 ```
 
 - **`@useremember/core`** is the whole open-source engine. CLI + HTTP API + indexer + search + adapters. Node-only. Standalone-usable — drive it from the terminal, from `curl`, or from any agent that speaks HTTP.
@@ -82,7 +81,6 @@ Every component of the indexing pipeline is an adapter with a documented interfa
 | `SearchEngine` | `query(q, opts): {results, query_ms, trace?}` | hybrid BM25+vector with weighted RRF | `@useremember/core/search/hybrid` |
 | `QueryPlanner` | `plan({query, intent?}): QueryPlan` | deterministic passthrough | `@useremember/core/query-planners/passthrough` |
 | `Reranker` | `rerank(query, candidates, context): scored[]` | deterministic passthrough; model-backed candidates gated | `@useremember/core/rerankers/none` |
-| `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `defaults.connector.*` from the main export |
 
 The default implementations are wired automatically when `loadConfig()` runs. Override any of them in `remember.config.ts`:
 
@@ -145,30 +143,9 @@ reranking, evaluation, and citation contracts belong in the core.
 See [`retrieval-intelligence.md`](./retrieval-intelligence.md) for the design
 direction and rollout rules.
 
-## Connector framework
+## Ingestion
 
-Connectors run inside the core process on startup and on demand. They write to `content/external/<connector-name>/`, where the file watcher picks them up just like any other markdown change.
-
-```
-remember.config.ts
-   │
-   ▼ defaults.connector.obsidian({...})
-   │
-   ▼
-ConnectorManager
-   ├─ obsidian.sync() ──▶ content/external/obsidian/
-   ├─ granola.sync()  ──▶ content/external/granola/
-   └─ filesystem.sync() ▶ content/external/<name>/
-                                │
-                                ▼
-                          chokidar watcher
-                                │
-                                ▼
-                          incremental reindex
-                                │
-                                ▼
-                          searchable in <1s
-```
+There are no built-in connectors: external content comes in as plain markdown written into `content/` — by the user or their AI agent, directly on disk or via `PUT /v1/pages/<path>` — where the watcher indexes it like any other file.
 
 ## HTTP API surface
 
@@ -193,9 +170,6 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | `POST /v1/index` | Trigger reindex |
 | `GET /v1/config` | Read loaded config |
 | `PUT /v1/config` | Write config with `.bak` backup |
-| `GET /v1/connectors` | Connector list + status |
-| `POST /v1/connectors/<name>/sync` | Trigger one connector |
-| `POST /v1/connectors/sync` | Trigger all connectors |
 | `GET /v1/events` | Server-Sent Events stream |
 | `GET /v1/tools` | Anthropic/OpenAI tool definitions |
 
@@ -237,7 +211,6 @@ control.
 .remember/
   index.db                       SQLite — chunks, embeddings, FTS, manifest, pages
   models/                        Cached ONNX model files (~100MB+ depending on model)
-  connectors/                    Per-connector state (last sync time, etc.)
 ```
 
 You can safely delete `.remember/` at any time. Next start will reindex from disk.

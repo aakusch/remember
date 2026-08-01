@@ -45,11 +45,6 @@ export interface RouteContext {
     prune: (path: string, keep?: number) => number;
   };
   events: EventEmitter;
-  connectors: {
-    list: () => Array<{ name: string; kind: string; target: string; configured: boolean; last_sync_at: string | null; last_result: unknown; last_error: string | null }>;
-    syncOne: (name: string) => Promise<unknown>;
-    syncAll: () => Promise<Record<string, unknown>>;
-  };
 }
 
 /** True for any loopback hostname form. Used on the BOUND host (trusted), never on the client Host header. */
@@ -271,7 +266,6 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
         { name: 'index', description: 'Reindex trigger + status' },
         { name: 'config', description: 'Live config get/set + hot-reload' },
         { name: 'observability', description: 'Logs + live events' },
-        { name: 'connectors', description: 'External-source sync' },
       ],
     }),
   );
@@ -761,22 +755,6 @@ export function registerRoutes(app: Hono, ctx: RouteContext): void {
     });
   });
 
-  // Connectors
-  app.get('/v1/connectors', (c) => c.json({ connectors: ctx.connectors.list() }));
-  app.post('/v1/connectors/:name/sync', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
-    if (denial) return denial;
-    const name = c.req.param('name');
-    const r = await ctx.connectors.syncOne(name);
-    return c.json(r);
-  });
-  app.post('/v1/connectors/sync', async (c) => {
-    const denial = checkAdmin(c, ctx.adminToken, ctx.boundHost);
-    if (denial) return denial;
-    const r = await ctx.connectors.syncAll();
-    return c.json({ ok: true, results: r });
-  });
-
   // AI tools surface — same defs the `remember tools` CLI command prints.
   app.get('/v1/tools', (c) => c.json({ tools: AGENT_TOOL_DEFS }));
 }
@@ -1014,32 +992,6 @@ const openApiPaths = {
       responses: {
         [200]: { description: 'SSE stream', content: { 'text/event-stream': {} } },
       },
-    },
-  },
-
-  // ─── Connectors ────────────────────────────────────────────────────────
-  '/connectors': {
-    get: {
-      summary: 'List configured connectors + their last sync state',
-      tags: ['connectors'],
-      responses: jsonResponse('connectors[]'),
-    },
-  },
-  '/connectors/{name}/sync': {
-    post: {
-      summary: 'Run a single connector now',
-      tags: ['connectors'],
-      security: [{ adminToken: [] }],
-      parameters: [stringParam('name', 'path', true)],
-      responses: jsonResponse('sync result'),
-    },
-  },
-  '/connectors/sync': {
-    post: {
-      summary: 'Run every configured connector',
-      tags: ['connectors'],
-      security: [{ adminToken: [] }],
-      responses: jsonResponse('per-connector result map'),
     },
   },
 } as const;

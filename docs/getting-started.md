@@ -47,7 +47,7 @@ my-wiki/
     getting-started.md           ← short orientation page
     remember.md                  ← how AI agents plug in (+ the trigger snippet)
     authoring.md                 ← the frontmatter worth setting
-  remember.config.ts             ← typed config — connectors, embedder, ports
+  remember.config.ts             ← typed config — embedder, ports
   package.json                   ← scripts: dev, start, index, status, search, list, get
   .gitignore                     ← skips .remember/, node_modules, .env
   .rememberignore                ← extends ignore rules for indexing
@@ -141,33 +141,22 @@ renames. Two things to know about writes:
 Page paths in the URL keep their real slashes — `PUT /v1/pages/ops/deploy.md`.
 Percent-encoding the `/` separators in a nested path 404s.
 
-### 5. Connectors pull external sources
+### 5. Bring in external content
 
-Configure them in `remember.config.ts`:
+`remember` ships **no built-in connectors** on purpose — your agent is the
+connector. To pull in an external source (meeting notes, another tool's vault,
+an export), your AI agent (or you) fetches it, converts it to markdown, and
+writes it into `content/` — either directly as files (the watcher indexes them
+within a second), or over HTTP:
 
-```ts
-import { defineConfig, defaults } from '@useremember/core';
-
-export default defineConfig({
-  connectors: [
-    defaults.connector.obsidian({
-      vaultPath: '~/Documents/Obsidian Vault',
-      transformWikilinks: true,
-      tag: 'obsidian',
-    }),
-    defaults.connector.granola({
-      apiUrl: process.env.GRANOLA_API_URL,
-      apiKey: process.env.GRANOLA_API_KEY,
-      tag: 'meeting',
-    }),
-  ],
-});
+```bash
+curl -X PUT 'http://localhost:4320/v1/pages/external/weekly-sync.md' \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $REMEMBER_ADMIN_TOKEN" \
+  -d '{"body": "---\ntitle: Weekly sync\ntags: [meeting]\n---\n\n# Weekly sync\n\nNotes…"}'
 ```
 
-Synced files land in `content/external/<connector>/` and get indexed normally.
-The connector manager runs an initial sync on boot; trigger a resync at any time
-with `POST /v1/connectors/<name>/sync` (or `POST /v1/connectors/sync` for all)
-and check status with `GET /v1/connectors`.
+Managed, turnkey connectors are a **Pro** concern, not part of this engine.
 
 ### 6. `remember doctor` keeps the corpus healthy
 
@@ -203,7 +192,7 @@ config, `PUT /v1/config` writes it back with a timestamped `.bak` backup.
 | Trigger a reindex | `POST /v1/index` (or `remember index`) |
 | Corpus-health sweep | `GET /v1/doctor` (or `remember doctor`) |
 | Query / filter / sort by frontmatter | `GET /v1/pages?filter[k]=v&sort=-date` |
-| Manage connectors | `GET/POST /v1/connectors...` |
+| Write a page (agent ingestion) | `PUT /v1/pages/<path>` with `{ "body": "<markdown>" }` |
 | Read loaded config | `GET /v1/config` |
 | Health, OpenAPI, tool defs | `GET /v1/health`, `/v1/openapi.json`, `/v1/tools` |
 | Index stats dashboard | `remember status` |

@@ -53,7 +53,7 @@ export interface LoadedConfig {
 
 /**
  * Load `<rootDir>/.env` into process.env before the config is evaluated, so a
- * scaffolded `.env` (which is where the admin token and connector secrets now live,
+ * scaffolded `.env` (which is where the admin token and any API keys now live,
  * kept out of the committable config) actually takes effect. Existing process.env
  * values always win — the file only fills in what isn't already set. Best-effort:
  * a missing or malformed file is silently ignored.

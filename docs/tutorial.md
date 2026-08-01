@@ -1,6 +1,6 @@
 # Tutorial
 
-A hands-on walkthrough that takes about 15 minutes. By the end you'll have a working wiki, indexed content, a connector pulling external data, and an AI agent answering questions against it — all from the terminal and the HTTP API.
+A hands-on walkthrough that takes about 15 minutes. By the end you'll have a working wiki, indexed content, external content brought in as markdown, and an AI agent answering questions against it — all from the terminal and the HTTP API.
 
 > **Prerequisites:** Node 20+, npm (pnpm 9+ / yarn work too), and a terminal.
 >
@@ -199,43 +199,40 @@ Filter rules AND together. Sort by any system column (`path`, `modified`,
 descending). `GET /v1/attrs` lists the distinct frontmatter keys available to
 filter on. An agent uses exactly these endpoints to narrow before it reads.
 
-## 7. Wire up a connector
+## 7. Bring in external content
 
-Connectors pull external markdown sources into your index. Edit `remember.config.ts`:
+`remember` ships **no built-in connectors** on purpose — your agent is the
+connector. To pull in an external source (meeting notes, another tool's vault,
+an export), your AI agent (or you) fetches it, converts it to markdown, and
+writes it into `content/`. Two ways to land it:
 
-```ts
-import { defineConfig, defaults } from '@useremember/core';
+**Write a file** — the watcher indexes it within a second:
 
-export default defineConfig({
-  // ...
-  connectors: [
-    defaults.connector.obsidian({
-      vaultPath: '~/Documents/Obsidian Vault',
-      transformWikilinks: true,
-      tag: 'obsidian',
-    }),
-  ],
-});
+```bash
+cat > content/external/weekly-sync.md <<'MD'
+---
+title: Weekly sync — 2026-08-01
+tags: [meeting]
+---
+
+# Weekly sync
+
+Decisions and action items from the call…
+MD
 ```
 
-Restart `remember start`. On boot, the connector manager runs an initial sync — your Obsidian vault gets copied to `content/external/obsidian/`, `[[wikilinks]]` are rewritten to `[text](./slug)` form, and a `tag: obsidian` is injected into every page's frontmatter so you can filter on it.
+**Or over HTTP** — `PUT /v1/pages/<path>` with a JSON body and the admin token:
 
-Manage connectors over the API: `GET /v1/connectors` lists each connector with
-its kind, target directory, configured state, and last sync time;
-`POST /v1/connectors/<name>/sync` re-runs one; `POST /v1/connectors/sync` runs
-them all. The Granola connector works the same way but pulls from an HTTP API:
-
-```ts
-defaults.connector.granola({
-  apiUrl: process.env.GRANOLA_API_URL,
-  apiKey: process.env.GRANOLA_API_KEY,
-  since: '2026-01-01',
-  tag: 'meeting',
-  includeTranscript: false,
-}),
+```bash
+curl -X PUT 'http://localhost:4320/v1/pages/external/weekly-sync.md' \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $REMEMBER_ADMIN_TOKEN" \
+  -d '{"body": "---\ntitle: Weekly sync — 2026-08-01\ntags: [meeting]\n---\n\n# Weekly sync\n\nDecisions and action items…"}'
 ```
 
-The generic `filesystem` connector accepts any source path — useful for plain-folder syncs from team shares, exported notebooks, etc.
+Either way it's plain markdown in `content/` — searchable in about a second and
+yours to edit like any other page. Managed, turnkey connectors are a **Pro**
+concern, not part of this engine.
 
 ## 8. Plug in an AI agent
 
@@ -315,7 +312,7 @@ After this tutorial you have:
 - Hybrid search returning results from both BM25 and vector retrievers, from the CLI and over HTTP
 - A hand-edited `remember.config.ts`
 - Frontmatter queries over `/v1/pages` for any filter/sort you need
-- A connector pulling external content into the same index
+- External content pulled into the same index as plain markdown
 - An AI agent that can search and read pages via `/v1/tools`
 
 ## Next

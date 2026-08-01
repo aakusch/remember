@@ -98,30 +98,3 @@ export const queryPlanner = {
   },
 };
 
-export const connector = {
-  obsidian(opts: {
-    name?: string;
-    vaultPath: string;
-    target?: string;
-    include?: string[];
-    exclude?: string[];
-    transformWikilinks?: boolean;
-    tag?: string;
-  }) {
-    return { _kind: 'connector' as const, type: 'obsidian' as const, opts };
-  },
-  granola(opts: {
-    name?: string;
-    target?: string;
-    apiUrl?: string;
-    apiKey?: string;
-    since?: string;
-    tag?: string;
-    includeTranscript?: boolean;
-  } = {}) {
-    return { _kind: 'connector' as const, type: 'granola' as const, opts };
-  },
-  filesystem(opts: { name?: string; sourcePath: string; target?: string; tag?: string }) {
-    return { _kind: 'connector' as const, type: 'filesystem' as const, opts };
-  },
-};

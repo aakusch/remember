@@ -12,7 +12,7 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 export interface LogEntry {
   at: string; // ISO timestamp
   level: LogLevel;
-  source: string; // 'indexer' | 'connector:<name>' | 'http' | 'config' | etc.
+  source: string; // 'indexer' | 'http' | 'config' | etc.
   message: string;
   detail?: Record<string, unknown>;
 }

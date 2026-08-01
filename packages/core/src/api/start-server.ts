@@ -13,8 +13,6 @@ import { createPassthroughReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
 import { loadConfig, type LoadedConfig } from '../config/load.js';
 import { resolveEmbedder } from './resolve-embedder.js';
-import { createConnectorManager } from '../connectors/manager.js';
-import { resolveConnectors } from '../connectors/resolve.js';
 import { createLogBuffer, type LogBuffer } from '../observability/log-buffer.js';
 import type { Embedder, SearchEngine } from '../types.js';
 
@@ -29,7 +27,6 @@ interface Runtime {
   search: SearchEngine;
   indexer: ReturnType<typeof createIndexer>;
   watcher: ReturnType<typeof chokidar.watch>;
-  connectorManager: Awaited<ReturnType<typeof createConnectorManager>>;
   configSnapshot: LoadedConfig;
 }
 
@@ -93,39 +90,6 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
   watcher.on('change', (p) => emitChange('change', p));
   watcher.on('unlink', (p) => emitChange('unlink', p));
 
-  // Connectors.
-  const resolvedConnectors = resolveConnectors(cfg.raw.connectors, cfg.rootDir);
-  const connectorManager = await createConnectorManager({
-    connectors: resolvedConnectors,
-    contentRoot,
-    rootDir: cfg.rootDir,
-    events,
-  });
-
-  if (resolvedConnectors.length > 0) {
-    process.stdout.write(
-      `[remember] ${resolvedConnectors.length} connector(s) configured: ${resolvedConnectors.map((c) => c.name).join(', ')}\n`,
-    );
-    connectorManager
-      .syncAll()
-      .then((r) => {
-        const summary = Object.entries(r)
-          .map(([name, res]) => {
-            if (res && typeof res === 'object' && 'error' in res)
-              return `${name}: ERROR (${(res as { error: string }).error})`;
-            const r2 = res as { files_written?: number; files_unchanged?: number; duration_ms?: number };
-            return `${name}: ${r2.files_written ?? 0}w/${r2.files_unchanged ?? 0}u in ${r2.duration_ms ?? 0}ms`;
-          })
-          .join(' · ');
-        process.stdout.write(`[remember] initial connector sync done — ${summary}\n`);
-      })
-      .catch((err) => {
-        const msg = (err as Error).message;
-        process.stderr.write(`[remember] connector sync failed: ${msg}\n`);
-        logs.push({ level: 'error', source: 'connectors', message: `initial sync failed: ${msg}` });
-      });
-  }
-
   return {
     contentRoot,
     store,
@@ -133,7 +97,6 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
     search,
     indexer,
     watcher,
-    connectorManager,
     configSnapshot: cfg,
   };
 }
@@ -154,7 +117,6 @@ function resolveHybridSearchOptions(descriptor: unknown): HybridSearchOptions {
 
 async function teardownRuntime(rt: Runtime): Promise<void> {
   await rt.watcher.close().catch(() => undefined);
-  await rt.connectorManager.stopAll().catch(() => undefined);
   try {
     rt.store.close();
   } catch {
@@ -208,7 +170,7 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
         error: {
           code: 'PIPELINE_BUILD_FAILED',
           message: `Failed to build pipeline from new config: ${msg}`,
-          hint: 'Embedder, store, or connector init failed — check the error message',
+          hint: 'Embedder or store init failed — check the error message',
         },
       };
     }
@@ -326,11 +288,6 @@ export async function startServer(opts: StartServerOptions): Promise<{ url: stri
       prune: (p: string, keep?: number) => runtime.store.pruneHistory(p, keep),
     },
     events,
-    connectors: {
-      list: () => runtime.connectorManager.list(),
-      syncOne: (name: string) => runtime.connectorManager.syncOne(name),
-      syncAll: () => runtime.connectorManager.syncAll(),
-    },
   };
 
   const app = createApp(ctx);
