@@ -178,14 +178,35 @@ export async function setupCommand(argv: string[] = []): Promise<void> {
     }
   }
 
+  // ── What you got: the directory layout ───────────────────────────────────
+  p.note(
+    [
+      `${c.bold('Your wiki')}  ${c.dim(absFolder)}`,
+      ``,
+      `  ${c.cyan('content/')}            your markdown (edit in any editor; edits reindex live)`,
+      `  ${c.cyan('content/remember.md')} agent guide + the trigger snippet`,
+      `  ${c.cyan('remember.config.ts')}  config: embedder, connectors, ports`,
+      `  ${c.cyan('.env')}                secrets (token / API keys) — gitignored`,
+    ].join('\n'),
+    'What was created',
+  );
+
   // ── Agent wiring (print only — never writes your files) ──────────────────
   p.note(
-    `${AGENT_TRIGGER_SNIPPET}\n\n${c.dim('↑ paste into your project\'s CLAUDE.md / AGENTS.md — or point your agent at this')}\n${c.dim('  wiki (content/remember.md) and ask it to wire itself up.')}`,
+    `${AGENT_TRIGGER_SNIPPET}\n\n${c.dim('↑ GIVE THIS TO YOUR AGENT — paste the block into your project\'s CLAUDE.md /')}\n${c.dim('  AGENTS.md, or point your agent at content/remember.md and let it add this itself.')}`,
     'Make "remember …" route to the wiki',
   );
 
   // ── Index + serve, or hand off ───────────────────────────────────────────
   if (doStart) {
+    p.note(
+      [
+        `${c.dim('$')} remember search "…"   ${c.dim('search from the terminal (or GET /v1/search?q=…)')}`,
+        `${c.dim('$')} remember doctor       ${c.dim('check corpus health')}`,
+        `${c.dim('$')} remember --help       ${c.dim('everything remember can do')}`,
+      ].join('\n'),
+      'Once it\'s running, in another terminal',
+    );
     p.outro(`Indexing + starting the dev server… ${c.dim('(first run downloads the model; Ctrl+C to stop)')}`);
     process.chdir(absFolder);
     const { devCommand } = await import('./dev-cmd.js');
@@ -212,6 +233,7 @@ function printNextSteps(folder: string, pm: PackageManager, installed: boolean, 
   lines.push(`  ${c.dim('$')} ${runScript} dev              ${c.dim('# index + serve the agent API on :4320')}`);
   lines.push(`  ${c.dim('$')} remember search "…"      ${c.dim('# or GET /v1/search?q=…')}`);
   lines.push(`  ${c.dim('$')} remember doctor          ${c.dim('# check corpus health')}`);
+  lines.push(`  ${c.dim('$')} remember --help          ${c.dim('# everything remember can do')}`);
   process.stdout.write(`\n${lines.join('\n')}\n`);
   if (adminToken) {
     process.stdout.write(`\n  ${c.dim('Admin token (for remote writes) is in')} ${folder}/.env\n`);
