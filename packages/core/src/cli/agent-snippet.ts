@@ -12,4 +12,10 @@
  */
 export const AGENT_TRIGGER_SNIPPET = `## remember — recall from the knowledge base
 
-This project has a **remember** wiki (a local, hybrid-search knowledge base). When the user says "remember …" as a request to recall context — e.g. "remember when we decided X", "remember how we structure this doc" — treat it as a **retrieval request**, not small talk: run \`remember search "<their query>" --json\` (or GET \`http://localhost:4320/v1/search?q=…\`) and ground your answer in the returned pages rather than guessing. A result is ranked text for the query, not proof an answer exists — read the top pages before you rely on them.`;
+This project has a **remember** wiki (a local, hybrid-search knowledge base).
+
+**Trigger: the word "remember" used as the user's imperative to you.** When the user directs you to recall something — e.g. "remember when we decided X", "remember how we structure this doc", "do you remember our deploy process" — treat it as a **retrieval request**: run \`remember search "<their query>" --json\` (or GET \`http://localhost:4320/v1/search?q=…\`) and ground your answer in the returned pages instead of guessing.
+
+Do **not** fire on the word "remember" appearing incidentally — inside a document you're reading, a quote, code, or ordinary prose. The cue is the user asking *you* to recall, not the token showing up in content. When in doubt about context, don't fire.
+
+A result is ranked text for the query, not proof an answer exists — read the top pages before you rely on them.`;
