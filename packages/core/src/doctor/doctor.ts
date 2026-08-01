@@ -21,10 +21,6 @@ export interface DoctorPageFact {
   chunkCount: number;
   /** content hash from the manifest (exact-duplicate detection). */
   sha256: string;
-  /** chunks whose heading_path is non-empty. */
-  headingChunks: number;
-  /** total chunks in the chunks table for this page. */
-  totalChunks: number;
   /** the chunk_idx 0 text, for thin-page detection. */
   firstChunkText: string;
 }
@@ -139,29 +135,12 @@ export function runDoctor(
     }
   }
 
-  // 5 & 6. Structure: no headings captured, and the worse "wall of prose".
-  for (const p of pages) {
-    if (p.totalChunks > 0 && p.headingChunks === 0) {
-      if (p.chunkCount >= 3) {
-        findings.push({
-          check: 'wall-of-prose',
-          severity: 'warn',
-          path: p.path,
-          detail: `${p.chunkCount} chunks, no headings`,
-          hint: 'add `##` section headings — long unstructured pages retrieve poorly',
-        });
-      } else {
-        findings.push({
-          check: 'no-structure',
-          severity: 'warn',
-          path: p.path,
-          hint: 'add at least one `##` heading so sections are retrievable',
-        });
-      }
-    }
-  }
+  // NOTE: the structure checks (no-structure / wall-of-prose) are deferred — they
+  // rely on per-chunk heading_path, which the OSS parser does not yet populate
+  // (that fix is ranking-adjacent and gated on a benchmark re-baseline). The no-h1
+  // check below is the structural signal that ships today.
 
-  // 7. Thin page — a single short chunk carries little signal.
+  // 5. Thin page — a single short chunk carries little signal.
   for (const p of pages) {
     if (p.chunkCount === 1 && p.firstChunkText.trim().length < 200) {
       findings.push({
@@ -174,7 +153,7 @@ export function runDoctor(
     }
   }
 
-  // 8. No frontmatter at all.
+  // 6. No frontmatter at all.
   for (const p of pages) {
     if (p.frontmatterEmpty && p.chunkCount > 0) {
       findings.push({
@@ -186,7 +165,7 @@ export function runDoctor(
     }
   }
 
-  // 9. No H1 / title↔H1 mismatch (from the disk pass).
+  // 7. No H1 / title↔H1 mismatch (from the disk pass).
   for (const f of disk) {
     if (!f.indexed) continue;
     const page = byPath.get(f.path);

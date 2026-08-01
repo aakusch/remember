@@ -27,17 +27,10 @@ export function createRemarkParser(): Parser {
  *
  * `mdast-util-to-string` on the whole tree concatenates every node with NO
  * separator, so a heading and the next paragraph fuse ("wikiThis is…") and list
- * items jam together — which then leaks into search snippets. We join block-level
+ * items jam together — which then leaks into search snippets. We keep it simple
+ * (no heading markers / structure — that lives in Pro) and just join block-level
  * siblings with blank lines and list items with newlines, so words never run
- * together.
- *
- * Headings are re-emitted WITH their `#` markers. The smart-split chunker detects
- * section boundaries by matching `^#{1,6}\s` on this flattened text to build each
- * chunk's `heading_path`; `mdast-util-to-string` alone drops the markers, so every
- * chunk used to get an empty heading_path (breaking the breadcrumb, the heading
- * boost, and the lexical tie-break haystack) while `#` comments *inside* fenced code
- * were the only lines that looked like headings. We indent code content so those
- * comment lines can never be mistaken for section headings.
+ * together. Inline text inside a block is already correctly spaced by the source.
  */
 function flattenBlocks(node: MdastNode): string {
   if (
@@ -51,24 +44,11 @@ function flattenBlocks(node: MdastNode): string {
   if (node.type === 'list') {
     return (node.children ?? []).map(flattenBlocks).filter(Boolean).join('\n');
   }
-  if (node.type === 'heading') {
-    const depth = Math.min(Math.max(node.depth ?? 1, 1), 6);
-    return `${'#'.repeat(depth)} ${mdastToString(node).trim()}`;
-  }
-  if (node.type === 'code') {
-    // Indent so a `# comment` line inside code is never read as a section heading.
-    return mdastToString(node)
-      .split('\n')
-      .map((line) => (line ? `    ${line}` : line))
-      .join('\n')
-      .replace(/\s+$/, '');
-  }
   return mdastToString(node).trim();
 }
 
 interface MdastNode {
   type: string;
-  depth?: number;
   children?: MdastNode[];
 }
 
