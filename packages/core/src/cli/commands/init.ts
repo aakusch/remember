@@ -254,7 +254,13 @@ const PACKAGE_TEMPLATE = (name: string) => ({
   },
   dependencies: {
     // Pinned to a real published range; `*` reads as "unmaintained" on a scaffold.
-    '@useremember/core': '^0.2.0',
+    '@useremember/core': '^0.3.0',
+    // The local BGE embedder needs @huggingface/transformers. The engine declares
+    // it only as an OPTIONAL peer (so `npm install @useremember/core` stays lean and
+    // audit-clean — transformers transitively pulls sharp/onnxruntime), so a real
+    // wiki opts into it HERE. Without it the engine falls back to the placeholder
+    // hash embedder with a loud warning. Set OPENAI_API_KEY instead to skip it.
+    '@huggingface/transformers': '^3.0.0',
   },
   // pnpm >=10 blocks postinstall build scripts by default, which silently leaves
   // better-sqlite3's native binding unbuilt — every `remember` command then dies with

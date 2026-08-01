@@ -237,8 +237,11 @@ the engine resolves them:
    the scaffold's local-ONNX pin; you can also pin a model with
    `defaults.embedder.openai(...)` in `remember.config.ts`.
 2. **Local ONNX (the default)** — `BAAI/bge-small-en-v1.5` (384-d) via the
-   optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
-   dependency, which the default scaffold installs. The model (~100 MB)
+   [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
+   peer dependency, which the default scaffold installs for you. The engine
+   declares it as an **optional peer**, so `npm install @useremember/core` on
+   its own stays lean and audit-clean; a scaffolded wiki (or an explicit
+   `npm install @huggingface/transformers`) opts into it. The model (~100 MB)
    downloads once on first index and is cached; after that, indexing and
    search run entirely offline. No API keys, no network.
 3. **Hash placeholder (fallback)** — if `@huggingface/transformers` is not
@@ -248,11 +251,12 @@ the engine resolves them:
    prints a loud warning. Fix it with `npm install @huggingface/transformers`
    or by setting `OPENAI_API_KEY`.
 
-> **A note on `npm audit`:** `@huggingface/transformers` transitively pulls in
-> `sharp`, an image-processing library, and `npm audit` may report CVEs
-> against it. This engine is text-only and never invokes the image path — but
-> if your policy requires a clean audit, the OpenAI embedder path works
-> without `@huggingface/transformers` installed.
+> **A note on `npm audit`:** installing the engine alone is clean (0 known
+> vulnerabilities). Once you add `@huggingface/transformers` for local
+> embeddings, it transitively pulls in `sharp`, an image-processing library,
+> and `npm audit` may report CVEs against it. This engine is text-only and
+> never invokes the image path — but if your policy requires a clean audit,
+> the OpenAI embedder path works without `@huggingface/transformers` installed.
 
 <br>
 

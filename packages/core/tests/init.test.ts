@@ -41,11 +41,23 @@ describe('remember init scaffold', () => {
     const dir = path.join(tmp, 'wiki');
     await init(dir);
     const pkg = JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8'));
-    expect(pkg.dependencies['@useremember/core']).toMatch(/^\^0\.2\./);
+    expect(pkg.dependencies['@useremember/core']).toMatch(/^\^0\.3\./);
     // OSS is CLI + API only — the browser UI is a Pro feature. The scaffold
     // must not pull in the deprecated @useremember/viewer package.
     expect(pkg.dependencies['@useremember/viewer']).toBeUndefined();
     expect(pkg.scripts.dev).toBe('remember dev');
+  });
+
+  it('scaffold opts into the local embedder (optional peer of the engine)', async () => {
+    const dir = path.join(tmp, 'wiki');
+    await init(dir);
+    const pkg = JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8'));
+    // The engine declares @huggingface/transformers as an OPTIONAL PEER so a bare
+    // `npm install @useremember/core` stays lean/audit-clean; a real wiki opts in
+    // here so first-run gets real BGE embeddings instead of the hash fallback.
+    expect(pkg.dependencies['@huggingface/transformers']).toBeDefined();
+    // pnpm >=10 needs sharp/onnxruntime (transformers' native deps) pre-approved.
+    expect(pkg.pnpm.onlyBuiltDependencies).toContain('onnxruntime-node');
   });
 
   it('generates a CLI/API config with no viewer block', async () => {
