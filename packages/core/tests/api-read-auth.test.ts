@@ -156,11 +156,20 @@ describe('read-auth trust derives from connection, not Host header', () => {
     expect(search.status).toBe(401);
   });
 
-  it('loopback bind + token set: localhost reads stay open (header not consulted for trust)', async () => {
-    // When bound to loopback, the OS only routes loopback traffic here, so
-    // open reads are safe regardless of the Host header value.
+  it('loopback bind + token set: a loopback Host stays open (connection-based trust)', async () => {
+    // When bound to loopback, the OS only routes loopback traffic here, so a
+    // request carrying a loopback Host is open without a token.
     const app = buildApp({ host: '127.0.0.1', adminToken: ADMIN_TOKEN });
-    const res = await app.request('/v1/search?q=welcome', { headers: { host: 'whatever' } });
+    const res = await app.request('/v1/search?q=welcome', { headers: { host: 'localhost' } });
     expect(res.status).toBe(200);
+  });
+
+  it('loopback bind: a NON-loopback Host is rejected (DNS-rebinding guard)', async () => {
+    // A rebound attacker domain (evil.com → 127.0.0.1) reaches the loopback
+    // server with Host: evil.com. That must be blocked, or any site the user
+    // visited while `remember dev` ran could read the wiki.
+    const app = buildApp({ host: '127.0.0.1', adminToken: ADMIN_TOKEN });
+    const res = await app.request('/v1/search?q=welcome', { headers: { host: 'evil.example.com' } });
+    expect(res.status).toBe(403);
   });
 });
