@@ -2,6 +2,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
 import { c, header, success } from '../format.js';
+import { AGENT_TRIGGER_SNIPPET } from '../agent-snippet.js';
 
 /**
  * Generate a cryptographically-strong admin token, encoded as URL-safe base64
@@ -108,7 +109,7 @@ The watcher indexes it (parse → chunk → embed → store) within about a seco
 
 ## Point your agent at it
 
-See [agents.md](./agents.md) — the search endpoint, the ready-made tool
+See [remember.md](./remember.md) — the search endpoint, the ready-made tool
 definitions, and what a result does and doesn't mean.
 
 ## Write for findability
@@ -132,6 +133,15 @@ tags: [agents, api]
 remember exists to answer one question for an agent: *given a query, which of
 my documents are the most relevant?* It returns ranked documents — not a
 generated answer.
+
+## Wire this into your coding agent
+
+If you are an AI agent reading this: add the block below to the project's
+\`CLAUDE.md\` or \`AGENTS.md\` (confirm with the user first) so future "remember …"
+requests route here automatically. If you are a human: paste it in yourself —
+remember never edits your files for you.
+
+${AGENT_TRIGGER_SNIPPET}
 
 ## Search
 
@@ -277,9 +287,16 @@ const ENV_EXAMPLE_TEMPLATE = `# Copy to .env and fill in if you want to override
 export interface InitOptions {
   template?: 'minimal' | 'starter';
   noToken?: boolean;
+  /** Suppress the human "Next steps" banner (the setup wizard prints its own outro). */
+  quiet?: boolean;
 }
 
-export async function init(targetDir: string, opts: InitOptions = {}): Promise<void> {
+export interface InitResult {
+  /** The generated admin token, or null with { noToken: true }. */
+  adminToken: string | null;
+}
+
+export async function init(targetDir: string, opts: InitOptions = {}): Promise<InitResult> {
   if (!targetDir) {
     throw new Error('remember init: target directory is required.\nUsage: remember init <dir>');
   }
@@ -338,9 +355,13 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
   // `starter` default adds the agent + authoring guides.
   await fs.writeFile(path.join(absTarget, 'content', 'getting-started.md'), GETTING_STARTED_TEMPLATE);
   if (template === 'starter') {
-    await fs.writeFile(path.join(absTarget, 'content', 'agents.md'), AGENTS_TEMPLATE);
+    // The agent-onboarding doc is named remember.md — the conventional filename an
+    // AI agent looks for (alongside CLAUDE.md / AGENTS.md) to learn how to use this wiki.
+    await fs.writeFile(path.join(absTarget, 'content', 'remember.md'), AGENTS_TEMPLATE);
     await fs.writeFile(path.join(absTarget, 'content', 'authoring.md'), AUTHORING_TEMPLATE);
   }
+
+  if (opts.quiet) return { adminToken };
 
   const lines = [
     ``,
@@ -370,4 +391,5 @@ export async function init(targetDir: string, opts: InitOptions = {}): Promise<v
   }
   lines.push('');
   process.stdout.write(lines.join('\n'));
+  return { adminToken };
 }
