@@ -182,8 +182,8 @@ what you need. Common changes:
 - **Use OpenAI embeddings** — set `OPENAI_API_KEY` (the embedder switches automatically) or pin `defaults.embedder.openai(...)`.
 - **Remote access** — set `server.host` to `0.0.0.0` and provide an admin token (see [Going to production](#going-to-production)).
 
-The API can also read and write config: `GET /v1/config` returns the loaded
-config, `PUT /v1/config` writes it back with a timestamped `.bak` backup.
+The API can also read the loaded config: `GET /v1/config` (read-gated). There is
+no config-write endpoint — edit `remember.config.ts` and restart.
 
 ## Common actions over the API
 

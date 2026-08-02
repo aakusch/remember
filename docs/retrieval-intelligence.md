@@ -179,7 +179,7 @@ CI regression separate from representative release evaluation.
 The harness reports recall@k, candidate recall, MRR, nDCG, wrong-source and
 empty-result rates, latency percentiles, and per-class breakdowns for whatever
 corpus you point it at. Formal, published benchmark numbers for the shipped
-0.2.0 engine are not yet available — the shipped engine is untuned (the default
+0.3.0 engine are not yet available — the shipped engine is untuned (the default
 fusion and ranking are deliberately simple), so run the harness against a corpus
 you care about rather than relying on a single headline figure. No model-backed
 reranker has cleared a promotion gate, so 0.2.0 ships passthrough as the only

@@ -5,7 +5,7 @@ Operating brief for an agent working in this repo. Read this before editing.
 ## What this is
 
 `@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`,
-published to npm (currently `0.2.3`, public). Local-first, **CLI + HTTP API only — there is
+published to npm (`0.2.6` latest; `0.3.0` staged, unpublished), public. Local-first, **CLI + HTTP API only — there is
 no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
 
 The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
@@ -18,7 +18,7 @@ Engine: hybrid **BM25 (SQLite FTS5) + vector (sqlite-vec, local BGE embeddings)*
 `packages/core` is the whole thing: `cli/`, `api/`, `search/` (the query path — start at
 `search/hybrid.ts`), `indexer/`, `stores/` (sqlite-vec), `parsers/`, `embedders/`, `chunkers/`,
 `benchmarks/`. CLI commands: `setup · init · index · search · list · get · status · doctor ·
-tools · capabilities · dev · start · benchmark`. `remember dev` runs the API with file-watch
+tools · capabilities · dev · start · mcp · benchmark`. `remember dev` runs the API with file-watch
 (reindex within ~1s) — **CLI + API only, no browser UI**.
 
 **No built-in connectors.** Ingestion is deliberately not the engine's job: the wiki is plain

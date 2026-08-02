@@ -73,9 +73,9 @@ Every component of the indexing pipeline is an adapter with a documented interfa
 
 | Adapter | Interface | Default | Sub-export |
 |---|---|---|---|
-| `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | chokidar + ignore | `@useremember/core/walkers/chokidar` |
+| `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | fs walk + ignore | `@useremember/core/walkers/fs-walker` |
 | `Parser` | `parse(raw): {frontmatter, ast, plain}` | remark + gray-matter | `@useremember/core/parsers/remark` |
-| `Chunker` | `chunk(parsed): Chunk[]` | smart-split (900 tokens, 15% overlap) | `@useremember/core/chunkers/smart-split` |
+| `Chunker` | `chunk(parsed): Chunk[]` | smart-split (≤512 tokens, embedder-capped, 15% overlap) | `@useremember/core/chunkers/smart-split` |
 | `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai` |
 | `Store` | `upsert/delete/searchVector/searchBm25/getManifest/upsertPage/queryPages/listFrontmatterKeys` | SQLite + sqlite-vec | `@useremember/core/stores/sqlite-vec` |
 | `SearchEngine` | `query(q, opts): {results, query_ms, trace?}` | hybrid BM25+vector with weighted RRF | `@useremember/core/search/hybrid` |
@@ -168,8 +168,7 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | `GET /v1/status` | Index stats |
 | `GET /v1/doctor` | Corpus-health report (same as `remember doctor --json`) |
 | `POST /v1/index` | Trigger reindex |
-| `GET /v1/config` | Read loaded config |
-| `PUT /v1/config` | Write config with `.bak` backup |
+| `GET /v1/config` | Read loaded config (read-gated) |
 | `GET /v1/events` | Server-Sent Events stream |
 | `GET /v1/tools` | Anthropic/OpenAI tool definitions |
 
@@ -197,7 +196,7 @@ path. Practical characteristics:
 - **Indexing is incremental** — a sha256 manifest means only changed files are re-parsed, re-embedded, and re-stored.
 - **Search is local** — BM25 (SQLite FTS5) and vector (sqlite-vec) retrieval run against the on-disk index with no external service.
 
-Formal, reproducible benchmark numbers for the shipped 0.2.0 engine are not yet
+Formal, reproducible benchmark numbers for the shipped 0.3.0 engine are not yet
 published; run the versioned harness (`remember benchmark`, see
 [`benchmarks/retrieval/README.md`](../benchmarks/retrieval/README.md)) against
 your own corpus to measure recall, latency, and rank quality on hardware you

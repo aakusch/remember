@@ -1,5 +1,51 @@
 # Changelog — @useremember/core
 
+## 0.3.0 — 2026-08-02 (pre-launch: MCP, onboarding, doctor, connector removal)
+
+Staged for publish (npm latest is still `0.2.6`). The pre-launch release:
+agent-native onboarding and a native MCP server, a corpus-health command, the
+removal of built-in connectors, and a batch of security, quality, and
+supply-chain fixes.
+
+- **BREAKING — built-in connectors removed** (Granola / Obsidian / filesystem
+  sync, and the `/v1/connectors` surface). Ingestion is deliberately not the
+  engine's job: the wiki is plain markdown, so your agent (or you) writes
+  markdown into `content/`. Managed connectors are a Pro concern. (#8, #11)
+- **New: `remember mcp`** — a native Model Context Protocol server (stdio) so
+  Claude Desktop/Code, Cursor, and any MCP client drive the wiki as native tools
+  (`search_wiki` / `get_page` / `list_pages` / `write_page`). Shares the CLI/HTTP
+  tool definitions, result projection, honesty contract, and engine wiring — one
+  surface, not a bolt-on. (#9, #10)
+- **New: `remember setup`** — a one-command onboarding wizard: scaffold, install,
+  index, and a printed "give this to your agent" trigger snippet. (#5–#7)
+- **New: `remember doctor`** — deterministic corpus-health checks (not-indexed,
+  unfindable, duplicate body/title, thin/structureless pages, missing
+  frontmatter, …), `--json` / `--strict`, and `GET /v1/doctor`. No LLM, no
+  network. (#4)
+- **Embedder-aware chunking.** Chunk size is capped to the embedder's real input
+  limit (bge-small = 512 tokens) instead of a fixed 900, so chunks are no longer
+  silently truncated at embed time; paired with a `heading_path` parser fix that
+  repopulates heading breadcrumbs and re-enables heading-boost. CI retrieval gate
+  re-baselined. (#12)
+- **`@huggingface/transformers` is now an optional _peer_ dependency**, so a bare
+  `npm install @useremember/core` is lean and audit-clean (no transitive `sharp`
+  CVEs). The local embedder is opt-in; the scaffold installs it for a real wiki,
+  and the engine falls back to the placeholder hash embedder with a loud warning
+  if it's absent. (#14)
+- **Security — removed `PUT /v1/config`**, a config-write path abusable as a
+  remote-code-execution vector. `GET /v1/config` remains (read-gated). Plus
+  data-loss fixes: guard recursive folder-delete against an empty path, reconcile
+  the vector table on an embedder-dimension change, clean up ghost page rows on
+  delete, and make a malformed-YAML file non-fatal to an index run. (#4, #8, #11)
+- **Faster `remember dev`** — the watcher reindexes only the changed file (was
+  re-walking the whole corpus per save), the embedding model loads once at
+  startup, and result frontmatter is fetched in one batched query. (#13)
+- **CLI usage errors carry `code: 'USAGE'`** in `--json` output (was a blanket
+  `COMMAND_ERROR`), so agents distinguish a bad invocation from a runtime
+  failure. Packaging: fixed a stale `./walkers/chokidar` export → `fs-walker`, a
+  `prebuild` clean so stale files never ship, and version synced across
+  `package.json` / `version.ts` / a test guard. (#13, #14)
+
 ## 0.2.4 — 2026-07-31 (reliability + supply chain)
 
 - **Retryable local-model startup.** A transient first-download failure no

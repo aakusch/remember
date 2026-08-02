@@ -73,7 +73,7 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | | |
 |---|---|
 | **Hybrid retrieval engine** | BM25 (SQLite FTS5) + vector (sqlite-vec) + Reciprocal Rank Fusion, path/heading signals, page diversity, and an inspectable ranking trace. |
-| **Rich terminal CLI** | `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `doctor`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
+| **Rich terminal CLI** | `setup`, `init`, `dev`, `start`, `index`, `search`, `list`, `get`, `status`, `doctor`, `mcp`, `tools`, `capabilities`, `benchmark` — formatted result cards, aligned dashboards, a restrained color palette, `NO_COLOR` + non-TTY aware. |
 | **`remember search`** | Hybrid search straight from your terminal. Ranked cards with matched terms highlighted, `-k`, `--open`, and `--json` for scripts and agents. |
 | **Agent HTTP API** | Small Hono server: `GET /v1/search`, `/v1/pages`, `/v1/tools` (Anthropic/OpenAI-shaped tool definitions — drop into a tool-use call), and `/v1/capabilities` (one discovery object). |
 | **Local embeddings** | Local `BAAI/bge-small-en-v1.5` ONNX model (384-d) via the optional `@huggingface/transformers` dependency. OpenAI is opt-in via `OPENAI_API_KEY`. |
