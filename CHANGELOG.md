@@ -3,6 +3,78 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [0.3.0] - 2026-08-02
+
+Pre-launch release — staged for publish; npm latest is still `0.2.6`.
+Agent-native onboarding and a native MCP server, a corpus-health command, the
+removal of built-in connectors, plus security, quality, and supply-chain fixes.
+
+### Removed
+
+- **BREAKING: built-in connectors** (Granola / Obsidian / filesystem sync) and
+  the `/v1/connectors` surface. Ingestion is not the engine's job — the wiki is
+  plain markdown; your agent (or you) writes markdown into `content/`. Managed
+  connectors are a Pro concern. (#8, #11)
+- **`PUT /v1/config`** — a config-write path abusable as a remote-code-execution
+  vector. `GET /v1/config` remains (read-gated); edit `remember.config.ts` and
+  restart to change config. (#8, #11)
+
+### Added
+
+- **`remember mcp`** — a native Model Context Protocol server (stdio) so Claude
+  Desktop/Code, Cursor, and any MCP client drive the wiki as native tools
+  (`search_wiki` / `get_page` / `list_pages` / `write_page`), sharing the
+  CLI/HTTP tool definitions, projection, honesty contract, and engine wiring.
+  (#9, #10)
+- **`remember setup`** — a one-command onboarding wizard (scaffold, install,
+  index, and a "give this to your agent" trigger snippet). (#5–#7)
+- **`remember doctor`** — deterministic corpus-health checks with `--json` /
+  `--strict` and `GET /v1/doctor`; no LLM, no network. (#4)
+
+### Changed
+
+- **Embedder-aware chunking** — chunk size is capped to the embedder's real input
+  limit (bge-small = 512 tokens) instead of a fixed 900, so chunks are no longer
+  truncated at embed time; paired with a `heading_path` parser fix that
+  repopulates heading breadcrumbs and re-enables heading-boost. CI retrieval gate
+  re-baselined. (#12)
+- **`@huggingface/transformers` is now an optional _peer_ dependency** — a bare
+  `npm install @useremember/core` is lean and audit-clean (no transitive `sharp`
+  CVEs); the local embedder is opt-in, the scaffold installs it, and the engine
+  falls back to the placeholder hash embedder with a loud warning if absent. (#14)
+- **Faster `remember dev`** — per-file watcher reindex (was whole-corpus),
+  single embedding-model load at startup, batched result-frontmatter lookup. (#13)
+
+### Security
+
+- Data-loss / robustness fixes: guard recursive folder-delete against an empty
+  path, reconcile the vector table on an embedder-dimension change, clean up
+  ghost page rows on delete, and make a malformed-YAML file non-fatal to an index
+  run (skipped + reported). (#4)
+
+### Fixed
+
+- CLI bad-invocation errors carry a stable `code: 'USAGE'` in `--json` output
+  (was a blanket `COMMAND_ERROR`). (#13)
+- Packaging: stale `./walkers/chokidar` export corrected to `./walkers/fs-walker`
+  (the walker is a plain `fs` walk); `prebuild` clean so stale files never ship;
+  version synced across `package.json` / `version.ts` / a test guard. (#13, #14)
+
+## [0.2.4] - 2026-07-31
+
+Reliability + supply chain.
+
+### Added
+
+- **Dependency-security gate** — a production dependency audit now runs in CI;
+  resolved transitive security updates are pinned through the workspace lockfile.
+
+### Fixed
+
+- **Retryable local-model startup** — a transient first-download failure is no
+  longer cached for the process lifetime; a later index or search retries with an
+  actionable error instead of requiring a restart.
+
 ## [0.2.3] - 2026-07-28
 
 Agent-DX and perceived-quality polish. No ranking changes — snippet *selection*

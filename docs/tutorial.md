@@ -28,7 +28,7 @@ Confirm it's up from another terminal:
 ```bash
 remember status                        # index dashboard: pages, chunks, model
 remember search "getting started" -k 5 # ranked result cards
-curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.2.3"}
+curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.3.0"}
 ```
 
 > `remember` lives in the project's `node_modules/.bin`. Prefix the commands
@@ -180,8 +180,8 @@ Every field has a default, so change only what you need. A few useful knobs:
 - **Remote access** — set `server.host` to `0.0.0.0` and provide an admin token (see [step 9](#9-run-in-production)).
 
 Restart `remember start` (or `remember dev`) to pick up config changes. The API
-can also read/write config: `GET /v1/config` and `PUT /v1/config` (which writes
-a timestamped `.bak` backup).
+can read the loaded config over `GET /v1/config` (read-gated); there is no
+config-write endpoint — edit `remember.config.ts` and restart.
 
 ## 6. Query by frontmatter
 
