@@ -39,7 +39,7 @@ export async function indexCommand(): Promise<void> {
       '\n\n',
   );
 
-  const indexer = createDefaultIndexer(store, embedder);
+  const indexer = createDefaultIndexer(store, embedder, cfg.validated.index.formats);
 
   let lastFile = '';
   const result = await indexer.indexAll(contentRoot, (p) => {

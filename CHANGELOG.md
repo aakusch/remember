@@ -3,6 +3,50 @@
 All notable changes to this project. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) starting at v1.0.
 
+## [Unreleased]
+
+### Added
+
+- **Multi-format ingestion** via [`@firecrawl/anydoc`](https://github.com/firecrawl/anydoc)
+  (MIT, local Rust/napi — no network, no API key, no model): `.docx`/`.doc`/`.docm`,
+  `.pdf`, PowerPoint (`.ppt`/`.pptx`/…), Excel (`.xls`/`.xlsx`/…), OpenDocument
+  (`.odt`/`.ods`/`.odp`), `.rtf`, `.epub`, and `.csv`. Every format converts to
+  markdown, so document headings populate `heading_path` and drive section-aware
+  chunking exactly as markdown does.
+
+  Opt in with `index.formats` in `remember.config.ts`, and install the optional
+  peer dependency:
+
+  ```ts
+  // remember.config.ts
+  export default { index: { formats: ['md', 'pdf', 'docx', 'pptx'] } };
+  ```
+  ```bash
+  npm install @firecrawl/anydoc
+  ```
+
+  `index.formats` **defaults to `['md']`**, so an existing install is unchanged
+  until you opt in and a default install pulls no native binary. Verified against
+  the committed deterministic gate: `recall@1/5/10` `0.507/0.853/0.927`, MRR
+  `0.853`, `corpus_hash` unchanged.
+
+  Scope, stated plainly: **native-text PDFs only** — a scanned or image-only PDF
+  needs OCR, so it is recorded with no searchable text and named in a warning,
+  and the engine never calls a cloud OCR service. Spreadsheets index as one line
+  per row, so a large grid of bare numbers retrieves poorly. ODF presentations
+  (`.odp`) carry no heading information, so their `heading_path` is empty where
+  `.pptx` populates it. A corrupt or unreadable document degrades to an empty
+  recorded page and never fails the indexing run.
+
+### Changed
+
+- `createFsWalker` accepts `extensions` / `binaryExtensions` and yields
+  `content: string | Uint8Array`; `createIndexer` accepts either the legacy
+  markdown `Parser` or the new multi-format `DocumentParser`. Existing callers
+  passing `createRemarkParser()` keep working unchanged.
+- The markdown format now also claims `.markdown`, which the walker previously
+  skipped. This is the only behaviour change on the default path.
+
 ## [0.3.0] - 2026-08-02
 
 Pre-launch release — staged for publish; npm latest is still `0.2.6`.

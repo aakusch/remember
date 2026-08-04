@@ -34,13 +34,32 @@ export type {
   RememberConfig,
   PageRecord,
   PageQuery,
+  DocumentParser,
+  ParsedDocument,
+  WalkEntry,
 } from './types.js';
+export { isDocumentParser } from './types.js';
 
 export { createApp } from './api/server.js';
 export { startServer } from './api/start-server.js';
 
 export { createFsWalker } from './walkers/fs-walker.js';
 export { createRemarkParser } from './parsers/remark.js';
+export {
+  createFormatRouter,
+  SUPPORTED_FORMATS,
+  type FormatName,
+  type FormatRouter,
+  type FormatRouterOptions,
+} from './parsers/format-router.js';
+export {
+  createAnydocDocumentParser,
+  normalizeAnydocMarkdown,
+  ANYDOC_FORMAT_EXTENSIONS,
+  ANYDOC_FORMAT_NAMES,
+  type AnydocFormatName,
+  type AnydocParserOptions,
+} from './parsers/anydoc.js';
 export { createSmartSplitChunker } from './chunkers/smart-split.js';
 export { createSqliteVecStore } from './stores/sqlite-vec.js';
 export { createHybridSearchEngine } from './search/hybrid.js';

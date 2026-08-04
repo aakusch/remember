@@ -9,8 +9,13 @@ published to npm (`0.2.6` latest; `0.3.0` staged, unpublished), public. Local-fi
 no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
 
 The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
-doc-health, and multi-format (HTML/DOCX) ingestion — is a **separate PRIVATE package and is
-not in this repo.** Do not reference, import, or assume any of it here.
+doc-health, and HTML ingestion — is a **separate PRIVATE package and is not in this repo.**
+Do not reference, import, or assume any of it here. Note this boundary moved: office and PDF
+ingestion (via `@firecrawl/anydoc`) now ships here too, so "multi-format is pro-only" is
+**stale** wherever it still appears. HTML is still pro-only — this engine has no HTML parser.
+The pro engine's non-markdown handling is a *different* implementation (mammoth for docx,
+pdf-inspector directly for pdf, with page classification and OCR flags this engine does not
+have), so never describe the two as running the same ingestion.
 
 Engine: hybrid **BM25 (SQLite FTS5) + vector (sqlite-vec, local BGE embeddings)** fused with
 **Reciprocal Rank Fusion**. One index, queried by people and agents over HTTP.
@@ -46,8 +51,42 @@ away.
 `benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
 fixture rather than mutating them.
 
-**Markdown only.** The only parser is `parsers/remark.ts`. HTML/DOCX ingestion is a *pro*
-feature and is deliberately not in this engine — don't add a second parser here.
+**Markdown by default; other formats are opt-in and there is exactly ONE other parser.**
+`parsers/remark.ts` handles markdown. Everything else — `.docx`/`.doc`/`.docm`, `.pdf`,
+PowerPoint, Excel, OpenDocument, `.rtf`, `.epub`, `.csv` — goes through
+`parsers/anydoc.ts` (`@firecrawl/anydoc`, MIT, an optional **peer** dep, lazy-imported,
+local Rust/napi, no network and no API key). Do **not** add a third parser: anydoc emits
+GFM markdown for every format, so a new format is an entry in
+`ANYDOC_FORMAT_EXTENSIONS`, not a new extraction implementation.
+
+`index.formats` defaults to `['md']`, and that default is load-bearing: an unconfigured
+install walks, parses and indexes exactly what it did before. Verified — the `ci` gate
+reproduces `recall@1/5/10 0.507/0.853/0.927`, MRR `0.853`, unchanged `corpus_hash`, against
+`benchmarks/results/remember-v0.3.0-ci-hash.json`. The one behaviour change on the default
+path: the md format claims `.markdown` as well as `.md`, which the old walker skipped (no
+`.markdown` file exists in this repo, so no artifact moved).
+
+Notes that will bite if you miss them:
+- **`normalizeAnydocMarkdown` is load-bearing, not tidying.** Without `remark-gfm` a GFM
+  table is not a table, so anydoc's `| --- | --- |` delimiter rows would be indexed as
+  literal text; it also emits an empty header row for header-less tables. The normalizer
+  flattens tables to `a | b | c` rows, strips list markers, backslash-escapes a leading `#`
+  in flattened cell text (else a cell becomes a phantom heading), and collapses the title
+  EPUB carries twice. Do not "simplify" it by feeding raw anydoc output to remark.
+- **anydoc throws on bad data** ("unsupported input: …") for corrupt, mislabeled, and
+  scanned/image-only PDFs. `parsers/anydoc.ts` catches all of it and degrades to an empty
+  recorded page plus a warning naming the file. Keep that contract: an ordinary scanned PDF
+  must not turn into an indexing error.
+- **The hosted `/parse` OCR fallback is deliberately not wired.** It is a cloud call, and
+  this engine's conversion stays local.
+- **Spreadsheets and `.odp` retrieve poorly by nature**, not by bug. A sheet is one line per
+  row; ODF presentations carry no heading semantics (text boxes are `draw:frame`), so
+  `heading_path` is empty where `.pptx` populates it. Both are pinned in
+  `tests/parser-anydoc.test.ts` under "documented limits".
+- The walker now takes `extensions`/`binaryExtensions` and yields `string | Uint8Array`;
+  `createIndexer` accepts either the legacy `Parser` or a `DocumentParser`. Always source
+  both extension lists from `createFormatRouter()` so walker and parser cannot drift, and
+  pass `binaryExtensions` to `createIndexer` too — `indexOne` reads files itself.
 
 ## Things that look inert but are intentional — do NOT "tidy" them
 

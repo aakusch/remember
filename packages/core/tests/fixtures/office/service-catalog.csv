@@ -1,0 +1,5 @@
+service,tier,oncall rotation
+checkout-api,tier1,platform-primary
+search-api,tier1,search-primary
+admin-console,tier3,none
+billing-worker,tier2,"finance, then platform"

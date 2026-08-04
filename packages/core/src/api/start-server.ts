@@ -74,7 +74,7 @@ async function buildRuntime(opts: { rootDir: string; events: EventEmitter; cfg: 
     reranker,
     resolveHybridSearchOptions(cfg.raw.search?.engine),
   );
-  const indexer = createDefaultIndexer(store, embedder);
+  const indexer = createDefaultIndexer(store, embedder, cfg.validated.index.formats);
 
   // Filesystem watcher — debounced auto-reindex on disk changes.
   const watcher = chokidar.watch(contentRoot, {
