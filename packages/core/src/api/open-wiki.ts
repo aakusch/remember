@@ -7,7 +7,7 @@ import { createHybridSearchEngine, type HybridSearchOptions } from '../search/hy
 import { createNoneReranker } from '../rerankers/none.js';
 import { createIndexer } from '../indexer/index.js';
 import { createFsWalker } from '../walkers/fs-walker.js';
-import { createRemarkParser } from '../parsers/remark.js';
+import { createFormatRouter, type FormatName } from '../parsers/format-router.js';
 import { createSmartSplitChunker } from '../chunkers/smart-split.js';
 import type { Embedder, Store } from '../types.js';
 
@@ -26,15 +26,30 @@ export function chunkSizeFor(embedder: Embedder): number {
   return Math.min(DEFAULT_CHUNK.maxSize, Math.floor(embedder.maxInputTokens * 0.85));
 }
 
-/** Build the standard indexer (fs walker + remark parser + smart-split
- *  chunker) for a store+embedder. The single source of the pipeline wiring. */
-export function createDefaultIndexer(store: Store, embedder: Embedder) {
+/** Build the standard indexer (fs walker + format router + smart-split
+ *  chunker) for a store+embedder. The single source of the pipeline wiring.
+ *
+ *  `formats` defaults to markdown only, so a caller that passes nothing gets
+ *  byte-identical behaviour to the pre-multi-format pipeline. The walker's
+ *  extension sets come from the router itself, so the walker and the parser
+ *  cannot drift apart. */
+export function createDefaultIndexer(
+  store: Store,
+  embedder: Embedder,
+  formats: FormatName[] = ['md'],
+) {
+  const router = createFormatRouter({ formats });
   return createIndexer({
-    walker: createFsWalker({ respectGitignore: true }),
-    parser: createRemarkParser(),
+    walker: createFsWalker({
+      respectGitignore: true,
+      extensions: router.extensions,
+      binaryExtensions: router.binaryExtensions,
+    }),
+    parser: router.parser,
     chunker: createSmartSplitChunker({ size: chunkSizeFor(embedder), overlap: DEFAULT_CHUNK.overlap }),
     embedder,
     store,
+    binaryExtensions: router.binaryExtensions,
   });
 }
 
@@ -87,6 +102,6 @@ export async function openWiki(rootDir: string): Promise<OpenWiki> {
     createNoneReranker(),
     resolveHybridSearchOptions(cfg.raw.search?.engine),
   );
-  const indexer = createDefaultIndexer(store, embedder);
+  const indexer = createDefaultIndexer(store, embedder, cfg.validated.index.formats);
   return { cfg, contentRoot, store, embedder, engine, indexer };
 }

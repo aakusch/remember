@@ -1,21 +1,56 @@
 // Adapter interfaces for the remember pipeline.
 // Single file in the scaffold; will split per-adapter in implementation.
 
-export interface Walker {
-  walk(root: string): AsyncIterable<{
-    path: string;
-    content: string;
-    mtime: Date;
-    sha256: string;
-  }>;
+export interface WalkEntry {
+  path: string;
+  /**
+   * File contents. A `string` for text formats; raw bytes for any extension the
+   * walker was told is binary. A `.docx`/`.pptx`/`.xlsx` is a zip archive and a
+   * `.doc` is an OLE container — reading either as utf8 corrupts it
+   * irrecoverably, so binary formats must be declared rather than sniffed.
+   */
+  content: string | Uint8Array;
+  mtime: Date;
+  sha256: string;
 }
 
+export interface Walker {
+  walk(root: string): AsyncIterable<WalkEntry>;
+}
+
+export interface ParsedDocument {
+  frontmatter: Record<string, unknown>;
+  ast: unknown;
+  plain: string;
+}
+
+/**
+ * Legacy single-format parser. Markdown-only and synchronous. Deliberately
+ * unchanged: it is part of the published `@useremember/core` surface and every
+ * existing consumer calls `parse(raw: string)`. New formats implement
+ * `DocumentParser` instead.
+ */
 export interface Parser {
-  parse(raw: string): {
-    frontmatter: Record<string, unknown>;
-    ast: unknown;
-    plain: string;
-  };
+  parse(raw: string): ParsedDocument;
+}
+
+/**
+ * Multi-format parser. Async because non-markdown formats need a lazily
+ * imported converter, and path-aware because format dispatch keys off the file
+ * extension rather than sniffing content.
+ */
+export interface DocumentParser {
+  readonly kind: 'document';
+  /** Extensions this parser claims, lowercase and dot-prefixed (`['.rtf']`). */
+  readonly extensions: string[];
+  /** Subset of `extensions` whose content must be delivered as raw bytes. */
+  readonly binaryExtensions: string[];
+  parseDocument(input: { path: string; content: string | Uint8Array }): Promise<ParsedDocument>;
+}
+
+/** Narrow a `Parser | DocumentParser` union without instanceof. */
+export function isDocumentParser(p: Parser | DocumentParser): p is DocumentParser {
+  return (p as DocumentParser).kind === 'document';
 }
 
 export interface Chunk {

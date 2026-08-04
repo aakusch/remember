@@ -84,14 +84,19 @@
     "zod": "^3.23.0"
   },
   "peerDependencies": {
+    "@firecrawl/anydoc": "^0.1.2",
     "@huggingface/transformers": "^3.0.0"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
       "optional": true
+    },
+    "@firecrawl/anydoc": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@firecrawl/anydoc": "0.1.2",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.14.0",
     "tsx": "^4.16.0",

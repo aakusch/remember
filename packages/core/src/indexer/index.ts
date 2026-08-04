@@ -1,5 +1,14 @@
 import path from 'node:path';
-import type { Chunker, Embedder, Parser, Store, Walker } from '../types.js';
+import {
+  isDocumentParser,
+  type Chunker,
+  type DocumentParser,
+  type Embedder,
+  type ParsedDocument,
+  type Parser,
+  type Store,
+  type Walker,
+} from '../types.js';
 
 /**
  * Upper bound on a single file read by indexOne. Matches the walker's default
@@ -10,10 +19,21 @@ const MAX_INDEXABLE_FILE_BYTES = 5 * 1024 * 1024;
 
 export interface IndexerOptions {
   walker: Walker;
-  parser: Parser;
+  /**
+   * Either the legacy markdown-only `Parser` or a multi-format
+   * `DocumentParser`. Both are accepted so an existing embedder of this library
+   * that passes `createRemarkParser()` keeps working unchanged.
+   */
+  parser: Parser | DocumentParser;
   chunker: Chunker;
   embedder: Embedder;
   store: Store;
+  /**
+   * Extensions whose content the walker delivers as bytes. `indexOne` reads
+   * files itself, so it needs the same list to decide how to read them — the
+   * walker's own setting is invisible to it.
+   */
+  binaryExtensions?: string[];
 }
 
 export interface IndexResult {
@@ -46,6 +66,36 @@ function pickTitle(frontmatter: Record<string, unknown>, fallback: string): stri
 }
 
 export function createIndexer(opts: IndexerOptions) {
+  const binaryExtensions = new Set((opts.binaryExtensions ?? []).map((e) => e.toLowerCase()));
+
+  /**
+   * Parse with whichever parser shape was supplied.
+   *
+   * The legacy `Parser` is markdown-only and takes a string, so bytes reaching
+   * it are a wiring bug (a binary extension enabled on the walker without a
+   * `DocumentParser` to read it) rather than bad data — say so instead of
+   * letting `parse` stringify a zip archive into mojibake.
+   */
+  async function parseContent(
+    filePath: string,
+    content: string | Uint8Array,
+  ): Promise<ParsedDocument> {
+    if (isDocumentParser(opts.parser)) {
+      return opts.parser.parseDocument({ path: filePath, content });
+    }
+    if (typeof content !== 'string') {
+      throw new Error(
+        `"${filePath}" was read as bytes, but this indexer has a markdown-only parser. ` +
+          `Pass a multi-format parser from createFormatRouter() to ingest binary formats.`,
+      );
+    }
+    return opts.parser.parse(content);
+  }
+
+  /** Byte length for bytes, character length for text — what `size` has always meant. */
+  const sizeOf = (content: string | Uint8Array): number =>
+    typeof content === 'string' ? content.length : content.byteLength;
+
   return {
     async indexAll(root: string, onProgress?: (p: IndexProgress) => void): Promise<IndexResult> {
       const started = Date.now();
@@ -74,7 +124,7 @@ export function createIndexer(opts: IndexerOptions) {
         // and continue.
         try {
           onProgress?.({ stage: 'parse', path: entry.path });
-          const parsed = opts.parser.parse(entry.content);
+          const parsed = await parseContent(entry.path, entry.content);
           const chunks = opts.chunker.chunk({ plain: parsed.plain, ast: parsed.ast });
           const nowIso = new Date().toISOString();
 
@@ -84,7 +134,7 @@ export function createIndexer(opts: IndexerOptions) {
             path: entry.path,
             frontmatter: parsed.frontmatter ?? {},
             title: pickTitle(parsed.frontmatter ?? {}, entry.path),
-            size: entry.content.length,
+            size: sizeOf(entry.content),
             last_indexed: nowIso,
             last_modified: entry.mtime.toISOString(),
           });
@@ -168,18 +218,24 @@ export function createIndexer(opts: IndexerOptions) {
           `File too large to index: "${relPath}" is ${stat.size} bytes (limit ${MAX_INDEXABLE_FILE_BYTES})`,
         );
       }
-      const content = await fs.readFile(abs, 'utf8');
+      // Read binary formats as bytes, matching the walker. Reading a zip
+      // container as utf8 corrupts it, and the hash must cover the same bytes
+      // the walk would have hashed or the two paths disagree about staleness.
+      const ext = path.extname(abs).toLowerCase();
+      const content = binaryExtensions.has(ext)
+        ? await fs.readFile(abs)
+        : await fs.readFile(abs, 'utf8');
       const sha256 = createHash('sha256').update(content).digest('hex');
       const nowIso = new Date().toISOString();
 
-      const parsed = opts.parser.parse(content);
+      const parsed = await parseContent(relPath, content);
       const chunks = opts.chunker.chunk({ plain: parsed.plain, ast: parsed.ast });
 
       await opts.store.upsertPage({
         path: relPath,
         frontmatter: parsed.frontmatter ?? {},
         title: pickTitle(parsed.frontmatter ?? {}, relPath),
-        size: content.length,
+        size: sizeOf(content),
         last_indexed: nowIso,
         last_modified: stat.mtime.toISOString(),
       });
