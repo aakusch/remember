@@ -53,17 +53,14 @@ describe('anydoc parser — wiring', () => {
     expect(rtfOnly.extensions).not.toContain('.pptx');
   });
 
-  it('claims .docx and .pdf, which this engine has no other parser for', () => {
-    // Unlike the pro engine (mammoth for docx, pdf-inspector for pdf), anydoc is
-    // this engine's only non-markdown parser, so it owns both.
+  it('claims Word, and leaves markdown and PDF to their own parsers', () => {
     expect(parser.extensions).toContain('.docx');
-    expect(parser.extensions).toContain('.pdf');
-  });
-
-  it('does not claim markdown', () => {
-    // A collision here would silently re-route every already-indexed .md file
-    // onto a different parser.
-    for (const taken of ['.md', '.markdown']) {
+    expect(parser.extensions).toContain('.docm');
+    // PDF has a dedicated parser (parsers/pdf.ts) because pdf-inspector exposes
+    // page classification, OCR flags and encoding warnings that anydoc's wrapper
+    // around the same library hides. A collision on markdown would silently
+    // re-route every already-indexed .md file onto a different parser.
+    for (const taken of ['.pdf', '.md', '.markdown']) {
       expect(parser.extensions).not.toContain(taken);
     }
   });

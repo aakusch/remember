@@ -52,6 +52,7 @@ export {
   type FormatRouter,
   type FormatRouterOptions,
 } from './parsers/format-router.js';
+export { createPdfDocumentParser, type PdfParserOptions } from './parsers/pdf.js';
 export {
   createAnydocDocumentParser,
   normalizeAnydocMarkdown,

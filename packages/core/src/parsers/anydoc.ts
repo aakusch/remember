@@ -11,8 +11,12 @@ import { createRemarkParser } from './remark.js';
  * with no per-format structure logic and there is only ever one parser to
  * reason about.
  *
- * It is the engine's **only** non-markdown parser, deliberately: a second
- * format-specific parser is a second place for structure extraction to drift.
+ * It handles every non-markdown format **except PDF**, which has its own parser
+ * (`parsers/pdf.ts`). That is not drift: pdf-inspector exposes page
+ * classification, per-page OCR flags, font-encoding warnings and a recoverable
+ * document title, and anydoc's wrapper around the same library surfaces none of
+ * it — it raises an unsupported error for a scanned PDF instead of reporting
+ * *why* the text is missing. Do not collapse the two.
  *
  * ## Two things it is not
  *
@@ -28,23 +32,20 @@ import { createRemarkParser } from './remark.js';
  * 1. **Never throws on document data.** The indexer isolates per-file failures,
  *    but a parser that throws still costs the file its content and writes a
  *    scary error for something as ordinary as a scanned PDF. anydoc *does*
- *    throw ("unsupported input: …") on a corrupt container, a mislabeled file,
- *    and any scanned or image-only PDF. So a conversion failure degrades to an
- *    empty (0-chunk) recorded page plus a warning naming the file. (The only
+ *    throw ("unsupported input: …") on a corrupt container and on a mislabeled
+ *    file. So a conversion failure degrades to an empty (0-chunk) recorded page
+ *    plus a warning naming the file. (The only
  *    throws are the bytes-vs-string wiring guard and the missing-dependency
  *    error, both configuration bugs, not per-file data.)
- * 2. **Native-text PDFs only.** A scanned or image-only PDF needs OCR, which is
- *    out of scope; it is recorded with no searchable text and named in a
- *    warning rather than silently dropped.
- * 3. **Spreadsheets are text, not cells.** An `.xlsx` serializes to one line
+ * 2. **Spreadsheets are text, not cells.** An `.xlsx` serializes to one line
  *    per row. A large sheet of bare numbers chunks into rows carrying almost no
  *    retrievable meaning, which dilutes the index rather than enriching it —
  *    see `docs/authoring-for-retrieval.md`.
- * 4. **Structure is only as good as the source.** anydoc reads real heading
+ * 3. **Structure is only as good as the source.** anydoc reads real heading
  *    levels out of the container, so a document using named heading styles
  *    nests correctly. One made of bold body text has no heading information to
  *    find and degrades to correct text with a flatter `heading_path`.
- * 5. **Embedded images are dropped to their alt text.** Indexing image bytes is
+ * 4. **Embedded images are dropped to their alt text.** Indexing image bytes is
  *    out of scope.
  */
 
@@ -59,7 +60,6 @@ import { createRemarkParser } from './remark.js';
 export const ANYDOC_FORMAT_NAMES = [
   'docx',
   'doc',
-  'pdf',
   'pptx',
   'xlsx',
   'odt',
@@ -75,7 +75,6 @@ export type AnydocFormatName = (typeof ANYDOC_FORMAT_NAMES)[number];
 export const ANYDOC_FORMAT_EXTENSIONS: Record<AnydocFormatName, readonly string[]> = {
   docx: ['.docx', '.docm'],
   doc: ['.doc'],
-  pdf: ['.pdf'],
   pptx: ['.ppt', '.pptx', '.pptm', '.pps', '.ppsx', '.ppsm', '.pot'],
   xlsx: ['.xls', '.xlsx', '.xlsm', '.xlsb'],
   odt: ['.odt'],
@@ -120,7 +119,6 @@ function warn(message: string): void {
 type AnydocFormat =
   | 'doc'
   | 'docx'
-  | 'pdf'
   | 'ppt'
   | 'pptx'
   | 'xlsx'
@@ -355,9 +353,9 @@ export function createAnydocDocumentParser(opts: AnydocParserOptions = {}): Docu
   return {
     kind: 'document',
     extensions,
-    // Every format here is a binary container (a zip, an OLE stream, a PDF) or a
-    // text format whose encoding anydoc detects itself, which is strictly better
-    // than letting the walker assume utf8.
+    // Every format here is a binary container (a zip, an OLE stream) or a text
+    // format whose encoding anydoc detects itself, which is strictly better than
+    // letting the walker assume utf8.
     binaryExtensions: extensions,
     async parseDocument({ path: filePath, content }): Promise<ParsedDocument> {
       if (typeof content === 'string') {
@@ -393,8 +391,8 @@ export function createAnydocDocumentParser(opts: AnydocParserOptions = {}): Docu
       try {
         md = await toMarkdownBytes(content, format);
       } catch (err) {
-        // Corrupt, encrypted, mislabeled, or scanned-PDF input is ordinary in a
-        // real corpus and must not cost the run an error.
+        // Corrupt, encrypted or mislabeled input is ordinary in a real corpus and
+        // must not cost the run an error.
         if (onFailure === 'warn') {
           warn(
             `"${filePath}" could not be converted (${(err as Error).message}); recorded with ` +
@@ -410,7 +408,7 @@ export function createAnydocDocumentParser(opts: AnydocParserOptions = {}): Docu
         if (onFailure === 'warn') {
           warn(
             `"${filePath}" converted to no text — recorded with no searchable content. ` +
-              `A scanned or image-only document needs OCR to be findable.`,
+              `An image-only or empty document needs OCR to be findable.`,
           );
         }
         return markdown.parse('');

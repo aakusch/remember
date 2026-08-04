@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { DocumentParser, ParsedDocument } from '../types.js';
 import { createRemarkParser } from './remark.js';
+import { createPdfDocumentParser, type PdfParserOptions } from './pdf.js';
 import {
   ANYDOC_FORMAT_NAMES,
   createAnydocDocumentParser,
@@ -8,10 +9,10 @@ import {
   type AnydocParserOptions,
 } from './anydoc.js';
 
-export const SUPPORTED_FORMATS = ['md', ...ANYDOC_FORMAT_NAMES] as const;
+export const SUPPORTED_FORMATS = ['md', 'pdf', ...ANYDOC_FORMAT_NAMES] as const;
 export type FormatName = (typeof SUPPORTED_FORMATS)[number];
 
-/** True for every format `@firecrawl/anydoc` converts — i.e. everything but md. */
+/** True for every format `@firecrawl/anydoc` converts — everything but md and pdf. */
 function isAnydocFormat(name: FormatName): name is AnydocFormatName {
   return (ANYDOC_FORMAT_NAMES as readonly string[]).includes(name);
 }
@@ -23,6 +24,7 @@ export interface FormatRouterOptions {
    * load-bearing, not cosmetic.
    */
   formats?: FormatName[];
+  pdf?: PdfParserOptions;
   /**
    * Applies to every anydoc-backed format at once: they share one parser
    * instance so the native module is imported and memoized once.
@@ -102,7 +104,12 @@ export function createFormatRouter(opts: FormatRouterOptions = {}): FormatRouter
   const binaryExtensions: string[] = [];
 
   for (const name of ordered) {
-    const parser = name === 'md' ? createMarkdownDocumentParser() : anydoc();
+    const parser =
+      name === 'md'
+        ? createMarkdownDocumentParser()
+        : name === 'pdf'
+          ? createPdfDocumentParser(opts.pdf ?? {})
+          : anydoc();
     const binary = new Set(parser.binaryExtensions.map((e) => e.toLowerCase()));
     for (const rawExt of parser.extensions) {
       const ext = rawExt.toLowerCase();

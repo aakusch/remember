@@ -179,6 +179,36 @@ describe('multi-format indexing (real pipeline, asserted against the DB)', () =>
     expect(sources).not.toContain('decks/broken.pptx');
   });
 
+  it('populates heading_path in the DB for a PDF', async () => {
+    // PDF goes through parsers/pdf.ts (pdf-inspector), not anydoc — its
+    // font-size-ratio heading detection emits the ATX markers the chunker needs.
+    const target = path.join(contentRoot, 'platform/runbook.pdf');
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(path.join(FIXTURES, '../runbook.pdf'), target);
+
+    const indexer = await buildIndexer(['md', 'pdf']);
+    expect((await indexer.indexAll(contentRoot)).files_indexed).toBe(1);
+
+    const paths = headingPathsFor('platform/runbook.pdf');
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths.some((p) => p.length > 0)).toBe(true);
+  });
+
+  it('records a scanned PDF as an empty page instead of failing the run', async () => {
+    // The behaviour anydoc could not give us: a scanned PDF is classified, named
+    // in a warning, and recorded — not surfaced as an indexing error.
+    await fs.writeFile(path.join(contentRoot, 'readme.md'), '# Readme\n\nStill here.');
+    await fs.writeFile(path.join(contentRoot, 'scan.pdf'), 'not really a pdf');
+
+    const indexer = await buildIndexer(['md', 'pdf']);
+    const result = await indexer.indexAll(contentRoot);
+    expect(result.files_indexed).toBe(2);
+    expect(result.errors).toEqual([]);
+    const sources = new Set(readChunks().map((r) => r.source_path));
+    expect(sources).toContain('readme.md');
+    expect(sources).not.toContain('scan.pdf');
+  });
+
   it('skips unchanged office files on re-run (hash covers the real bytes)', async () => {
     await copyFixture('access-control.odt', 'security/access-control.odt');
     await copyFixture('incident-deck.pptx', 'decks/incident-deck.pptx');

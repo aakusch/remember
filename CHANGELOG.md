@@ -9,8 +9,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
 
 - **Multi-format ingestion** via [`@firecrawl/anydoc`](https://github.com/firecrawl/anydoc)
   (MIT, local Rust/napi — no network, no API key, no model): `.docx`/`.doc`/`.docm`,
-  `.pdf`, PowerPoint (`.ppt`/`.pptx`/…), Excel (`.xls`/`.xlsx`/…), OpenDocument
-  (`.odt`/`.ods`/`.odp`), `.rtf`, `.epub`, and `.csv`. Every format converts to
+  PowerPoint (`.ppt`/`.pptx`/…), Excel (`.xls`/`.xlsx`/…), OpenDocument
+  (`.odt`/`.ods`/`.odp`), `.rtf`, `.epub`, and `.csv` — plus `.pdf` through
+  [`@firecrawl/pdf-inspector`](https://github.com/firecrawl/pdf-inspector).
+  Every format converts to
   markdown, so document headings populate `heading_path` and drive section-aware
   chunking exactly as markdown does.
 
@@ -22,7 +24,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
   export default { index: { formats: ['md', 'pdf', 'docx', 'pptx'] } };
   ```
   ```bash
-  npm install @firecrawl/anydoc
+  npm install @firecrawl/anydoc          # office formats
+  npm install @firecrawl/pdf-inspector   # pdf
   ```
 
   `index.formats` **defaults to `['md']`**, so an existing install is unchanged
@@ -30,9 +33,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
   the committed deterministic gate: `recall@1/5/10` `0.507/0.853/0.927`, MRR
   `0.853`, `corpus_hash` unchanged.
 
+  PDF gets its own parser rather than riding anydoc's, because pdf-inspector
+  reports page classification, per-page OCR flags, font-encoding warnings and a
+  recoverable document title — so a PDF that cannot be read tells you *why*.
+
   Scope, stated plainly: **native-text PDFs only** — a scanned or image-only PDF
   needs OCR, so it is recorded with no searchable text and named in a warning,
-  and the engine never calls a cloud OCR service. Spreadsheets index as one line
+  and the engine never calls a cloud OCR service. A `Mixed` PDF indexes the text
+  pages it has. Text extracted from fonts with no `ToUnicode` map may be garbled;
+  that is reported as a warning and still indexed. Spreadsheets index as one line
   per row, so a large grid of bare numbers retrieves poorly. ODF presentations
   (`.odp`) carry no heading information, so their `heading_path` is empty where
   `.pptx` populates it. A corrupt or unreadable document degrades to an empty
