@@ -81,6 +81,9 @@ importers:
       '@firecrawl/anydoc':
         specifier: 0.1.2
         version: 0.1.2
+      '@firecrawl/pdf-inspector':
+        specifier: ^1.11.2
+        version: 1.12.0
       '@types/better-sqlite3':
         specifier: ^7.6.0
         version: 7.6.13
@@ -449,6 +452,46 @@ packages:
   '@firecrawl/anydoc@0.1.2':
     resolution: {integrity: sha512-9QTFO6GyeSPwxZMkHEk3b5XmeeKggAaJ+NoiEYeIVA8bJjWDBm49OlFA85ZJRydT9QC0pWuMdxAK3F6qhP805g==}
     engines: {node: '>= 20'}
+
+  '@firecrawl/pdf-inspector-darwin-arm64@1.12.0':
+    resolution: {integrity: sha512-6iOsh28po59EVoLyF4vtdps6pgoORak2e0sul4XIOY7QK/TdvWWB7Xsy05Nf7UvxYVgEFHkNQf10G2o1Sy9Rpg==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@firecrawl/pdf-inspector-linux-arm64-gnu@1.12.0':
+    resolution: {integrity: sha512-c25eoPAWmnREixGOXqecPv59Md5gQyu9lWqmOfh1cTpKB7CaRkpeLrDmm6DSVg6TUpLZ21vwgnE7q40eFupesA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@firecrawl/pdf-inspector-linux-arm64-musl@1.12.0':
+    resolution: {integrity: sha512-IbC4PuuTZu7jxzN9rRAavz1kFst8C5qHq0/A5LW3CaxiCPA2X1SW6PvJNjCBVQCUtXjqhAL3Qpb2gbqdp+Gzuw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@firecrawl/pdf-inspector-linux-x64-gnu@1.12.0':
+    resolution: {integrity: sha512-EaydxMqBQn0AUEpG0kcoPbXIxIAOZwVYPCRQ1yCRbqGDYaoEtjF/KKBi0heoc3TzcO4G3BxdBATDduHU+4lJxQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+
+  '@firecrawl/pdf-inspector-linux-x64-musl@1.12.0':
+    resolution: {integrity: sha512-Jg+zyPHmjMNqTULCx3+hv6BOOK0JYXUqJ4IbZJBnis+ZnA+u+Kg/GCSMVPWCIlZT8edqskXXOMLC3VlNrpGbqw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+
+  '@firecrawl/pdf-inspector-win32-x64-msvc@1.12.0':
+    resolution: {integrity: sha512-FeSrs6mAlY6nMq4qXWQDyd1ED1vwx99J7ZTs6ohFKlBCQ2i/64sFO9r0ZOsmddSq7cfxt4tCLSmXYLzRGF+tsQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
+  '@firecrawl/pdf-inspector@1.12.0':
+    resolution: {integrity: sha512-Gfn1ltmqyAwvrb+M46MwII0JZ7a1w1ZMItHMmJgC0aQmU8NoFJiP0YwTicm4pfc4dv3Upr7+shBqC9d/2QCwSw==}
+    hasBin: true
 
   '@hono/node-server@2.0.12':
     resolution: {integrity: sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg==}
@@ -2046,6 +2089,33 @@ snapshots:
       '@firecrawl/anydoc-linux-x64-gnu': 0.1.2
       '@firecrawl/anydoc-linux-x64-musl': 0.1.2
       '@firecrawl/anydoc-win32-x64-msvc': 0.1.2
+
+  '@firecrawl/pdf-inspector-darwin-arm64@1.12.0':
+    optional: true
+
+  '@firecrawl/pdf-inspector-linux-arm64-gnu@1.12.0':
+    optional: true
+
+  '@firecrawl/pdf-inspector-linux-arm64-musl@1.12.0':
+    optional: true
+
+  '@firecrawl/pdf-inspector-linux-x64-gnu@1.12.0':
+    optional: true
+
+  '@firecrawl/pdf-inspector-linux-x64-musl@1.12.0':
+    optional: true
+
+  '@firecrawl/pdf-inspector-win32-x64-msvc@1.12.0':
+    optional: true
+
+  '@firecrawl/pdf-inspector@1.12.0':
+    optionalDependencies:
+      '@firecrawl/pdf-inspector-darwin-arm64': 1.12.0
+      '@firecrawl/pdf-inspector-linux-arm64-gnu': 1.12.0
+      '@firecrawl/pdf-inspector-linux-arm64-musl': 1.12.0
+      '@firecrawl/pdf-inspector-linux-x64-gnu': 1.12.0
+      '@firecrawl/pdf-inspector-linux-x64-musl': 1.12.0
+      '@firecrawl/pdf-inspector-win32-x64-msvc': 1.12.0
 
   '@hono/node-server@2.0.12(hono@4.12.32)':
     dependencies:

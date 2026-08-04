@@ -10,12 +10,19 @@ no browser UI in this repo.** It is a real, useful search engine and the top of 
 
 The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
 doc-health, and HTML ingestion — is a **separate PRIVATE package and is not in this repo.**
-Do not reference, import, or assume any of it here. Note this boundary moved: office and PDF
-ingestion (via `@firecrawl/anydoc`) now ships here too, so "multi-format is pro-only" is
-**stale** wherever it still appears. HTML is still pro-only — this engine has no HTML parser.
-The pro engine's non-markdown handling is a *different* implementation (mammoth for docx,
-pdf-inspector directly for pdf, with page classification and OCR flags this engine does not
-have), so never describe the two as running the same ingestion.
+Do not reference, import, or assume any of it here.
+
+**This boundary moved, and older claims about it are stale.** Office *and* PDF ingestion now
+ship here, so "multi-format ingestion is pro-only" is wrong wherever it still appears.
+**HTML is the only format still pro-only** — this engine has no HTML parser, and that is not
+a licence to port the pro extractor. PDF is now the *same* implementation in both engines
+(`@firecrawl/pdf-inspector`, same parser, same page classification and OCR flags), and DOCX
+converged too (pro moved off mammoth onto anydoc at its own `PIPELINE_REV` 5).
+
+What still genuinely differs is **ranking quality and the surfaces around it** — the query
+path, the browser viewer, subwikis, scoped keys, doc-health — not the file formats. Never
+cite a pro-engine benchmark number as this engine's, and never claim the two run the same
+*engine*: ingestion overlapping is not ranking overlapping.
 
 Engine: hybrid **BM25 (SQLite FTS5) + vector (sqlite-vec, local BGE embeddings)** fused with
 **Reciprocal Rank Fusion**. One index, queried by people and agents over HTTP.
@@ -51,13 +58,19 @@ away.
 `benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
 fixture rather than mutating them.
 
-**Markdown by default; other formats are opt-in and there is exactly ONE other parser.**
-`parsers/remark.ts` handles markdown. Everything else — `.docx`/`.doc`/`.docm`, `.pdf`,
-PowerPoint, Excel, OpenDocument, `.rtf`, `.epub`, `.csv` — goes through
-`parsers/anydoc.ts` (`@firecrawl/anydoc`, MIT, an optional **peer** dep, lazy-imported,
-local Rust/napi, no network and no API key). Do **not** add a third parser: anydoc emits
-GFM markdown for every format, so a new format is an entry in
-`ANYDOC_FORMAT_EXTENSIONS`, not a new extraction implementation.
+**Markdown by default; other formats are opt-in, and there are exactly THREE parsers.**
+`parsers/remark.ts` handles markdown. `parsers/pdf.ts` handles `.pdf` via
+`@firecrawl/pdf-inspector`. Everything else — `.docx`/`.doc`/`.docm`, PowerPoint, Excel,
+OpenDocument, `.rtf`, `.epub`, `.csv` — goes through `parsers/anydoc.ts`
+(`@firecrawl/anydoc`). Both natives are MIT, optional **peer** deps, lazy-imported, local
+Rust/napi — no network, no API key, no model.
+
+Do **not** add a fourth parser, and do **not** collapse pdf into anydoc. Both emit markdown,
+so a *new* format is an entry in `ANYDOC_FORMAT_EXTENSIONS`, not a new extraction
+implementation. PDF is separate on purpose: pdf-inspector exposes page classification
+(`TextBased`/`Scanned`/`ImageBased`/`Mixed`), per-page OCR flags, font-encoding warnings and
+a recoverable document title. anydoc wraps the *same library* and surfaces none of it — it
+raises an unsupported error for a scanned PDF instead of reporting why the text is missing.
 
 `index.formats` defaults to `['md']`, and that default is load-bearing: an unconfigured
 install walks, parses and indexes exactly what it did before. Verified — the `ci` gate
@@ -73,10 +86,17 @@ Notes that will bite if you miss them:
   flattens tables to `a | b | c` rows, strips list markers, backslash-escapes a leading `#`
   in flattened cell text (else a cell becomes a phantom heading), and collapses the title
   EPUB carries twice. Do not "simplify" it by feeding raw anydoc output to remark.
-- **anydoc throws on bad data** ("unsupported input: …") for corrupt, mislabeled, and
-  scanned/image-only PDFs. `parsers/anydoc.ts` catches all of it and degrades to an empty
-  recorded page plus a warning naming the file. Keep that contract: an ordinary scanned PDF
-  must not turn into an indexing error.
+- **anydoc throws on bad data** ("unsupported input: …") for corrupt and mislabeled files.
+  `parsers/anydoc.ts` catches all of it and degrades to an empty recorded page plus a warning
+  naming the file. `parsers/pdf.ts` holds the same never-throw contract for scanned, corrupt
+  and encrypted PDFs. Keep both: an ordinary scanned PDF must not turn into an indexing
+  error.
+- **PDF is native-text only.** `Scanned`/`ImageBased` need OCR (out of scope) and are
+  recorded as empty pages with a warning naming the file; `Mixed` indexes its text pages and
+  notes the rest. `pagesNeedingOcr` is a per-page *reliability* flag, NOT a "content dropped"
+  signal — pdf-inspector sets it on clean text PDFs too — so it drives no warning; only an
+  empty extraction does. `PdfParserOptions.maxBytes` (20 MiB) bounds the *synchronous,
+  uninterruptible* native parse.
 - **The hosted `/parse` OCR fallback is deliberately not wired.** It is a cloud call, and
   this engine's conversion stays local.
 - **Spreadsheets and `.odp` retrieve poorly by nature**, not by bug. A sheet is one line per
