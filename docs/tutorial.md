@@ -1,23 +1,43 @@
 # Tutorial
 
-A hands-on walkthrough that takes about 15 minutes. By the end you'll have a working wiki, indexed content, a custom view, a connector pulling external data, and an AI agent answering questions against it.
+A hands-on walkthrough that takes about 15 minutes. By the end you'll have a working wiki, indexed content, external content brought in as markdown, and an AI agent answering questions against it — all from the terminal and the HTTP API.
 
-> **Prerequisites:** Node 20+, pnpm 9+ (or npm), and a terminal.
+> **Prerequisites:** Node 20+, npm (pnpm 9+ / yarn work too), and a terminal.
+>
+> The open-source engine is **CLI + API only** — there is no browser UI. (The browser viewer/editor is a **Pro** feature.)
 
 ## 1. Install
 
 ```bash
 npx @useremember/core init my-wiki
 cd my-wiki
-pnpm install
-pnpm dev
+npm install    # pnpm / yarn work too
+npm run dev
 ```
 
-The first `pnpm dev` will start both processes: the core API on `:4320` and the viewer on `:4321`. The first reindex downloads the local ONNX embedding model (~80 MB) to `~/.cache/huggingface/` — subsequent runs are fast.
+`npm run dev` indexes the starter wiki and serves the agent HTTP API on `:4320`
+with a live file watcher. The first index downloads the local ONNX embedding
+model (`BAAI/bge-small-en-v1.5`, ~100 MB) via the optional
+`@huggingface/transformers` dependency and caches it — subsequent runs are
+offline. If that dependency is missing you'll see a loud placeholder-embedder
+warning; install it with `npm install @huggingface/transformers` or set
+`OPENAI_API_KEY`.
 
-Open **<http://localhost:4321>** in your browser. You should see the landing page with three pages already in the sidebar (`README`, `getting-started`, `examples/with-frontmatter`).
+Confirm it's up from another terminal:
 
-![Home page](./images/01-home.png)
+```bash
+remember status                        # index dashboard: pages, chunks, model
+remember search "getting started" -k 5 # ranked result cards
+curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.2.6"}
+```
+
+> `remember` lives in the project's `node_modules/.bin`. Prefix the commands
+> below with `npx --no-install` (or `pnpm exec`) — e.g.
+> `npx --no-install remember status` — unless you installed it globally with
+> `npm i -g @useremember/core`. Avoid a plain `npx remember` outside the
+> project directory: it fetches an unrelated npm package named `remember`.
+
+The starter wiki ships with three pages (`getting-started`, `agents`, `authoring`).
 
 ## 2. Add a page
 
@@ -52,21 +72,23 @@ When you need to ship to production safely.
 MD
 ```
 
-The filesystem watcher catches the new file within ~500 ms. The viewer's open tabs auto-refresh via Server-Sent Events. Browse to **<http://localhost:4321/deploy-runbook>** to see it rendered with breadcrumbs, tag pills, TOC, and the Edit button.
+The filesystem watcher catches the new file within about a second and reindexes
+it incrementally. Confirm it landed:
 
-![Page detail](./images/02-page-detail.png)
+```bash
+remember search "deploy runbook" -k 3
+```
 
 ## 3. Search it
 
-Three patterns:
+Two patterns:
 
-**Browser** — search bar at the top of every page:
+**CLI** — ranked result cards straight in your terminal:
 
+```bash
+remember search "how do I deploy" -k 5
+# add --json for clean machine output, or --open to open the top hit in $EDITOR
 ```
-how do I deploy
-```
-
-![Search results](./images/03-search.png)
 
 **HTTP API** — for AI agents, scripts, anything that speaks JSON:
 
@@ -114,101 +136,104 @@ curl http://localhost:4320/v1/tools
 ```
 
 Drop the response into your LLM's tool-use call. Three tools: `search_wiki`, `get_page`, `list_pages`.
+Prefer native MCP? `remember mcp` serves the same tools (plus `write_page`) to any MCP client over stdio.
 
-## 4. Edit in the browser
+## 4. Edit your pages
 
-Click ✎ Edit on any page (or visit `/admin/edit/<path>`). The editor has source on the left, live preview on the right. Type `/` at the start of a line for the slash command palette — 20 commands including:
+Your wiki is plain markdown in `content/` — edit it in any editor (VS Code,
+Obsidian, `vim`) and the filesystem watcher reindexes changed files within a
+second. Nothing else to learn.
 
-- `/h1` `/h2` `/h3` `/h4` — headings
-- `/bullet` `/numbered` `/todo` — list types
-- `/code` `/code-ts` `/code-py` `/code-sh` — code blocks (with language)
-- `/quote` `/table` `/hr` — block elements
-- `/link` `/image` — inline references
-- `/math` `/mermaid` — diagrams
-- `/frontmatter` — scaffolds a YAML block
+Agents and scripts can also write through the API. `PUT /v1/pages/<path>` takes
+a JSON body — `{ "body": "<full markdown, including frontmatter>" }`:
 
-![Editor with slash menu](./images/08-editor-slash.png)
+```bash
+# Write (or overwrite) a page and reindex it
+curl -X PUT 'http://localhost:4320/v1/pages/notes/scratch.md' \
+  -H 'Content-Type: application/json' \
+  -d '{"body": "---\ntitle: Scratch\n---\n\n# Scratch\n\nSome notes.\n"}'
 
-Arrow keys navigate the list, Enter or Tab inserts, Escape closes. Type to filter (`/co` narrows to code blocks). The caret lands inside the inserted scaffold where you'll want to keep typing (`/code` drops you between the fence lines, `/link` drops you between the `()`).
-
-**Save with `⌘/Ctrl+S`** — same as clicking Save.
-
-## 5. Configure via the setup wizard
-
-`/admin/setup` is an interactive `remember.config.ts` builder. It detects your loaded config, lets you tweak fields, and flags every changed field with a "CHANGED" pill so you can see exactly what's different from what's running.
-
-![Setup wizard](./images/06-setup-wizard.png)
-
-Four preset profiles to start from:
-
-- **Local quickstart** — `BAAI/bge-small-en-v1.5`, localhost-only, no token
-- **Lightweight local** — `mxbai-embed-xsmall-v1` (~30 MB) for low-RAM machines
-- **OpenAI-powered** — flips to OpenAI embeddings (uses `OPENAI_API_KEY` env var)
-- **Team / remote access** — host `0.0.0.0`, auto-generated 32-hex admin token
-
-Click **Save to disk** to write the new config (with a timestamped `.bak` backup). Then restart `remember start` to pick up the changes.
-
-## 6. Build a custom view
-
-Frontmatter is queryable. Visit `/admin/views` for a sortable, filterable table over your corpus.
-
-![Table view](./images/05-table-view.png)
-
-Try these:
-
-```
-/admin/views?filter[tags]=runbook
-/admin/views?filter[owner]=platform&sort=severity
-/admin/views?filter[status]=stable&columns=path,title,tags,owner&sort=-modified
+# Move/rename, or delete
+curl -X POST 'http://localhost:4320/v1/pages/move' \
+  -H 'Content-Type: application/json' \
+  -d '{"from":"notes/scratch.md","to":"notes/kept.md"}'
+curl -X DELETE 'http://localhost:4320/v1/pages/notes/kept.md'
 ```
 
-Filter rules AND together. Sort by any system column (`path`, `modified`, `title`, `size`, `last_indexed`) or any frontmatter key (use `-key` for descending). Pick columns via the comma-separated input. Bookmark the URL — that's your saved view.
+Two rules to remember:
 
-Four built-in preset views at the bottom of the page:
+- **POST and PUT require `Content-Type: application/json`** (a cross-site
+  request guard) — a raw markdown body with a non-JSON content type is
+  rejected, and so is curl's default form encoding, so always pass the header.
+- **Page paths keep their real slashes** — `GET /v1/pages/ops/deploy.md`, with
+  the `/` separators literal. Percent-encoding them 404s.
 
-- **Runbooks by severity** — all pages tagged `runbook`, sorted by severity
-- **ADRs newest first** — architecture decision records by date
-- **Platform-owned** — everything owned by the platform team
-- **Recently modified** — latest 30 pages by modification time
+Writes from a non-loopback origin require `REMEMBER_ADMIN_TOKEN`
+(`Authorization: Bearer <token>`).
 
-## 7. Wire up a connector
+## 5. Configure
 
-Connectors pull external markdown sources into your index. Edit `remember.config.ts`:
+Configuration lives in `remember.config.ts`, a typed file you edit directly.
+Every field has a default, so change only what you need. A few useful knobs:
 
-```ts
-import { defineConfig, defaults } from '@useremember/core';
+- **Lighter embedding model** — `defaults.embedder.localOnnx({ model: 'mixedbread-ai/mxbai-embed-xsmall-v1' })` for low-RAM machines.
+- **OpenAI embeddings** — set `OPENAI_API_KEY` (the embedder switches automatically).
+- **Remote access** — set `server.host` to `0.0.0.0` and provide an admin token (see [step 9](#9-run-in-production)).
 
-export default defineConfig({
-  // ...
-  connectors: [
-    defaults.connector.obsidian({
-      vaultPath: '~/Documents/Obsidian Vault',
-      transformWikilinks: true,
-      tag: 'obsidian',
-    }),
-  ],
-});
+Restart `remember start` (or `remember dev`) to pick up config changes.
+`GET /v1/config` returns the loaded config (read-gated); config is written only
+on disk — there is no config-write HTTP endpoint.
+
+## 6. Query by frontmatter
+
+Frontmatter is stored and queryable through `GET /v1/pages` — filter, sort, and
+page over your whole corpus:
+
+```bash
+curl 'http://localhost:4320/v1/pages?filter[tags]=runbook'
+curl 'http://localhost:4320/v1/pages?filter[owner]=platform&sort=severity'
+curl 'http://localhost:4320/v1/pages?filter[status]=stable&sort=-modified&limit=20'
 ```
 
-Restart `remember start`. On boot, the connector manager runs an initial sync — your Obsidian vault gets copied to `content/external/obsidian/`, `[[wikilinks]]` are rewritten to `[text](./slug)` form, and a `tag: obsidian` is injected into every page's frontmatter so you can filter on it.
+Filter rules AND together. Sort by any system column (`path`, `modified`,
+`title`, `size`, `last_indexed`) or any frontmatter key (use `-key` for
+descending). `GET /v1/attrs` lists the distinct frontmatter keys available to
+filter on. An agent uses exactly these endpoints to narrow before it reads.
 
-Manage connectors at `/admin/connectors`:
+## 7. Bring in external content
 
-![Connectors page](./images/07-connectors.png)
+`remember` ships **no built-in connectors** on purpose — your agent is the
+connector. To pull in an external source (meeting notes, another tool's vault,
+an export), your AI agent (or you) fetches it, converts it to markdown, and
+writes it into `content/`. Two ways to land it:
 
-Each card shows the kind, target directory, configured state, last sync time, and a sync-now button. The Granola connector works the same way but pulls from an HTTP API:
+**Write a file** — the watcher indexes it within a second:
 
-```ts
-defaults.connector.granola({
-  apiUrl: process.env.GRANOLA_API_URL,
-  apiKey: process.env.GRANOLA_API_KEY,
-  since: '2026-01-01',
-  tag: 'meeting',
-  includeTranscript: false,
-}),
+```bash
+cat > content/external/weekly-sync.md <<'MD'
+---
+title: Weekly sync — 2026-08-01
+tags: [meeting]
+---
+
+# Weekly sync
+
+Decisions and action items from the call…
+MD
 ```
 
-The generic `filesystem` connector accepts any source path — useful for plain-folder syncs from team shares, exported notebooks, etc.
+**Or over HTTP** — `PUT /v1/pages/<path>` with a JSON body and the admin token:
+
+```bash
+curl -X PUT 'http://localhost:4320/v1/pages/external/weekly-sync.md' \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $REMEMBER_ADMIN_TOKEN" \
+  -d '{"body": "---\ntitle: Weekly sync — 2026-08-01\ntags: [meeting]\n---\n\n# Weekly sync\n\nDecisions and action items…"}'
+```
+
+Either way it's plain markdown in `content/` — searchable in about a second and
+yours to edit like any other page. Managed, turnkey connectors are a **Pro**
+concern, not part of this engine.
 
 ## 8. Plug in an AI agent
 
@@ -241,7 +266,9 @@ for (const block of message.content) {
       const r = await fetch(`http://localhost:4320/v1/search?q=${encodeURIComponent(block.input.query)}&k=${block.input.k ?? 5}`);
       result = await r.json();
     } else if (block.name === 'get_page') {
-      const r = await fetch(`http://localhost:4320/v1/pages/${encodeURIComponent(block.input.path)}?format=text`);
+      // Keep the / separators literal — percent-encoding them 404s.
+      const pagePath = block.input.path.split('/').map(encodeURIComponent).join('/');
+      const r = await fetch(`http://localhost:4320/v1/pages/${pagePath}?format=text`);
       result = await r.text();
     } else if (block.name === 'list_pages') {
       const r = await fetch(`http://localhost:4320/v1/pages?limit=${block.input.limit ?? 50}`);
@@ -252,7 +279,7 @@ for (const block of message.content) {
 }
 ```
 
-No special integration on the wiki side — `remember` is just an HTTP server, and the tool definitions are auto-generated.
+No special integration on the wiki side — `remember` is just an HTTP server, and the tool definitions are auto-generated. For clients that speak MCP, `remember mcp` exposes the same tools over stdio with no HTTP server at all.
 
 ## 9. Run in production
 
@@ -281,12 +308,12 @@ The server refuses non-loopback binds without `REMEMBER_ADMIN_TOKEN` set, and th
 
 After this tutorial you have:
 
-- A running wiki at `http://localhost:4321`
+- A running agent API at `http://localhost:4320`
 - 4 pages indexed (3 starter + your `deploy-runbook.md`)
-- Hybrid search returning results from both BM25 and vector retrievers
-- A custom config built via the setup wizard
-- A saved view URL bookmarkable for any frontmatter filter
-- A connector pulling external content into the same index
+- Hybrid search returning results from both BM25 and vector retrievers, from the CLI and over HTTP
+- A hand-edited `remember.config.ts`
+- Frontmatter queries over `/v1/pages` for any filter/sort you need
+- External content pulled into the same index as plain markdown
 - An AI agent that can search and read pages via `/v1/tools`
 
 ## Next

@@ -176,27 +176,31 @@ paragraph declare the document dead.
 
 Stated plainly so nobody over-trusts this document:
 
-1. **`status` is not consumed by ranking today.** `SearchResult.frontmatter` is
-   parsed and returned, and the `/v1/pages` API can filter on it, but no scoring
-   stage reads it. Authoring `status` today makes the fix possible and lets
-   consumers filter (see [`agent-search-guide.md`](./agent-search-guide.md)); it
-   does not currently change result order by itself.
+1. **`status`-based ranking exists but is off by default.** `SearchResult.frontmatter`
+   is parsed and returned, and the `/v1/pages` API can filter on it. A scoring
+   stage, `applyStatusDemotion`, *does* read it (it demotes declared-stale docs —
+   measured rank-1 stale `54%`→`8%` on the confusables fixture), but it **defaults
+   to off** because its generalisation to corpora without `status` frontmatter is
+   unproven. So by default, authoring `status` today lets consumers filter and
+   demote in-agent (see [`agent-search-guide.md`](./agent-search-guide.md)) and
+   arms the opt-in demoter; it does not change result order until you enable it.
 2. **The staleness measurement is partly self-fulfilling.** The 54% figure comes
    from `examples/confusable-wiki`, a 20-document fixture authored *with* clean
    status frontmatter and explicit deadness paragraphs. It demonstrates that the
    engine ignores authority signals that are present; it does not prove that a
    messy real corpus becomes clean by adopting this standard. Real corpora have
    missing fields, lying fields, and documents nobody has touched in three years.
-3. **The dedicated heading signal is not live in the default pipeline.** The
-   default parser (`packages/core/src/parsers/remark.ts`) flattens markdown to
-   plain text with `mdast-util-to-string` before the chunker runs, which strips
-   `#` markers and line breaks. `splitByHeadings` matches `/^#{1,6}\s+/`, so with
-   that parser `heading_path` comes back empty and `applyHeadingBoost` is a
-   no-op. Heading and title text still help — they remain in the chunk body where
-   BM25 and the embedder see them, which is the mechanism behind the 32-point
-   gap on a corpus whose filenames are numeric IDs. Write headings anyway: they
-   cost nothing, they are what makes chunks self-contained, and the scoring seam
-   is already wired for when the parser preserves structure.
+3. **`heading_path` is now populated — but this was recently a silent bug.**
+   Earlier builds flattened markdown with `mdast-util-to-string` before chunking,
+   which stripped `#` markers and left `heading_path` empty for *every* chunk,
+   making `applyHeadingBoost` an inert no-op. The parser
+   (`packages/core/src/parsers/remark.ts`) now re-emits ATX heading markers, so
+   the chunker's `/^#{1,6}\s+/` split builds a real `heading_path` and
+   `applyHeadingBoost` is live again. Heading and title text also stay in the
+   chunk body where BM25 and the embedder see them directly — that dual path is
+   the mechanism behind the 32-point gap on a corpus whose filenames are numeric
+   IDs. Write meaningful headings: they now drive the boost, they keep chunks
+   self-contained, and they cost nothing.
 4. **The BEIR fixtures are subsets.** Absolute scores are not comparable to
    published leaderboard numbers; only deltas on the same fixture are meaningful.
    The 32-point gap is a same-engine, same-scale comparison, which is the claim

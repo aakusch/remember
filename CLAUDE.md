@@ -1,96 +1,99 @@
-# remember — notes for the next agent
+# CLAUDE.md — remember (open-source engine)
 
-Open-core retrieval engine over a team's markdown knowledge base, queried by AI
-agents. `packages/core` is the engine and CLI; `packages/viewer` is the UI.
+Operating brief for an agent working in this repo. Read this before editing.
 
-**Read first:** [`docs/retrieval-review-request.md`](docs/retrieval-review-request.md).
-It carries the current state, the measured numbers, the lessons learned, what we
-explicitly *do not* trust about our own results, and the open questions. Start
-there before forming an opinion about the engine.
+## What this is
 
-Then, as needed:
-- `docs/architecture.md` — overall shape
-- `packages/core/src/search/hybrid.ts` — the entire query path in one file
-- `benchmarks/retrieval/README.md` — what each fixture measures and its limits
-- `docs/authoring-for-retrieval.md` — how documents must be written to be findable
-- `docs/agent-search-guide.md` — how a calling agent should use the API
+`@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`.
+The latest published npm release is `0.2.6` (public); the in-tree version is `0.3.0`, which
+is **staged but not yet published** (it removes the built-in connectors — a breaking change —
+so it needs a deliberate release). Local-first, **CLI + HTTP API only — there is no browser
+UI in this repo.** It is a real, useful search engine and the top of the funnel.
+
+The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
+doc-health, and multi-format (HTML/DOCX) ingestion — is a **separate PRIVATE package and is
+not in this repo.** It is a distinct proprietary engine built on top of this core, not the
+same binary — do not reference, import, or assume any of it here, and never claim Pro/Cloud
+run "the same engine."
+
+Engine: hybrid **BM25 (SQLite FTS5) + vector (sqlite-vec, local BGE embeddings)** fused with
+**Reciprocal Rank Fusion**. One index, queried by people and agents over HTTP.
+
+`packages/core` is the whole thing: `cli/`, `api/`, `search/` (the query path — start at
+`search/hybrid.ts`), `indexer/`, `stores/` (sqlite-vec), `parsers/`, `embedders/`, `chunkers/`,
+`benchmarks/`. CLI commands: `setup · init · index · search · list · get · status · doctor ·
+mcp · tools · capabilities · dev · start · benchmark`. `remember dev` runs the API with
+file-watch (reindex within ~1s); `remember mcp` serves the wiki to MCP clients over stdio —
+**CLI + API only, no browser UI**.
+
+**No built-in connectors.** Ingestion is deliberately not the engine's job: the wiki is plain
+markdown, so the user's agent (or the user) writes markdown into `content/` — pulling from Granola,
+Obsidian, exports, etc. Managed/turnkey connectors are a *Pro* concern. Do not add source-specific
+connectors (Granola API, Obsidian sync) back into this repo. See `content/remember.md`'s
+"bring content in" section for the agent-as-connector pattern.
 
 ## Hard rules
 
-**Never edit `examples/sample-wiki/content/` or
-`benchmarks/retrieval/sample-wiki.questions.jsonl`.** Committed baseline
-artifacts pin their `corpus_hash` and `questions_hash`. That fixture is the
-deterministic CI gate. Create a new fixture instead.
+**The honesty contract is load-bearing — never soften it.** The engine *does not know when it
+does not know*: a returned result is **ranked text for the query, not evidence that an answer
+exists**, and `score` is a **fused rank score, not a probability** (comparable within one
+result set, meaningless across queries). This is stated in the CLI output and the API — keep
+the wording consistent across the CLI, the `/v1/search` response + OpenAPI description, and the
+README. Publishing the engine's limits is deliberate positioning, not a rough edge to polish
+away.
 
-**Every performance or quality claim needs a committed benchmark artifact.** This
-repo's standard is evidence over assertion. Negative results get committed too —
-see `3da0b63`, whose commit message says the feature does not work. Do not
-describe something as improved without a before/after artifact in
-`benchmarks/results/`.
+**Evidence over assertion for anything ranking-related.** `rrfK` defaults to **10**
+(`search/hybrid.ts`). Every performance/quality claim needs a committed artifact under
+`benchmarks/results/`; negative results get committed too. Do not change the default ranking,
+`rrfK`, or the fusion weights without a before/after artifact proving it.
 
-**Bump `PIPELINE_REV` in `packages/core/src/cli/commands/benchmark-cmd.ts`
-whenever you change anything on the indexing path** (parser, chunker, indexer).
-The index cache keys on corpus + embedder + chunker options, so an indexing-path
-change without a rev bump silently reuses stale indexes and reports confident
-wrong numbers.
+**Do not edit the committed benchmark fixture.** `examples/sample-wiki/content/` and
+`benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
+fixture rather than mutating them.
 
-## Benchmarking
+**Markdown only.** The only parser is `parsers/remark.ts`. HTML/DOCX ingestion is a *pro*
+feature and is deliberately not in this engine — don't add a second parser here.
+
+## Things that look inert but are intentional — do NOT "tidy" them
+
+- **`query-planners/passthrough.ts` and `rerankers/none.ts`** are deliberate no-op seams: the
+  query path is built so a real planner / cross-encoder reranker *could* slot in, and the OSS
+  engine ships the passthrough/none versions on purpose. Don't delete the seams or the
+  `@deprecated`/placeholder markers in `search/`.
+- **`lexicalTieBreak`** (`search/hybrid.ts`, default `false`) is an opt-in tie-breaker that only
+  reorders exact fused-score ties. It is off by default **on evidence** (measured net-neutral on
+  the bundled corpus). Don't flip the default without a benchmark on harder fixtures.
+
+## The `/v1/search` contract
+
+Each result carries a fixed field set — `path, title, snippet, score, frontmatter,
+heading_path, retrievers, chunk_id` — enforced by a whitelist projection, not a spread of the
+internal result. Don't widen it casually. `GET /v1/capabilities` (and `remember capabilities`)
+expose a stable, versioned discovery object for agents from one source of truth — keep it in
+step with what the engine actually does.
+
+## Open-core boundary
+
+This repo is the **MIT basic engine** and stays that way. When a sibling repo's copy says
+"`@useremember/core` is MIT," that is a true statement about **this** package — don't "fix" it
+to something else. Keep pro-only concepts out of this codebase and its docs.
+
+## Roadmap SSOT (maintainers)
+
+The cross-product roadmap that spans OSS, Pro, and Cloud lives in the **private**
+`remember-internal` repo at `product/roadmap-internal.md` — that is the source of truth for
+prioritization, and it does **not** belong in this public repo. Public-facing roadmap signals
+that *do* live here: `CHANGELOG.md` (wave-by-wave shipped history) and the GitHub issue
+tracker. Note: `CHANGELOG.md` currently trails the code — it stops at `0.2.3` and needs
+`0.2.4`–`0.3.0` entries (doctor, setup, mcp, connector removal, optional-peer embeddings).
+
+## Dev / build / test
 
 ```bash
-pnpm --filter @useremember/core benchmark -- \
-  --profile fast --candidate-k 20 \
-  --corpus <dir> --questions <jsonl> \
-  --index-cache benchmarks/datasets/.index-cache
+pnpm install
+pnpm build       # tsc
+pnpm typecheck
+pnpm test        # full suite
+# benchmark harness:
+pnpm --filter @useremember/core benchmark -- --help
 ```
-
-Committed baselines in `benchmarks/results/` were generated at `candidate_k = 20`
-(the CLI default). Always match `candidate_k` when comparing against them — a
-delta across mismatched `candidate_k` is bogus. Runs at other values are fine
-for studies, but label them and never diff them against the k=20 baselines.
-
-Flags: `--profile ci|fast`, `--corpus`, `--questions`, `--k`, `--candidate-k`,
-`--rrf-k`, `--bm25-weight`, `--vector-weight`, `--status-demotion`, `--pooling`,
-`--query-prefix`, `--reranker`, `--reranker-model`, `--index-cache`,
-`--compare`, `--fail-on-regression`, `--output`.
-
-- `ci` uses a deterministic hash embedder — reproducible, semantically
-  meaningless. Never quote its scores as quality.
-- `fast` uses local BGE and is the real signal. **Always pass `--index-cache`**
-  or you re-embed for ~15 minutes per 20k-document fixture.
-- BEIR fixture corpora are generated and gitignored; rebuild with
-  `benchmarks/datasets/beir-fixture.mjs build`. `selection.json` pins the exact
-  document set so `corpus_hash` reproduces.
-
-**zsh trap:** do not pass benchmark flags via an unquoted shell variable. zsh
-does not word-split, so the whole string arrives as one bogus argument, the run
-dies, and a `grep` on the output hides the error.
-
-## Reading the metrics
-
-`recall@k` is the fraction of *all* correct documents found, and many fixture
-questions have 2–3, so it understates practical usefulness. For product claims
-use **"at least one correct document in the returned set"** — that is what an
-agent consumer needs. `wrong_source_rate` is top-1 precision (or, for
-unanswerable queries, "returned anything at all"). `candidate_recall` is the
-ceiling: ranking can only reorder what retrieval found.
-
-## Things that look implemented but are inert
-
-Check before assuming a signal works:
-
-- **`QueryInput.intent`** — accepted by the API, threaded through core, recorded
-  in traces, consumed by nothing.
-- **Query planner** — seam exists, `createPassthroughQueryPlanner` returns the
-  query unchanged.
-- **Reranker** — passthrough by default. A cross-encoder exists but measured
-  net-negative; it stays opt-in.
-- **`applyStatusDemotion`** — implemented and effective (rank-1 stale 54% → 8%
-  on the confusables fixture) but **defaults to off**, because its generalisation
-  to corpora without `status` frontmatter is unproven.
-
-## Release state
-
-`@useremember/core@0.1.0` is published to npm with `rrfK=60`. This branch
-defaults to `10`, which is a behaviour change for every consumer and needs a
-minor bump before release. Committed v0.1.0 baseline artifacts predate that
-change and have not been regenerated.

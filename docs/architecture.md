@@ -1,21 +1,20 @@
 # Architecture
 
-A condensed view of how `remember` is built. The full design rationale lives in [`docs/superpowers/specs/2026-05-23-remember-platform-design.md`](./superpowers/specs/2026-05-23-remember-platform-design.md).
+A condensed view of how `remember` is built. For the retrieval pipeline in depth, see [`retrieval-intelligence.md`](./retrieval-intelligence.md).
 
-## Two packages, one monorepo
+## One package, one monorepo
 
 ```
 remember/
 ├─ packages/
-│  ├─ core/      @useremember/core    — headless engine
-│  └─ viewer/    @useremember/viewer  — Astro browser UI
+│  └─ core/      @useremember/core    — headless engine (CLI + HTTP API)
 └─ examples/
-   ├─ sample-wiki/   reference wiki used in tests + by remember init
-   └─ sample-vault/  mock Obsidian vault for the connector demo
+   └─ sample-wiki/   reference wiki used in tests + by remember init
 ```
 
-- **`@useremember/core`** is the engine. CLI + HTTP API + indexer + search + adapters. Node-only. Can be used standalone with any UI.
-- **`@useremember/viewer`** is the default browser UI. Astro 5 SSR + tiny inline scripts. Talks to core over HTTP/JSON + SSE. Optional — bring your own UI if you want.
+- **`@useremember/core`** is the whole open-source engine. CLI + HTTP API + indexer + search + adapters. Node-only. Standalone-usable — drive it from the terminal, from `curl`, or from any agent that speaks HTTP.
+
+> The browser viewer/editor is a **Pro** feature (a separate proprietary engine that adds a browser UI and quality levers on top of this same core) and lives outside this repository. The open-source engine is CLI + API only.
 
 ## Data flow
 
@@ -60,17 +59,18 @@ remember/
         │  └──────────────────────────────────────┘  │
         └────────────────┬──────────────────────────┘
                          │ HTTP/JSON + SSE
-                         ▼
-              ┌───────────────────────┐
-              │   @useremember/viewer    │
-              │   (Astro on :4321)    │
-              └───────────────────────┘
-                         ▲
-                         │
-                    ┌────┴────┐
-                    │ Browser │
-                    └─────────┘
+          ┌──────────────┼───────────────┐
+          ▼              ▼               ▼
+   ┌─────────────┐ ┌───────────┐ ┌───────────────┐
+   │ remember    │ │ curl /    │ │ AI agent via  │
+   │ CLI (search)│ │ any HTTP  │ │ /v1/tools     │
+   └─────────────┘ └───────────┘ └───────────────┘
 ```
+
+The filesystem watch that drives incremental reindex uses `chokidar` (in
+`api/start-server.ts`). The pipeline's `Walker` adapter — the one-shot corpus
+scan — is a plain recursive `fs` walk (`walkers/fs-walker.ts`); it does not use
+chokidar.
 
 ## Pipeline adapters
 
@@ -78,15 +78,14 @@ Every component of the indexing pipeline is an adapter with a documented interfa
 
 | Adapter | Interface | Default | Sub-export |
 |---|---|---|---|
-| `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | chokidar + ignore | `@useremember/core/walkers/chokidar` |
+| `Walker` | `walk(root): AsyncIterable<{path, content, mtime, sha256}>` | recursive fs walk + ignore | `@useremember/core/walkers/fs-walker` |
 | `Parser` | `parse(raw): {frontmatter, ast, plain}` | remark + gray-matter | `@useremember/core/parsers/remark` |
 | `Chunker` | `chunk(parsed): Chunk[]` | smart-split (900 tokens, 15% overlap) | `@useremember/core/chunkers/smart-split` |
-| `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai`, `/hash` |
+| `Embedder` | `embed(texts): number[][]` | local ONNX (`BAAI/bge-small-en-v1.5`) | `@useremember/core/embedders/local-onnx`, `/openai` |
 | `Store` | `upsert/delete/searchVector/searchBm25/getManifest/upsertPage/queryPages/listFrontmatterKeys` | SQLite + sqlite-vec | `@useremember/core/stores/sqlite-vec` |
 | `SearchEngine` | `query(q, opts): {results, query_ms, trace?}` | hybrid BM25+vector with weighted RRF | `@useremember/core/search/hybrid` |
 | `QueryPlanner` | `plan({query, intent?}): QueryPlan` | deterministic passthrough | `@useremember/core/query-planners/passthrough` |
 | `Reranker` | `rerank(query, candidates, context): scored[]` | deterministic passthrough; model-backed candidates gated | `@useremember/core/rerankers/none` |
-| `Connector` | `sync(ctx): ConnectorSyncResult` | none (opt-in via config) | `@useremember/core/connectors` |
 
 The default implementations are wired automatically when `loadConfig()` runs. Override any of them in `remember.config.ts`:
 
@@ -110,7 +109,7 @@ GET /v1/search?q=<query>&k=10&debug=0
    ▼
 1. Passthrough query plan by default
 2. BM25 overlaps with embed → vector retrieval
-3. Weighted Reciprocal Rank Fusion to candidateK
+3. Weighted Reciprocal Rank Fusion (rrfK=10) to candidateK
 4. Exact, path, and heading signals
 5. Chunk deduplication
 6. Bounded reranker (passthrough by default)
@@ -119,7 +118,7 @@ GET /v1/search?q=<query>&k=10&debug=0
 9. Return { results, query_ms, trace? }
 ```
 
-Each result includes path, chunk_idx, snippet, frontmatter, score, retrievers (`['bm25', 'vector']`), and a stable chunk_id (`<path>#<idx>`).
+Each result includes path, title, chunk_id (`<path>#<idx>`), snippet, frontmatter, heading_path, score, and retrievers (`['bm25', 'vector']`).
 
 `?debug=1` adds a structured ranking trace: normalized query/intent, planner
 variations, retriever candidate counts, per-result RRF contributions and
@@ -149,30 +148,9 @@ reranking, evaluation, and citation contracts belong in the core.
 See [`retrieval-intelligence.md`](./retrieval-intelligence.md) for the design
 direction and rollout rules.
 
-## Connector framework
+## Ingestion
 
-Connectors run inside the core process on startup and on demand. They write to `content/external/<connector-name>/`, where the file watcher picks them up just like any other markdown change.
-
-```
-remember.config.ts
-   │
-   ▼ defaults.connector.obsidian({...})
-   │
-   ▼
-ConnectorManager
-   ├─ obsidian.sync() ──▶ content/external/obsidian/
-   ├─ granola.sync()  ──▶ content/external/granola/
-   └─ filesystem.sync() ▶ content/external/<name>/
-                                │
-                                ▼
-                          chokidar watcher
-                                │
-                                ▼
-                          incremental reindex
-                                │
-                                ▼
-                          searchable in <1s
-```
+There are no built-in connectors: external content comes in as plain markdown written into `content/` — by the user or their AI agent, directly on disk or via `PUT /v1/pages/<path>` — where the watcher indexes it like any other file.
 
 ## HTTP API surface
 
@@ -181,11 +159,12 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | Endpoint | Purpose |
 |---|---|
 | `GET /v1/health` | Liveness check |
+| `GET /v1/capabilities` | One stable agent discovery object |
 | `GET /v1/openapi.json` | OpenAPI route enumeration |
 | `GET /v1/search?q&k&debug` | Hybrid search |
 | `GET /v1/pages?filter[k]=v&sort=&q=&limit=&cursor=` | Frontmatter-aware page query |
-| `GET /v1/pages/<path>?format=json\|text\|html` | One page |
-| `PUT /v1/pages/<path>` | Write markdown + reindex |
+| `GET /v1/pages/<path>?format=json\|text` | One page |
+| `PUT /v1/pages/<path>` | Write page (JSON body `{ "body": "<markdown>" }`) + reindex |
 | `DELETE /v1/pages/<path>` | Delete + reconcile index |
 | `POST /v1/pages/move` | Move/rename page |
 | `POST /v1/folders` | Create folder |
@@ -193,14 +172,15 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
 | `POST /v1/folders/rename` | Rename folder |
 | `GET /v1/attrs` | Distinct frontmatter keys |
 | `GET /v1/status` | Index stats |
+| `GET /v1/doctor` | Corpus-health report (same as `remember doctor --json`) |
 | `POST /v1/index` | Trigger reindex |
-| `GET /v1/config` | Read loaded config |
-| `PUT /v1/config` | Write config with `.bak` backup |
-| `GET /v1/connectors` | Connector list + status |
-| `POST /v1/connectors/<name>/sync` | Trigger one connector |
-| `POST /v1/connectors/sync` | Trigger all connectors |
+| `GET /v1/config` | Read loaded config (read-gated) |
 | `GET /v1/events` | Server-Sent Events stream |
 | `GET /v1/tools` | Anthropic/OpenAI tool definitions |
+
+> Note: there is no `PUT /v1/config`. Config-write over HTTP was removed as a
+> hardening measure (it could leak the admin token). Edit `remember.config.ts`
+> on disk instead.
 
 ## Auth model
 
@@ -209,22 +189,28 @@ All endpoints under `/v1/`. JSON by default; `?format=text` returns raw markdown
   - All mutations (POST/PUT/DELETE)
   - All reads from non-loopback origins (introduced in v0.0.1+ wave 5)
 - **Non-loopback bind requires the token** — server refuses to start on `0.0.0.0` without it.
+- **CSRF / DNS-rebinding guard** — browser-tagged cross-site requests are
+  rejected, and POST/PUT require `Content-Type: application/json` (which
+  forces a preflight on cross-origin writes). Non-browser clients sending
+  JSON pass untouched.
 
-Localhost reads stay open by default to preserve the zero-config viewer.
+Localhost reads stay open by default to keep the zero-config local CLI and
+agent experience friction-free.
 
 ## Performance characteristics
 
-Measured on a 25-page sample wiki:
+Everything runs locally and in-process — there is no network hop on the search
+path. Practical characteristics:
 
-| Operation | Time |
-|---|---|
-| Initial index (cold, downloads model) | ~10-15s (~80MB model download) |
-| Initial index (warm, model cached) | ~2-3s |
-| Incremental index (no changes) | ~5ms |
-| Single-file edit + reindex | ~100ms |
-| Hybrid search query | ~2-5ms |
-| Vector retrieve (top-K from sqlite-vec) | <1ms |
-| BM25 retrieve (top-K from FTS5) | <1ms |
+- **First index** downloads the embedding model once (`BAAI/bge-small-en-v1.5`, ~100 MB), then caches it; every index after that is offline.
+- **Indexing is incremental** — a sha256 manifest means only changed files are re-parsed, re-embedded, and re-stored.
+- **Search is local** — BM25 (SQLite FTS5) and vector (sqlite-vec) retrieval run against the on-disk index with no external service.
+
+Formal, reproducible benchmark numbers for the shipped 0.2.0 engine are not yet
+published; run the versioned harness (`remember benchmark`, see
+[`benchmarks/retrieval/README.md`](../benchmarks/retrieval/README.md)) against
+your own corpus to measure recall, latency, and rank quality on hardware you
+control.
 
 ## Storage layout
 
@@ -233,8 +219,7 @@ Measured on a 25-page sample wiki:
 ```
 .remember/
   index.db                       SQLite — chunks, embeddings, FTS, manifest, pages
-  models/                        Cached ONNX model files (~80-440MB depending on model)
-  connectors/                    Per-connector state (last sync time, etc.)
+  models/                        Cached ONNX model files (~100MB+ depending on model)
 ```
 
 You can safely delete `.remember/` at any time. Next start will reindex from disk.

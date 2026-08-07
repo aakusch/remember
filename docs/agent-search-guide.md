@@ -18,7 +18,7 @@ GET /v1/pages?filter[status]=current      # frontmatter-filtered listing
 | `k` range over HTTP | clamped to 1–50 (`k=10` default) |
 | Results per page | one chunk per document by default (page dedup + backfill) |
 | Snippet size | ~280 characters, selected to cover your query terms |
-| Result fields | `path`, `chunk_idx`, `chunk_id`, `snippet`, `frontmatter`, `score`, `retrievers` |
+| Result fields | `path`, `title`, `snippet`, `score`, `frontmatter`, `heading_path`, `retrievers`, `chunk_id` (`<path>#<idx>`) |
 | Latency | p95 18–49 ms at 1k–20k documents |
 
 Latency is not your constraint and neither is snippet volume: `k=25` is roughly
