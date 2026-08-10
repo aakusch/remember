@@ -132,8 +132,44 @@ export async function loadConfig(rootDir: string): Promise<LoadedConfig> {
   }
 
   const merged = applyEnvOverrides(raw);
+  warnUnknownConfigKeys(merged, configPath);
   const validated = configSchema.parse(merged);
   return { raw: merged, validated, rootDir: absRoot, configPath };
+}
+
+/**
+ * Say so when a config key does nothing.
+ *
+ * `configSchema` is a plain `z.object()`, so zod strips unknown top-level keys
+ * silently. That turned a removed feature into a lie: a config carrying the
+ * 0.2.x `connectors: [...]` block parsed cleanly, ingested nothing, and reported
+ * nothing. The honesty contract says the engine publishes its limits, so an
+ * ignored key has to be visible.
+ *
+ * A warning rather than `.strict()`: a hard failure would break configs whose
+ * extra keys are harmless, and silently breaking someone's boot is a worse
+ * trade than telling them what was dropped.
+ */
+function warnUnknownConfigKeys(raw: RememberConfig, configPath: string | null): void {
+  // `pipeline` is read straight off `raw` by the indexer and resolveEmbedder, so
+  // it is a real key even though `configSchema` has no entry for it. That also
+  // means it is never validated: a typo inside pipeline (a misspelled adapter
+  // key, a bad opts field) silently falls back to a default rather than
+  // erroring. Schema coverage for pipeline is a separate fix.
+  const READ_OFF_RAW = ['pipeline'];
+  const known = new Set([...Object.keys(configSchema.shape), ...READ_OFF_RAW]);
+  const unknown = Object.keys(raw as Record<string, unknown>).filter((key) => !known.has(key));
+  if (unknown.length === 0) return;
+
+  const where = configPath ? path.basename(configPath) : 'the remember config';
+  const removed: Record<string, string> = {
+    connectors:
+      'removed in 0.3.0 — ingestion is not the engine\'s job. Write Markdown into content/ instead (see content/remember.md, "bring content in").',
+  };
+  for (const key of unknown) {
+    const note = removed[key] ? ` ${removed[key]}` : ' It is being ignored.';
+    console.warn(`remember: ${where} sets "${key}", which this version does not read.${note}`);
+  }
 }
 
 function applyEnvOverrides(raw: RememberConfig): RememberConfig {

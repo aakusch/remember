@@ -12,9 +12,12 @@ export default defineConfig({
   },
 
   pipeline: {
-    walker:   defaults.walker.chokidar({ respectGitignore: true }),
+    walker:   defaults.walker.fs({ respectGitignore: true }),
     parser:   defaults.parser.remark(),
-    chunker:  defaults.chunker.smartSplit({ size: 900, overlap: 0.15 }),
+    // `size` is a token budget capped to the embedder's real input limit
+    // (bge-small = 512). Take the default rather than restating a larger number
+    // that would over-promise what the chunker actually does.
+    chunker:  defaults.chunker.smartSplit({ overlap: 0.15 }),
     embedder: defaults.embedder.localOnnx({ model: 'BAAI/bge-small-en-v1.5' }),
     store:    defaults.store.sqliteVec({ path: '.remember/index.db' }),
   },
@@ -33,28 +36,11 @@ export default defineConfig({
     }),
   },
 
-  // Pull external content into the index via connectors.
-  // Synced files land in content/external/<connector-name>/ and flow through the
-  // same pipeline as your hand-written pages.
-  connectors: [
-    defaults.connector.obsidian({
-      name: 'obsidian',
-      vaultPath: '../sample-vault',
-      transformWikilinks: true,
-      tag: 'obsidian',
-    }),
-    defaults.connector.granola({
-      name: 'granola',
-      // No apiUrl/apiKey here — connector reports as "misconfigured" until you
-      // wire it up. To enable, set GRANOLA_API_URL + GRANOLA_API_KEY env vars
-      // or pass a fetchMeetings callback in code.
-      apiUrl: process.env.GRANOLA_API_URL,
-      apiKey: process.env.GRANOLA_API_KEY,
-      since: '2026-01-01',
-      tag: 'meeting',
-      includeTranscript: false,
-    }),
-  ],
+  // There are no built-in connectors. Ingestion is deliberately not the
+  // engine's job: the wiki is plain Markdown, so your agent (or you) writes
+  // Markdown into content/ — pulling from Obsidian, exports, or anywhere else.
+  // See content/remember.md, "bring content in", for the agent-as-connector
+  // pattern.
 
   schemaVersion: 1,
 });
