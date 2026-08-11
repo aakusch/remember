@@ -24,6 +24,14 @@ export interface StartServerOptions {
    * second set, loading the ONNX model twice.
    */
   initialIndex?: boolean;
+  /**
+   * Build the index on boot *only when it is empty*. `remember start` is the
+   * Docker CMD, and it used to serve an empty index in silence: a fresh container
+   * answered every query with zero results until someone thought to POST
+   * /v1/index. "Assumes the index is already built" is a fair contract for a
+   * local run and a trap for a container. A populated index is never touched.
+   */
+  indexIfEmpty?: boolean;
 }
 
 export interface IndexPassResult {
@@ -40,6 +48,8 @@ export interface StartedServer {
   embedder: { modelId: string; dim: number };
   /** Present when `initialIndex` was requested. */
   index?: IndexPassResult;
+  /** True when `indexIfEmpty` found an empty index and built it. */
+  indexedOnBoot?: boolean;
 }
 
 interface Runtime {
@@ -173,6 +183,17 @@ export async function startServer(opts: StartServerOptions): Promise<StartedServ
   let runtime = await buildRuntime({ rootDir: opts.rootDir, events, cfg, logs });
 
   // Optional startup index pass, using the runtime's already-loaded embedder.
+  let indexedOnBoot = false;
+  if (!opts.initialIndex && opts.indexIfEmpty) {
+    const manifest = await runtime.store.getManifest();
+    if (Object.keys(manifest).length === 0) {
+      events.emit('event', { type: 'index.started', mode: 'full' });
+      const r = await runtime.indexer.indexAll(runtime.contentRoot);
+      events.emit('event', { type: 'index.completed', mode: 'full', ...r });
+      indexedOnBoot = true;
+    }
+  }
+
   let initialIndex: IndexPassResult | undefined;
   if (opts.initialIndex) {
     events.emit('event', { type: 'index.started', mode: 'full' });
@@ -196,6 +217,20 @@ export async function startServer(opts: StartServerOptions): Promise<StartedServ
     search: runtime.search,
     reindex: async (mode: 'incremental' | 'full') => {
       events.emit('event', { type: 'index.started', mode });
+      // `full` has to mean something. indexAll skips any file whose sha256 still
+      // matches the manifest, so without dropping the manifest first a "full"
+      // rebuild was byte-identical to an incremental one — the mode was accepted,
+      // documented in the OpenAPI spec, echoed back in the event, and did nothing.
+      //
+      // It is also the only recovery path that exists: swap the embedder and every
+      // stored vector belongs to the old model, but every sha256 still matches, so
+      // an incremental pass re-embeds nothing and search stays quietly broken.
+      if (mode === 'full') {
+        const manifest = await runtime.store.getManifest();
+        for (const sourcePath of Object.keys(manifest)) {
+          await runtime.store.updateManifest(sourcePath, null);
+        }
+      }
       const result = await runtime.indexer.indexAll(runtime.contentRoot);
       events.emit('event', { type: 'index.completed', mode, ...result });
       return {
@@ -270,6 +305,7 @@ export async function startServer(opts: StartServerOptions): Promise<StartedServ
     url: `http://${host}:${port}`,
     embedder: { modelId: runtime.embedder.modelId, dim: runtime.embedder.dim },
     index: initialIndex,
+    indexedOnBoot,
     close: () =>
       new Promise<void>(async (resolve) => {
         await teardownRuntime(runtime).catch(() => undefined);
