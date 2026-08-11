@@ -42,12 +42,6 @@ Then, in another terminal, search it:
 npm run search -- "how do deploys work" -k 5   # or: npx --no-install remember search …
 ```
 
-(`remember` lives in the project's `node_modules/.bin`. Run it through the
-scaffolded npm scripts (`npm run <cmd> --`) or with `npx --no-install remember` —
-note that a bare `npx remember` outside the project directory fetches an
-unrelated npm package named `remember`. Or install globally:
-`npm i -g @useremember/core` for a bare `remember`.)
-
 That's the entire install. No API keys required. Local semantic search is
 powered by the optional [`@huggingface/transformers`](https://www.npmjs.com/package/@huggingface/transformers)
 dependency, which the default scaffold installs for you. On the first index it
@@ -82,6 +76,15 @@ Other install paths: [from source](#from-source) · [Docker](#docker).
 | **Filesystem-canonical** | Plain markdown in a directory. Plays with Obsidian, Cursor, VS Code, Dropbox, git. No proprietary format. |
 | **Pluggable** | Walker · Parser · Chunker · Embedder · Store · SearchEngine · Reranker — every adapter has a documented interface. |
 | **MIT licensed** | Use it for anything. |
+
+<br>
+
+## Why this vs alternatives
+
+- **vs Obsidian** — `remember` runs a server and a CLI, so it has a real HTTP API and hybrid search index. Obsidian is desktop-only with no programmatic surface for AI agents.
+- **vs Notion / Confluence** — your files, your machine, your AI. No cloud lock-in, no per-seat pricing, no API rate limits.
+- **vs SiYuan** — markdown-canonical, not a proprietary `.sy` format. Plays nicely with git, Cursor, VS Code, Obsidian — anything that reads `.md`.
+- **vs Outline / BookStack** — designed *for* AI integration from day one. `remember search --json` and `/v1/tools` ship out of the box; you don't have to bolt on a separate AI layer.
 
 <br>
 
@@ -150,6 +153,11 @@ local index plus one cheap pass over `content/`. Flags:
 <br>
 
 ## How AI plugs in
+
+**Pick one, in ten seconds:** using Claude Code, Claude Desktop, or Cursor → **E**
+(native MCP). An agent that can run shell commands → **A**. Building your own app →
+**B** or **C**. Whichever you pick, also do **D** — it is the part that makes the agent
+*reach* for the wiki instead of guessing.
 
 No special integration. An agent can discover the whole surface in one call —
 `remember capabilities --json` (or `GET /v1/capabilities`) returns a single
@@ -299,6 +307,14 @@ Managed, turnkey connectors are a **Pro** concern, not part of this MIT engine.
 
 ## Install options
 
+### Running the `remember` command
+
+`remember` lives in the project's `node_modules/.bin`. Run it through the scaffolded
+npm scripts (`npm run <cmd> --`) or with `npx --no-install remember`. A bare
+`npx remember` *outside* the project directory fetches an unrelated npm package that
+is not this one — so either stay in the project, or install globally with
+`npm i -g @useremember/core` to get a bare `remember`.
+
 ### Quickstart (recommended)
 
 ```bash
@@ -394,12 +410,6 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for the full wave-by-wave history.
 
 <br>
 
-## Why this vs alternatives
-
-- **vs Obsidian** — `remember` runs a server and a CLI, so it has a real HTTP API and hybrid search index. Obsidian is desktop-only with no programmatic surface for AI agents.
-- **vs Notion / Confluence** — your files, your machine, your AI. No cloud lock-in, no per-seat pricing, no API rate limits.
-- **vs SiYuan** — markdown-canonical, not a proprietary `.sy` format. Plays nicely with git, Cursor, VS Code, Obsidian — anything that reads `.md`.
-- **vs Outline / BookStack** — designed *for* AI integration from day one. `remember search --json` and `/v1/tools` ship out of the box; you don't have to bolt on a separate AI layer.
 
 <br>
 

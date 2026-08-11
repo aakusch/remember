@@ -262,12 +262,25 @@ const PACKAGE_TEMPLATE = (name: string) => ({
     // hash embedder with a loud warning. Set OPENAI_API_KEY instead to skip it.
     '@huggingface/transformers': '^3.0.0',
   },
+  // transformers pulls `sharp`, and every sharp below 0.35.0 inherits four libvips
+  // CVEs — so a brand-new wiki greeted its owner with "3 high severity
+  // vulnerabilities" on the very first `npm install`. The advisories are almost
+  // certainly unreachable here (sharp is image preprocessing; this engine indexes
+  // text and never calls it), but a tool whose whole pitch is "your data stays on
+  // your machine" cannot open with three security warnings and then ask to be
+  // trusted. Pinning the fixed line costs nothing and audits clean.
+  //
+  // All three package managers, because the scaffold tells people any of them work:
+  // npm reads `overrides`, pnpm reads `pnpm.overrides`, yarn reads `resolutions`.
+  overrides: { sharp: '>=0.35.0' },
+  resolutions: { sharp: '>=0.35.0' },
   // pnpm >=10 blocks postinstall build scripts by default, which silently leaves
   // better-sqlite3's native binding unbuilt — every `remember` command then dies with
   // a "Could not locate the bindings file" dump. Pre-approving these builds makes
   // `pnpm install` work out of the box (npm/yarn ignore this key).
   pnpm: {
     onlyBuiltDependencies: ['better-sqlite3', 'onnxruntime-node', 'sharp', 'protobufjs'],
+    overrides: { sharp: '>=0.35.0' },
   },
 });
 

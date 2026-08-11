@@ -5,8 +5,13 @@ Operating brief for an agent working in this repo. Read this before editing.
 ## What this is
 
 `@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`,
-published to npm (`0.2.6` latest; `0.3.0` staged, unpublished), public. Local-first, **CLI + HTTP API only — there is
+published to npm (`0.3.0` is **live** on `latest`), public. Local-first, **CLI + HTTP API only — there is
 no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
+
+Verify with `npm view @useremember/core version` before repeating that number. This line read
+"0.3.0 staged, unpublished" for a while *after* 0.3.0 had shipped — and a stale release claim in
+the first file an agent reads is worse than no claim, because it changes what the agent believes
+is still safe to break.
 
 The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
 doc-health, and HTML ingestion — is a **separate PRIVATE package and is not in this repo.**
