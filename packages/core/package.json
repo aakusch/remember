@@ -1,7 +1,7 @@
 {
   "name": "@useremember/core",
   "version": "0.3.0",
-  "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
+  "description": "Headless retrieval engine for remember \u2014 indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [
     "wiki",
@@ -64,7 +64,7 @@
     "test:watch": "vitest",
     "benchmark": "node --import tsx src/cli/benchmark.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "echo '(eslint not yet configured)'"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",

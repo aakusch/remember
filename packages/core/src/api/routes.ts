@@ -2,10 +2,28 @@ import type { Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { EventEmitter } from 'node:events';
+import { timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { safeJoinContent, PathOutsideContentError } from './path-utils.js';
 import type { Embedder, SearchEngine, SearchResult, Store } from '../types.js';
+
+/**
+ * Constant-time admin-token comparison.
+ *
+ * `!==` on strings short-circuits at the first differing byte, so response time
+ * leaks how many leading characters a guess got right — recoverable byte-by-byte
+ * over enough requests. Cheap to remove, so remove it. Length is compared first
+ * because timingSafeEqual throws on a length mismatch, and length is not secret.
+ */
+function tokensMatch(candidate: string, expected: string): boolean {
+  const a = Buffer.from(candidate);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+
 import type { LogBuffer, LogLevel } from '../observability/log-buffer.js';
 import type { HistoryEntry, HistoryFull, HistoryWriteInput } from '../stores/sqlite-vec.js';
 import { VERSION } from '../version.js';
@@ -132,7 +150,7 @@ function checkAdmin(c: Context, adminToken: string | null, boundHost: string): R
     return c.json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required' } }, 401);
   }
   const token = auth.slice('Bearer '.length).trim();
-  if (!adminToken || token !== adminToken) {
+  if (!adminToken || !tokensMatch(token, adminToken)) {
     return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } }, 401);
   }
   return null;
@@ -151,7 +169,7 @@ function checkRead(c: Context, adminToken: string | null, boundHost: string): Re
     return c.json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required for remote reads' } }, 401);
   }
   const token = auth.slice('Bearer '.length).trim();
-  if (token !== adminToken) {
+  if (!tokensMatch(token, adminToken)) {
     return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid token' } }, 401);
   }
   return null;

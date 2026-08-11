@@ -157,6 +157,7 @@ function warnUnknownConfigKeys(raw: RememberConfig, configPath: string | null): 
   // key, a bad opts field) silently falls back to a default rather than
   // erroring. Schema coverage for pipeline is a separate fix.
   const READ_OFF_RAW = ['pipeline'];
+  warnInertPipelineKeys(raw, configPath);
   const known = new Set([...Object.keys(configSchema.shape), ...READ_OFF_RAW]);
   const unknown = Object.keys(raw as Record<string, unknown>).filter((key) => !known.has(key));
   if (unknown.length === 0) return;
@@ -183,4 +184,30 @@ function applyEnvOverrides(raw: RememberConfig): RememberConfig {
   if (env.REMEMBER_ADMIN_TOKEN) next.server.adminToken = env.REMEMBER_ADMIN_TOKEN;
 
   return next;
+}
+
+/**
+ * Say so when a pipeline knob does nothing.
+ *
+ * `pipeline` is read straight off `raw`, but only `embedder` is actually consumed:
+ * the runtime constructs the walker, parser, chunker and store itself with fixed
+ * settings. A config that sets `chunker.smartSplit({ size: 2000 })` therefore
+ * changes nothing, reports nothing, and leaves its author debugging retrieval
+ * quality against a number that was never applied.
+ *
+ * Wiring them is a feature, not a bugfix — until then the honest move is to name
+ * what is being ignored. Same reasoning as warnUnknownConfigKeys above.
+ */
+function warnInertPipelineKeys(raw: RememberConfig, configPath: string | null): void {
+  const pipeline = (raw as { pipeline?: Record<string, unknown> }).pipeline;
+  if (!pipeline) return;
+  const INERT = ['walker', 'parser', 'chunker', 'store'] as const;
+  const set = INERT.filter((k) => pipeline[k] !== undefined);
+  if (set.length === 0) return;
+  const where = configPath ? path.basename(configPath) : 'the remember config';
+  console.warn(
+    `remember: ${where} sets pipeline.${set.join(', pipeline.')} — not yet wired to ` +
+      `config and ignored. The runtime uses its built-in walker/parser/chunker/store. ` +
+      `Only pipeline.embedder is read.`,
+  );
 }

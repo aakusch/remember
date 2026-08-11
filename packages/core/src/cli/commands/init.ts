@@ -34,11 +34,13 @@ export default defineConfig({
 ${tokenLine}  },
 
   pipeline: {
-    walker: defaults.walker.fs({ respectGitignore: true }),
-    parser: defaults.parser.remark(),
-    chunker: defaults.chunker.smartSplit({ size: 512, overlap: 0.15 }),
+    // Only \`embedder\` is read today. walker / parser / chunker / store are not yet
+    // wired to config — the runtime builds them itself (fs walker respecting
+    // .gitignore, remark, smart-split at 512/0.15, sqlite-vec at .remember/index.db).
+    // Listing them here would advertise four knobs that silently do nothing, which
+    // is the one thing this engine promises not to do. Set OPENAI_API_KEY instead
+    // of this line to switch to OpenAI embeddings.
     embedder: defaults.embedder.localOnnx({ model: 'BAAI/bge-small-en-v1.5' }),
-    store: defaults.store.sqliteVec({ path: '.remember/index.db' }),
   },
 
   search: {
