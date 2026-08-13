@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 
 export class PathOutsideContentError extends Error {
   code = 'PATH_OUTSIDE_CONTENT' as const;
@@ -42,6 +42,15 @@ export function safeJoinContent(contentRoot: string, userPath: string): string {
  * ancestor that does and resolve that — the deepest real directory is where a
  * symlink could be hiding. The content root itself is resolved too, otherwise a
  * root that is *legitimately* a symlink would fail every comparison.
+ *
+ * The walk-up must NOT treat an unresolvable symlink as "absent". `realpathSync`
+ * throws the same ENOENT for a path that does not exist (fine — a create) and for
+ * one that exists as a DANGLING symlink (not fine — `fs.writeFile` follows it and
+ * lands wherever it points, so `ln -s /etc/cron.d/x content/note.md` turned
+ * `PUT /v1/pages/note.md` into a write outside content/). An ELOOP symlink cycle
+ * behaves the same way. `lstatSync` distinguishes the two cases without following
+ * the link, so a component that IS a link but cannot be resolved fails closed.
+ * Ported from the Pro engine's `resolveContentPath`, which found this.
  */
 function assertRealPathInside(contentRoot: string, abs: string, userPath: string): void {
   let realRoot: string;
@@ -54,6 +63,15 @@ function assertRealPathInside(contentRoot: string, abs: string, userPath: string
 
   let probe = abs;
   for (;;) {
+    // Does this component exist as a symlink? lstat does not follow it, so this
+    // is true for a dangling or looping link, and false for a genuinely absent path.
+    let isSymlink = false;
+    try {
+      isSymlink = lstatSync(probe).isSymbolicLink();
+    } catch {
+      // Absent (or unreadable) — not a link we need to fail closed on.
+    }
+
     try {
       const real = realpathSync(probe);
       const relReal = path.relative(realRoot, real);
@@ -65,6 +83,9 @@ function assertRealPathInside(contentRoot: string, abs: string, userPath: string
       return;
     } catch (err) {
       if (err instanceof PathOutsideContentError) throw err;
+      // It exists as a link and would not resolve: dangling or looping. A write
+      // through it escapes content/, so refuse rather than walking past it.
+      if (isSymlink) throw new PathOutsideContentError(userPath);
       const parent = path.dirname(probe);
       if (parent === probe) return; // reached the filesystem root; nothing resolved
       probe = parent;

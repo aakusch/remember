@@ -37,6 +37,26 @@ supply-chain fixes.
   data-loss fixes: guard recursive folder-delete against an empty path, reconcile
   the vector table on an embedder-dimension change, clean up ghost page rows on
   delete, and make a malformed-YAML file non-fatal to an index run. (#4, #8, #11)
+- **Security — a dangling or looping symlink in `content/` no longer escapes the
+  content root.** `safeJoinContent` resolved symlinks for real, but walked past a
+  component it could not resolve: `realpathSync` throws the same `ENOENT` for "this
+  path does not exist yet" (legitimate — every page write creates one) and for
+  "this path is a symlink pointing nowhere". The second case walked up to the
+  parent, declared it contained, and allowed the write — and `fs.writeFile`
+  follows the link, so `ln -s /etc/cron.d/x content/note.md` made
+  `PUT /v1/pages/note.md` a write outside `content/`. An `ELOOP` cycle behaved the
+  same. `lstatSync` now distinguishes the cases without following the link, so an
+  unresolvable symlink fails closed. Found by the Pro engine's `resolveContentPath`
+  audit; guarded by `tests/path-utils-symlink.test.ts`, which exercises real
+  inodes (the existing `path-utils.test.ts` uses a content root that does not
+  exist, so its `realpathSync` returns early and it never reached this code).
+- **Security — the agent trigger snippet no longer hands out the admin token.** It
+  told the agent to stage pages via `PUT http://localhost:4320/v1/pages/<path>`
+  "+ the admin token", putting the credential that gates every write into a file
+  the agent reads on every prompt, and advertising a write authority the engine
+  keeps off the default agent surface. It now leads with the MCP tools
+  (`search_wiki` / `get_page`), falls back to the CLI, and stages through the
+  filesystem, which is canonical anyway.
 - **Faster `remember dev`** — the watcher reindexes only the changed file (was
   re-walking the whole corpus per save), the embedding model loads once at
   startup, and result frontmatter is fetched in one batched query. (#13)
