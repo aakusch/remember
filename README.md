@@ -307,6 +307,24 @@ Managed, turnkey connectors are a **Pro** concern, not part of this MIT engine.
 
 ## Install options
 
+### What it needs to run
+
+Node ≥ 20, macOS or Linux. Windows is not yet verified — CI runs it, but as an
+informational job (two native modules plus an ONNX runtime; prebuilt binaries
+are not guaranteed for every target).
+
+**Indexing needs roughly 2 GB of free memory.** The embedding model runs in
+native memory outside the JS heap, so `--max-old-space-size` does not cap it and
+the requirement is nearly flat in corpus size — measured peak RSS was about
+0.7 GB on 3 documents and 1.75 GB on 496. Plan for ~2 GB on any corpus if you
+are sizing a container or a small VM. Searching an existing index is far
+cheaper; the cost is the indexing pass.
+
+Measured on a 496-document, 2.3 MB Markdown vault (macOS ARM, Node 20,
+`bge-small-en-v1.5`): a full index took 113s and produced 3,117 chunks in an
+11 MB database. After that, changing one file re-indexed in 360ms, deleting one
+took 42ms, and warm search ran at a 6ms median.
+
 ### Running the `remember` command
 
 `remember` lives in the project's `node_modules/.bin`. Run it through the scaffolded

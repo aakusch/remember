@@ -147,3 +147,31 @@ pnpm test        # full suite
 # benchmark harness:
 pnpm --filter @useremember/core benchmark -- --help
 ```
+
+## Measured operating cost (0.3.1)
+
+Real 496-document Markdown vault, 2.3 MB, macOS ARM / Node 20 /
+`bge-small-en-v1.5`. Re-measure before quoting these anywhere.
+
+| | |
+|---|---|
+| Full index | 113 s → 3,117 chunks |
+| `index.db` | 11 MB (4.6× the source markdown) |
+| Peak RSS | **1.75 GB** |
+| One file changed | 360 ms (0.3% of a full index) |
+| One file deleted | 42 ms |
+| Search | p50 6 ms warm; 133 ms first query (model load) |
+
+**The memory is native, not V8.** `--max-old-space-size=512` still completes and
+still peaks near 1.8 GB, because the ONNX runtime allocates outside the JS heap.
+`OMP_NUM_THREADS` / `ORT_NUM_THREADS` do not move it either (1.80 GB vs 1.65 GB,
+identical wall time — transformers.js does not appear to honour them). It is
+also nearly flat in corpus size: ~0.7 GB for 3 documents, ~1.15 GB from 60 to
+250, 1.75 GB at 496. So it is a fixed floor, not a leak — treat ~2 GB as the
+indexing requirement and say so to anyone sizing a container.
+
+If that floor ever needs to come down, the lever is model dtype, not batching:
+`--embedder-dtype` already exists on the benchmark CLI, and a quantized
+`bge-small` would cut model memory. **That is a retrieval study, not a config
+change** — it alters embeddings, so it needs a `PIPELINE_REV` bump, a full
+re-index, and a before/after artifact under `benchmarks/results/`.
