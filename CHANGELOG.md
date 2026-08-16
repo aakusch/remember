@@ -5,6 +5,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
 
 ## [Unreleased]
 
+No changes yet.
+
+## [0.3.1] - 2026-08-13
+
+Local release candidate; not published. npm `latest` remains `0.3.0`. This candidate combines the
+multi-format ingestion work below with a security and durability patch. It must not be described as
+available until the packed artifact and publication have completed.
+
 ### Added
 
 - **Multi-format ingestion** via [`@firecrawl/anydoc`](https://github.com/firecrawl/anydoc)
@@ -56,11 +64,30 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
 - The markdown format now also claims `.markdown`, which the walker previously
   skipped. This is the only behaviour change on the default path.
 
+### Security
+
+- Fail closed when a dangling or looping symlink under `content/` would otherwise be followed by a
+  page write outside the configured content root.
+- Stop putting the admin token and a privileged HTTP write instruction into the generated agent
+  guide. The guide now leads with MCP/CLI access and filesystem-canonical writes.
+- Compare configured admin tokens in constant time and retain the existing real-path containment
+  checks.
+
+### Fixed
+
+- Make `full` reindex actually reprocess unchanged files, index on boot when the database is empty,
+  and keep the Docker/Compose runtime aligned with the generated configuration.
+- Give actionable recovery instructions for corrupt, incompatible, read-only, or locked derived
+  index databases.
+- Add durability coverage for interrupted indexes, corrupt databases, and concurrent readers.
+- Add informational Windows CI while keeping Windows explicitly unverified for release support.
+- Record measured indexing cost, including the roughly 2 GB free-memory requirement.
+
 ## [0.3.0] - 2026-08-02
 
-Pre-launch release — staged for publish; npm latest is still `0.2.6`.
-Agent-native onboarding and a native MCP server, a corpus-health command, the
-removal of built-in connectors, plus security, quality, and supply-chain fixes.
+Published to npm on 2026-08-03 and currently `latest`. Agent-native onboarding and a native MCP
+server, a corpus-health command, the removal of built-in connectors, plus security, quality, and
+supply-chain fixes.
 
 ### Removed
 

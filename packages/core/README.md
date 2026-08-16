@@ -12,7 +12,8 @@ into ranked, source-cited evidence for humans and agents. Provides:
 
 ## Status
 
-**v0.3.1 — CLI- and MCP-first OSS.** Indexing, SQLite/sqlite-vec storage,
+**v0.3.1 local release candidate — not yet published; npm `latest` is 0.3.0.** This CLI- and
+MCP-first OSS candidate includes indexing, SQLite/sqlite-vec storage,
 concurrent BM25 + vector retrieval, weighted RRF over a bounded candidate set,
 path/heading signals, page-diversity backfill, structured ranking traces,
 corpus-health `doctor`, machine-readable `capabilities`, benchmark tooling, and

@@ -2,8 +2,14 @@
 
 ## 0.3.1 — 2026-08-13 (security patch)
 
-**Recommended upgrade for anyone on 0.3.0.** Two fixes found by an audit of the
-Pro engine's path containment, plus recovery guidance for a damaged index.
+**Local release candidate; not published. npm `latest` remains 0.3.0.** The candidate combines
+multi-format ingestion with two fixes found by an audit of the Pro engine's path containment, plus
+recovery guidance for a damaged index. It becomes a recommended upgrade only after publication.
+
+- **Optional multi-format ingestion.** PDF uses `@firecrawl/pdf-inspector`; Office, OpenDocument,
+  RTF, EPUB, and CSV use `@firecrawl/anydoc`. Markdown remains the only default format, so existing
+  installs and a bare package install do not acquire native parser dependencies. Native-text,
+  scanned-document, spreadsheet, and heading limitations are documented in the root changelog.
 
 - **Security — a dangling or looping symlink under `content/` no longer escapes
   the content root.** `safeJoinContent` resolved symlinks for real but walked
