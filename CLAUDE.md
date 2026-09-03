@@ -5,7 +5,8 @@ Operating brief for an agent working in this repo. Read this before editing.
 ## What this is
 
 `@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`,
-published to npm (`0.2.6` latest; `0.3.0` staged, unpublished), public. Local-first, **CLI + HTTP API only — there is
+published to npm (`0.3.0` latest), public. Verify with `npm view @useremember/core version`
+rather than trusting this line — it goes stale. Local-first, **CLI + HTTP API only — there is
 no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
 
 The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
@@ -57,6 +58,17 @@ away.
 **Do not edit the committed benchmark fixture.** `examples/sample-wiki/content/` and
 `benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
 fixture rather than mutating them.
+
+**This fixture is saturated, so it cannot show that a change improved ranking.** Per this
+repo's own committed artifacts, the real-embedding profile sits at recall@5 `.96`, recall@10
+`.98`, candidate recall `.98` (`remember-v0.3.0-fast-local-bge.json`), and the `ci` hash profile
+at recall@10 `.927` (`remember-v0.3.0-ci-hash.json`). Candidate recall `.98` is the tell: the
+retriever already reaches nearly every gold document, so there is almost nothing left for a
+ranking change to win. That headroom is too small to separate a real gain from noise, and a
+25-document corpus makes retrieval nearly free. It is the right instrument for proving a change
+left ranking *unchanged*, and the wrong one for claiming a gain. An improvement claim needs a
+fixture with measurable headroom — and if one is not committed here, the honest move is to
+report the change as unmeasured rather than to quote a number this fixture cannot support.
 
 **Markdown by default; other formats are opt-in, and there are exactly THREE parsers.**
 `parsers/remark.ts` handles markdown. `parsers/pdf.ts` handles `.pdf` via
