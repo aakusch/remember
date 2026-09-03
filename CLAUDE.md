@@ -5,7 +5,7 @@ Operating brief for an agent working in this repo. Read this before editing.
 ## What this is
 
 `@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`,
-published to npm (`0.3.0` is **live** on `latest`), public. Local-first, **CLI + HTTP API only — there is
+published to npm (`0.3.1` is **live** on `latest`), public. Local-first, **CLI + HTTP API only — there is
 no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
 
 Verify with `npm view @useremember/core version` before repeating that number. This line read
@@ -62,6 +62,17 @@ away.
 **Do not edit the committed benchmark fixture.** `examples/sample-wiki/content/` and
 `benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
 fixture rather than mutating them.
+
+**This fixture is saturated, so it cannot show that a change improved ranking.** Per this repo's
+own committed artifacts, the real-embedding profile sits at recall@5 `.96`, recall@10 `.98`,
+candidate recall `.98` (`remember-v0.3.0-fast-local-bge.json`), and the `ci` hash profile at
+recall@10 `.927` (`remember-v0.3.0-ci-hash.json`). Candidate recall `.98` is the tell: the
+retriever already reaches nearly every gold document, so a ranking change has almost nothing
+left to win, and a 25-document corpus makes retrieval close to free. The fixture is the right
+instrument for proving a change left ranking *unchanged* — that is how the `index.formats`
+default and the 0.3.1 dependency bumps were verified — and the wrong one for claiming a gain.
+An improvement claim needs a fixture with measurable headroom; if none is committed here, report
+the change as unmeasured rather than quote a number this fixture cannot support.
 
 **Markdown by default; other formats are opt-in, and there are exactly THREE parsers.**
 `parsers/remark.ts` handles markdown. `parsers/pdf.ts` handles `.pdf` via
