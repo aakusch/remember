@@ -1,7 +1,7 @@
 {
   "name": "@useremember/core",
   "version": "0.3.1",
-  "description": "Headless retrieval engine for remember \u2014 indexing, hybrid search, ranking, HTTP API, and CLI.",
+  "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [
     "wiki",
@@ -106,7 +106,7 @@
     "@types/node": "^20.14.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vitest": "^3.2.7"
   },
   "engines": {
     "node": ">=20"
