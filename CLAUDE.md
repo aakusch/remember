@@ -148,6 +148,19 @@ This repo is the **MIT basic engine** and stays that way. When a sibling repo's 
 "`@useremember/core` is MIT," that is a true statement about **this** package — don't "fix" it
 to something else. Keep pro-only concepts out of this codebase and its docs.
 
+## Pending from Pro Wave 2 (2026-09-03) — do not port until the owner decides
+
+`remember-pro-next` `wave2/document-pool` measured that RRF at **bm25 0.3 / vector 0.7** beats the
+shipped 0.5/0.5 on five of six fixtures with paired-bootstrap significance on both unsaturated ones
+(fiqa hit@10 .620→.740, hotpotqa recall@10 .855→.885), at zero latency cost. This engine has the
+same RRF and the same `bm25.weight` / `vector.weight` options, so the port is a default change plus
+regenerated `ci` baselines — a behaviour change for every consumer and therefore **Aaron's call**.
+Nothing else from that wave needs porting: the document-pool dials, MaxP, TM2C2 fusion and the
+reranker re-test all measured negative or neutral. Read
+`../remember-pro-next/docs/handoff-2026-09-03-wave2.md` before touching ranking here. Also from
+that wave: `better-sqlite3` `^11` compiles from source on Node 25 (19 s, 27 MB); Pro's `^12`
+downloads a prebuilt in 2 s — a packaging fix worth taking with the next release.
+
 ## Dev / build / test
 
 ```bash
