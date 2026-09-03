@@ -1,8 +1,53 @@
 # Changelog — @useremember/core
 
-## 0.3.0 — 2026-08-02 (pre-launch: MCP, onboarding, doctor, connector removal)
+## 0.3.1 — 2026-08-13 (security patch)
 
-Staged for publish (npm latest is still `0.2.6`). The pre-launch release:
+**Local release candidate; not published. npm `latest` remains 0.3.0.** The candidate combines
+multi-format ingestion with two fixes found by an audit of the Pro engine's path containment, plus
+recovery guidance for a damaged index. It becomes a recommended upgrade only after publication.
+
+- **Optional multi-format ingestion.** PDF uses `@firecrawl/pdf-inspector`; Office, OpenDocument,
+  RTF, EPUB, and CSV use `@firecrawl/anydoc`. Markdown remains the only default format, so existing
+  installs and a bare package install do not acquire native parser dependencies. Native-text,
+  scanned-document, spreadsheet, and heading limitations are documented in the root changelog.
+
+- **Security — a dangling or looping symlink under `content/` no longer escapes
+  the content root.** `safeJoinContent` resolved symlinks for real but walked
+  past any component it could not resolve, and `realpathSync` throws the same
+  `ENOENT` for "this path does not exist yet" (legitimate — every page write
+  creates one) and for "this path is a symlink pointing nowhere". The second
+  case walked up to the parent, declared it contained, and allowed the
+  operation — and `fs.writeFile` follows the link, so
+  `ln -s /etc/cron.d/x content/note.md` made `PUT /v1/pages/note.md` a write
+  outside `content/`. An `ELOOP` cycle behaved the same. `lstatSync` now
+  distinguishes the cases without following the link, so an unresolvable symlink
+  fails closed. Guarded by `tests/path-utils-symlink.test.ts` against real
+  inodes — the existing `path-utils.test.ts` uses a content root that does not
+  exist on disk, so its `realpathSync` returned early and never reached this
+  code at all.
+- **Security — the agent trigger snippet no longer hands out the admin token.**
+  It told the agent to stage pages via `PUT http://localhost:4320/v1/pages/<path>`
+  "+ the admin token", putting the credential that gates every write into a file
+  the agent reads on every prompt, and advertising a write authority the engine
+  keeps off the default agent surface. It now leads with the MCP tools
+  (`search_wiki` / `get_page`), falls back to the CLI, and stages through the
+  filesystem, which is canonical anyway.
+- **A damaged `.remember/index.db` now tells you how to recover.** Every command
+  surfaced the raw better-sqlite3 string ("file is not a database") with no next
+  step. The index is derived from `content/`, so deleting it is lossless — the
+  CLI now says so, in both the human and `--json` error forms. Same treatment for
+  schema mismatch, read-only, and locked-database failures.
+- **New durability tests** (`tests/index-durability.test.ts`) characterizing an
+  interrupted index (resumes by hash rather than restarting), a corrupt database
+  (errors rather than reporting an empty corpus), and concurrent readers during a
+  write. All three were exercised by hand against a real 496-document vault
+  first.
+- **CI now runs Windows** (Node 20), informationally. The CLI carries two native
+  modules plus an optional ONNX runtime and had never been tested there.
+
+## 0.3.0 — 2026-08-02 (MCP, onboarding, doctor, connector removal)
+
+Published to npm 2026-08-03 and currently `latest`. The pre-launch release:
 agent-native onboarding and a native MCP server, a corpus-health command, the
 removal of built-in connectors, and a batch of security, quality, and
 supply-chain fixes.
@@ -37,6 +82,26 @@ supply-chain fixes.
   data-loss fixes: guard recursive folder-delete against an empty path, reconcile
   the vector table on an embedder-dimension change, clean up ghost page rows on
   delete, and make a malformed-YAML file non-fatal to an index run. (#4, #8, #11)
+- **Security — a dangling or looping symlink in `content/` no longer escapes the
+  content root.** `safeJoinContent` resolved symlinks for real, but walked past a
+  component it could not resolve: `realpathSync` throws the same `ENOENT` for "this
+  path does not exist yet" (legitimate — every page write creates one) and for
+  "this path is a symlink pointing nowhere". The second case walked up to the
+  parent, declared it contained, and allowed the write — and `fs.writeFile`
+  follows the link, so `ln -s /etc/cron.d/x content/note.md` made
+  `PUT /v1/pages/note.md` a write outside `content/`. An `ELOOP` cycle behaved the
+  same. `lstatSync` now distinguishes the cases without following the link, so an
+  unresolvable symlink fails closed. Found by the Pro engine's `resolveContentPath`
+  audit; guarded by `tests/path-utils-symlink.test.ts`, which exercises real
+  inodes (the existing `path-utils.test.ts` uses a content root that does not
+  exist, so its `realpathSync` returns early and it never reached this code).
+- **Security — the agent trigger snippet no longer hands out the admin token.** It
+  told the agent to stage pages via `PUT http://localhost:4320/v1/pages/<path>`
+  "+ the admin token", putting the credential that gates every write into a file
+  the agent reads on every prompt, and advertising a write authority the engine
+  keeps off the default agent surface. It now leads with the MCP tools
+  (`search_wiki` / `get_page`), falls back to the CLI, and stages through the
+  filesystem, which is canonical anyway.
 - **Faster `remember dev`** — the watcher reindexes only the changed file (was
   re-walking the whole corpus per save), the embedding model loads once at
   startup, and result frontmatter is fetched in one batched query. (#13)

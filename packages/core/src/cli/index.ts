@@ -308,6 +308,33 @@ function commandHelp(name: string): string | null {
   return cmd ? `\n${cmd.help}\n` : null;
 }
 
+/**
+ * Turn a low-level failure into the next thing the user should actually do.
+ *
+ * Why: a damaged `.remember/index.db` surfaced as the raw better-sqlite3 string
+ * "file is not a database" from every command — status, search, index, doctor —
+ * with no way forward. The index is a derived artifact and deleting it is a
+ * complete, lossless recovery (`tests/index-durability.test.ts` asserts that),
+ * but nothing told anyone so. Keep this list short and only for failures with a
+ * genuinely unambiguous next step; a wrong hint is worse than none.
+ */
+export function recoveryHint(error: Error & { code?: string }): string | null {
+  const message = error.message ?? '';
+  if (/not a database|file is encrypted|database disk image is malformed/i.test(message)) {
+    return 'The index is damaged. It is rebuilt from content/, so deleting it loses nothing: rm -rf .remember/index.db* && remember index';
+  }
+  if (/no such (table|column)/i.test(message)) {
+    return 'The index was written by a different engine version: rm -rf .remember/index.db* && remember index';
+  }
+  if (error.code === 'SQLITE_READONLY' || /readonly database/i.test(message)) {
+    return 'The index file is not writable — check permissions on .remember/.';
+  }
+  if (error.code === 'SQLITE_BUSY' || /database is locked/i.test(message)) {
+    return 'Another remember process is writing the index. Wait for it to finish, or stop `remember dev`.';
+  }
+  return null;
+}
+
 export async function run(argv: string[]): Promise<void> {
   const command = argv[0];
   const rest = argv.slice(1);
@@ -429,17 +456,23 @@ export async function run(argv: string[]): Promise<void> {
     }
   } catch (err) {
     const error = err as Error & { code?: string };
+    const hint = recoveryHint(error);
     // When the caller asked for --json, fail with a structured JSON error on
     // stderr (exit non-zero) so an agent can script against it. Otherwise, a
     // human-friendly red line.
     if (rest.includes('--json')) {
       process.stderr.write(
         JSON.stringify({
-          error: { code: error.code ?? 'COMMAND_ERROR', message: error.message },
+          error: {
+            code: error.code ?? 'COMMAND_ERROR',
+            message: error.message,
+            ...(hint ? { hint } : {}),
+          },
         }) + '\n',
       );
     } else {
       process.stderr.write(`${c.red(`remember ${command}:`)} ${error.message}\n`);
+      if (hint) process.stderr.write(`${c.dim(`  ${hint}`)}\n`);
     }
     process.exit(1);
   }

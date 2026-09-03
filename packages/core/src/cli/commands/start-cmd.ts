@@ -7,10 +7,18 @@ import { banner, header, keyValues, c } from '../format.js';
  * already built). CLI + API only.
  */
 export async function startCommand(): Promise<void> {
-  const { url } = await startServer({ rootDir: process.cwd() });
+  const { url, indexedOnBoot } = await startServer({ rootDir: process.cwd(), indexIfEmpty: true });
   const out = process.stdout;
 
   out.write(`\n${banner(VERSION)}  ${c.dim('start')}\n`);
+  if (indexedOnBoot) {
+    // Why: `start` is the Docker CMD, and it used to serve an empty index in
+    // silence — a fresh container answered every query with zero results until
+    // someone thought to POST /v1/index. "Assumes the index is already built" is
+    // a fair contract for a local run and a trap for a container, so an empty
+    // index now builds itself once on boot. A populated index is left alone.
+    out.write(`${c.dim('index was empty — built it on boot')}\n`);
+  }
   out.write(header('API + agent endpoints'));
   out.write(
     '\n' +

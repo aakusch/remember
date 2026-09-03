@@ -15,9 +15,15 @@ services:
       # restricts external access to 127.0.0.1 by default.
       REMEMBER_HOST: 0.0.0.0
       REMEMBER_API_PORT: "4320"
-      # Recommended for any non-trivial deployment. Without a token,
-      # remember refuses non-loopback binds on the host outside Docker.
-      REMEMBER_ADMIN_TOKEN: ${REMEMBER_ADMIN_TOKEN:-}
+      # REQUIRED, not optional. The container binds 0.0.0.0 (it has to — a
+      # loopback bind inside a container is unreachable from the host), and the
+      # server cowardly refuses a non-loopback bind with no token. Defaulting
+      # this to empty meant `docker compose up` exited immediately with
+      # "Cowardly refusing to bind to 0.0.0.0" on a stock checkout — the compose
+      # file shipped in a state where it could not start.
+      #
+      # Generate one:  export REMEMBER_ADMIN_TOKEN=$(openssl rand -base64 32)
+      REMEMBER_ADMIN_TOKEN: ${REMEMBER_ADMIN_TOKEN:?set REMEMBER_ADMIN_TOKEN — see the comment above}
       # Optional: switches the embedder to OpenAI if set.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     healthcheck:

@@ -6,4 +6,4 @@
  * (`/v1/health`, `/v1/status`, OpenAPI), and the benchmark metadata — imports
  * from here so a release bump touches exactly one line of code.
  */
-export const VERSION = '0.3.0';
+export const VERSION = '0.3.1';

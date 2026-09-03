@@ -10,11 +10,22 @@ jobs:
   test:
     name: ${{ matrix.os }} / Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
+    # Windows has never been exercised. The CLI carries two native modules
+    # (better-sqlite3, sqlite-vec) plus an optional ONNX runtime, and prebuilt
+    # binaries are not guaranteed for every target — so this discovers the
+    # failure here rather than via the first Windows user. It runs
+    # informationally on purpose. Drop `continue-on-error` once it is green, or
+    # state "macOS and Linux only" in the README and delete the job. Leaving it
+    # ambiguous is the one option that is not acceptable.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         node: [20, 22]
+        include:
+          - os: windows-latest
+            node: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +48,9 @@ jobs:
       - name: Production dependency audit
         run: pnpm audit:prod
       - name: Deterministic retrieval benchmark
+        # bash explicitly: the Windows runner defaults to PowerShell, where
+        # "$RUNNER_TEMP" is an undefined variable rather than the env var.
+        shell: bash
         run: >-
           pnpm --filter @useremember/core benchmark --
           --profile ci

@@ -28,7 +28,7 @@ Confirm it's up from another terminal:
 ```bash
 remember status                        # index dashboard: pages, chunks, model
 remember search "getting started" -k 5 # ranked result cards
-curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.3.0"}
+curl http://localhost:4320/v1/health   # → {"ok":true,"version":"0.3.1"}
 ```
 
 > `remember` lives in the project's `node_modules/.bin`. Prefix the commands

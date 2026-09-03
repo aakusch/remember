@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { lstatSync, realpathSync } from 'node:fs';
 
 export class PathOutsideContentError extends Error {
   code = 'PATH_OUTSIDE_CONTENT' as const;
@@ -26,5 +27,68 @@ export function safeJoinContent(contentRoot: string, userPath: string): string {
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new PathOutsideContentError(userPath);
   }
+  assertRealPathInside(contentRoot, abs, userPath);
   return abs;
+}
+
+/**
+ * The lexical check above is not enough on its own: it reasons about the string,
+ * and a symlink makes the string lie. `ln -s /etc content/x` leaves
+ * `content/x/passwd` looking perfectly contained while resolving somewhere else
+ * entirely — readable through GET /v1/pages, writable through PUT.
+ *
+ * So resolve symlinks for real and re-check containment. The target usually does
+ * not exist yet (every write creates a new page), so walk up to the nearest
+ * ancestor that does and resolve that — the deepest real directory is where a
+ * symlink could be hiding. The content root itself is resolved too, otherwise a
+ * root that is *legitimately* a symlink would fail every comparison.
+ *
+ * The walk-up must NOT treat an unresolvable symlink as "absent". `realpathSync`
+ * throws the same ENOENT for a path that does not exist (fine — a create) and for
+ * one that exists as a DANGLING symlink (not fine — `fs.writeFile` follows it and
+ * lands wherever it points, so `ln -s /etc/cron.d/x content/note.md` turned
+ * `PUT /v1/pages/note.md` into a write outside content/). An ELOOP symlink cycle
+ * behaves the same way. `lstatSync` distinguishes the two cases without following
+ * the link, so a component that IS a link but cannot be resolved fails closed.
+ * Ported from the Pro engine's `resolveContentPath`, which found this.
+ */
+function assertRealPathInside(contentRoot: string, abs: string, userPath: string): void {
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(contentRoot);
+  } catch {
+    // No content root on disk yet — nothing to escape into.
+    return;
+  }
+
+  let probe = abs;
+  for (;;) {
+    // Does this component exist as a symlink? lstat does not follow it, so this
+    // is true for a dangling or looping link, and false for a genuinely absent path.
+    let isSymlink = false;
+    try {
+      isSymlink = lstatSync(probe).isSymbolicLink();
+    } catch {
+      // Absent (or unreadable) — not a link we need to fail closed on.
+    }
+
+    try {
+      const real = realpathSync(probe);
+      const relReal = path.relative(realRoot, real);
+      // An existing ancestor may legitimately BE the root, so '' is allowed here
+      // (unlike the lexical check, which is guarding the caller's own path).
+      if (relReal.startsWith('..') || path.isAbsolute(relReal)) {
+        throw new PathOutsideContentError(userPath);
+      }
+      return;
+    } catch (err) {
+      if (err instanceof PathOutsideContentError) throw err;
+      // It exists as a link and would not resolve: dangling or looping. A write
+      // through it escapes content/, so refuse rather than walking past it.
+      if (isSymlink) throw new PathOutsideContentError(userPath);
+      const parent = path.dirname(probe);
+      if (parent === probe) return; // reached the filesystem root; nothing resolved
+      probe = parent;
+    }
+  }
 }

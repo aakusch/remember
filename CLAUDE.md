@@ -5,8 +5,13 @@ Operating brief for an agent working in this repo. Read this before editing.
 ## What this is
 
 `@useremember/core` — the **MIT, open-source "basic" retrieval engine** for `remember`,
-published to npm (`0.2.6` latest; `0.3.0` staged, unpublished), public. Local-first, **CLI + HTTP API only — there is
+published to npm (`0.3.1` is **live** on `latest`), public. Local-first, **CLI + HTTP API only — there is
 no browser UI in this repo.** It is a real, useful search engine and the top of the funnel.
+
+Verify with `npm view @useremember/core version` before repeating that number. This line read
+"0.3.0 staged, unpublished" for a while *after* 0.3.0 had shipped — and a stale release claim in
+the first file an agent reads is worse than no claim, because it changes what the agent believes
+is still safe to break.
 
 The **pro engine** — the quality levers, the browser viewer, subwikis, scoped API keys,
 doc-health, and HTML ingestion — is a **separate PRIVATE package and is not in this repo.**
@@ -57,6 +62,17 @@ away.
 **Do not edit the committed benchmark fixture.** `examples/sample-wiki/content/` and
 `benchmarks/retrieval/sample-wiki.questions.jsonl` are the deterministic gate — create a *new*
 fixture rather than mutating them.
+
+**This fixture is saturated, so it cannot show that a change improved ranking.** Per this repo's
+own committed artifacts, the real-embedding profile sits at recall@5 `.96`, recall@10 `.98`,
+candidate recall `.98` (`remember-v0.3.0-fast-local-bge.json`), and the `ci` hash profile at
+recall@10 `.927` (`remember-v0.3.0-ci-hash.json`). Candidate recall `.98` is the tell: the
+retriever already reaches nearly every gold document, so a ranking change has almost nothing
+left to win, and a 25-document corpus makes retrieval close to free. The fixture is the right
+instrument for proving a change left ranking *unchanged* — that is how the `index.formats`
+default and the 0.3.1 dependency bumps were verified — and the wrong one for claiming a gain.
+An improvement claim needs a fixture with measurable headroom; if none is committed here, report
+the change as unmeasured rather than quote a number this fixture cannot support.
 
 **Markdown by default; other formats are opt-in, and there are exactly THREE parsers.**
 `parsers/remark.ts` handles markdown. `parsers/pdf.ts` handles `.pdf` via
@@ -142,3 +158,31 @@ pnpm test        # full suite
 # benchmark harness:
 pnpm --filter @useremember/core benchmark -- --help
 ```
+
+## Measured operating cost (0.3.1)
+
+Real 496-document Markdown vault, 2.3 MB, macOS ARM / Node 20 /
+`bge-small-en-v1.5`. Re-measure before quoting these anywhere.
+
+| | |
+|---|---|
+| Full index | 113 s → 3,117 chunks |
+| `index.db` | 11 MB (4.6× the source markdown) |
+| Peak RSS | **1.75 GB** |
+| One file changed | 360 ms (0.3% of a full index) |
+| One file deleted | 42 ms |
+| Search | p50 6 ms warm; 133 ms first query (model load) |
+
+**The memory is native, not V8.** `--max-old-space-size=512` still completes and
+still peaks near 1.8 GB, because the ONNX runtime allocates outside the JS heap.
+`OMP_NUM_THREADS` / `ORT_NUM_THREADS` do not move it either (1.80 GB vs 1.65 GB,
+identical wall time — transformers.js does not appear to honour them). It is
+also nearly flat in corpus size: ~0.7 GB for 3 documents, ~1.15 GB from 60 to
+250, 1.75 GB at 496. So it is a fixed floor, not a leak — treat ~2 GB as the
+indexing requirement and say so to anyone sizing a container.
+
+If that floor ever needs to come down, the lever is model dtype, not batching:
+`--embedder-dtype` already exists on the benchmark CLI, and a quantized
+`bge-small` would cut model memory. **That is a retrieval study, not a config
+change** — it alters embeddings, so it needs a `PIPELINE_REV` bump, a full
+re-index, and a before/after artifact under `benchmarks/results/`.

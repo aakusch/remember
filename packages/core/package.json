@@ -1,6 +1,6 @@
 {
   "name": "@useremember/core",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Headless retrieval engine for remember — indexing, hybrid search, ranking, HTTP API, and CLI.",
   "license": "MIT",
   "keywords": [
@@ -64,7 +64,7 @@
     "test:watch": "vitest",
     "benchmark": "node --import tsx src/cli/benchmark.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "echo '(eslint not yet configured)'"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
@@ -106,7 +106,7 @@
     "@types/node": "^20.14.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vitest": "^3.2.7"
   },
   "engines": {
     "node": ">=20"

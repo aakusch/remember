@@ -15,7 +15,7 @@ COPY packages/core/package.json packages/core/
 COPY examples/sample-wiki/package.json examples/sample-wiki/
 
 # Install deps with native modules built against this container's libc.
-RUN --mount=type=cache,target=/pnpm/store pnpm install --frozen-lockfile=false
+RUN --mount=type=cache,target=/pnpm/store pnpm install --frozen-lockfile
 
 # Now copy source + build the core package.
 COPY . .

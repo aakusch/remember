@@ -34,11 +34,13 @@ export default defineConfig({
 ${tokenLine}  },
 
   pipeline: {
-    walker: defaults.walker.fs({ respectGitignore: true }),
-    parser: defaults.parser.remark(),
-    chunker: defaults.chunker.smartSplit({ size: 512, overlap: 0.15 }),
+    // Only \`embedder\` is read today. walker / parser / chunker / store are not yet
+    // wired to config — the runtime builds them itself (fs walker respecting
+    // .gitignore, remark, smart-split at 512/0.15, sqlite-vec at .remember/index.db).
+    // Listing them here would advertise four knobs that silently do nothing, which
+    // is the one thing this engine promises not to do. Set OPENAI_API_KEY instead
+    // of this line to switch to OpenAI embeddings.
     embedder: defaults.embedder.localOnnx({ model: 'BAAI/bge-small-en-v1.5' }),
-    store: defaults.store.sqliteVec({ path: '.remember/index.db' }),
   },
 
   search: {
@@ -262,12 +264,25 @@ const PACKAGE_TEMPLATE = (name: string) => ({
     // hash embedder with a loud warning. Set OPENAI_API_KEY instead to skip it.
     '@huggingface/transformers': '^3.0.0',
   },
+  // transformers pulls `sharp`, and every sharp below 0.35.0 inherits four libvips
+  // CVEs — so a brand-new wiki greeted its owner with "3 high severity
+  // vulnerabilities" on the very first `npm install`. The advisories are almost
+  // certainly unreachable here (sharp is image preprocessing; this engine indexes
+  // text and never calls it), but a tool whose whole pitch is "your data stays on
+  // your machine" cannot open with three security warnings and then ask to be
+  // trusted. Pinning the fixed line costs nothing and audits clean.
+  //
+  // All three package managers, because the scaffold tells people any of them work:
+  // npm reads `overrides`, pnpm reads `pnpm.overrides`, yarn reads `resolutions`.
+  overrides: { sharp: '>=0.35.0' },
+  resolutions: { sharp: '>=0.35.0' },
   // pnpm >=10 blocks postinstall build scripts by default, which silently leaves
   // better-sqlite3's native binding unbuilt — every `remember` command then dies with
   // a "Could not locate the bindings file" dump. Pre-approving these builds makes
   // `pnpm install` work out of the box (npm/yarn ignore this key).
   pnpm: {
     onlyBuiltDependencies: ['better-sqlite3', 'onnxruntime-node', 'sharp', 'protobufjs'],
+    overrides: { sharp: '>=0.35.0' },
   },
 });
 

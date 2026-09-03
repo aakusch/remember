@@ -132,8 +132,45 @@ export async function loadConfig(rootDir: string): Promise<LoadedConfig> {
   }
 
   const merged = applyEnvOverrides(raw);
+  warnUnknownConfigKeys(merged, configPath);
   const validated = configSchema.parse(merged);
   return { raw: merged, validated, rootDir: absRoot, configPath };
+}
+
+/**
+ * Say so when a config key does nothing.
+ *
+ * `configSchema` is a plain `z.object()`, so zod strips unknown top-level keys
+ * silently. That turned a removed feature into a lie: a config carrying the
+ * 0.2.x `connectors: [...]` block parsed cleanly, ingested nothing, and reported
+ * nothing. The honesty contract says the engine publishes its limits, so an
+ * ignored key has to be visible.
+ *
+ * A warning rather than `.strict()`: a hard failure would break configs whose
+ * extra keys are harmless, and silently breaking someone's boot is a worse
+ * trade than telling them what was dropped.
+ */
+function warnUnknownConfigKeys(raw: RememberConfig, configPath: string | null): void {
+  // `pipeline` is read straight off `raw` by the indexer and resolveEmbedder, so
+  // it is a real key even though `configSchema` has no entry for it. That also
+  // means it is never validated: a typo inside pipeline (a misspelled adapter
+  // key, a bad opts field) silently falls back to a default rather than
+  // erroring. Schema coverage for pipeline is a separate fix.
+  const READ_OFF_RAW = ['pipeline'];
+  warnInertPipelineKeys(raw, configPath);
+  const known = new Set([...Object.keys(configSchema.shape), ...READ_OFF_RAW]);
+  const unknown = Object.keys(raw as Record<string, unknown>).filter((key) => !known.has(key));
+  if (unknown.length === 0) return;
+
+  const where = configPath ? path.basename(configPath) : 'the remember config';
+  const removed: Record<string, string> = {
+    connectors:
+      'removed in 0.3.0 — ingestion is not the engine\'s job. Write Markdown into content/ instead (see content/remember.md, "bring content in").',
+  };
+  for (const key of unknown) {
+    const note = removed[key] ? ` ${removed[key]}` : ' It is being ignored.';
+    console.warn(`remember: ${where} sets "${key}", which this version does not read.${note}`);
+  }
 }
 
 function applyEnvOverrides(raw: RememberConfig): RememberConfig {
@@ -147,4 +184,30 @@ function applyEnvOverrides(raw: RememberConfig): RememberConfig {
   if (env.REMEMBER_ADMIN_TOKEN) next.server.adminToken = env.REMEMBER_ADMIN_TOKEN;
 
   return next;
+}
+
+/**
+ * Say so when a pipeline knob does nothing.
+ *
+ * `pipeline` is read straight off `raw`, but only `embedder` is actually consumed:
+ * the runtime constructs the walker, parser, chunker and store itself with fixed
+ * settings. A config that sets `chunker.smartSplit({ size: 2000 })` therefore
+ * changes nothing, reports nothing, and leaves its author debugging retrieval
+ * quality against a number that was never applied.
+ *
+ * Wiring them is a feature, not a bugfix — until then the honest move is to name
+ * what is being ignored. Same reasoning as warnUnknownConfigKeys above.
+ */
+function warnInertPipelineKeys(raw: RememberConfig, configPath: string | null): void {
+  const pipeline = (raw as { pipeline?: Record<string, unknown> }).pipeline;
+  if (!pipeline) return;
+  const INERT = ['walker', 'parser', 'chunker', 'store'] as const;
+  const set = INERT.filter((k) => pipeline[k] !== undefined);
+  if (set.length === 0) return;
+  const where = configPath ? path.basename(configPath) : 'the remember config';
+  console.warn(
+    `remember: ${where} sets pipeline.${set.join(', pipeline.')} — not yet wired to ` +
+      `config and ignored. The runtime uses its built-in walker/parser/chunker/store. ` +
+      `Only pipeline.embedder is read.`,
+  );
 }
